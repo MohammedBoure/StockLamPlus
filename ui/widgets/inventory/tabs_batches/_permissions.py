@@ -8,12 +8,13 @@ from ._table import _can_view_financials
 
 def apply_role_permissions(self, role=None):
     """إخفاء البيانات المالية تماماً لمن لا يملك الصلاحية"""
-    
+
     # استخدام الدالة الديناميكية للتحقق من صلاحية "tab_inv_financials"
     hide_fin = not _can_view_financials(self)
 
-    for col in range(12, 19):
-        self.table.setColumnHidden(col, hide_fin)
+    self.table.setColumnHidden(6, hide_fin)
+    self.table.setColumnHidden(7, hide_fin)
+    self.table.setColumnHidden(8, hide_fin)
 
     if hasattr(self, 'lbl_total_value'):
         if hide_fin:

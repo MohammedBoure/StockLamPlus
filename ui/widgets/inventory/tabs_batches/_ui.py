@@ -98,12 +98,6 @@ def _build_left_filters(self):
     self.populate_automates()
     self.combo_automate.currentIndexChanged.connect(self.apply_filters_local)
 
-    self.combo_supplier = QComboBox()
-    self.combo_supplier.addItem("🚚 Fournisseurs", None)
-    self.combo_supplier.setFixedWidth(130)
-    self.populate_suppliers()
-    self.combo_supplier.currentIndexChanged.connect(self.apply_filters_local)
-
     self.combo_status = QComboBox()
     self.combo_status.addItems([
         "📋 Tous (>0)", "✅ En Stock", "⚠️ Faible (Seuil)",
@@ -117,7 +111,6 @@ def _build_left_filters(self):
     row2.addWidget(self.combo_family)
     row2.addWidget(self.combo_manuf)
     row2.addWidget(self.combo_automate)
-    row2.addWidget(self.combo_supplier)
     row2.addWidget(self.combo_status)
     left_layout.addLayout(row2)
 
@@ -181,11 +174,13 @@ def _build_right_filters(self):
 
     # أزرار الإجراءات
     reset_layout = QHBoxLayout()
+
     self.chk_reclamation = QCheckBox("Réclamations Uniquement")
     self.chk_reclamation.setStyleSheet("font-weight: bold; color: #d35400;")
     self.chk_reclamation.setChecked(False)
     self.chk_reclamation.stateChanged.connect(self.apply_filters_local)
     reset_layout.addWidget(self.chk_reclamation)
+
     reset_layout.addStretch()
 
     btn_refresh = QPushButton("Actualiser")
@@ -220,11 +215,11 @@ def _build_table(self):
     self.table.verticalHeader().setLayoutDirection(Qt.RightToLeft)
 
     cols = [
-        "Désignation Produit", "Famille", "Marque", "Automate",
-        "Fournisseur", "Stock (Actuel)", "Date Entrée", "N° Lot",
-        "Date Exp.", "Qté Init.", "Code-Barres", "Code Ext", "Prix U. HT",
-        "Prix U. TTC", "Valeur (DA)", "Prix Vente 1", "Prix Vente 2", "Prix Vente 3", "Prix Vente 4",
-        "Ref PO", "Emplacement", "Réclamation"
+        "Désignation Produit", "Stock (Actuel)", "N° Lot", "Date Exp.",
+        "Qté Init.", "Code-Barres", "Prix U. HT", "Prix U. TTC",
+        "Valeur (DA)", "Emplacement", "Famille", "Marque",
+        "Automate", "Fournisseur", "Ref PO", "Date Entrée",
+        "Réclamation"
     ]
     self.table.setColumnCount(len(cols))
     self.table.setHorizontalHeaderLabels(cols)
@@ -238,7 +233,7 @@ def _build_table(self):
     self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
     self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
     self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-    self.table.setAlternatingRowColors(True)
+    self.table.setAlternatingRowColors(False)
     self.table.setStyleSheet(
         "QTableWidget { gridline-color: #ecf0f1; font-size: 12px; }"
     )
@@ -274,7 +269,7 @@ def _build_bottom_bar(self):
     """)
     bottom_bar.addWidget(self.lbl_total_value)
 
-    self.lbl_total_quantity = QLabel("Stock disponible affiché : 0")
+    self.lbl_total_quantity = QLabel("Stock disponible affich\u00e9 : 0")
     self.lbl_total_quantity.setFont(QFont("Arial", 11, QFont.Bold))
     self.lbl_total_quantity.setStyleSheet("""
         QLabel {
@@ -302,8 +297,6 @@ def _build_bottom_bar(self):
         b.clicked.connect(slot)
         return b
 
-    bottom_bar.addWidget(_btn("➕ Ajout Rapide", "#8e44ad", self.open_quick_add))
-    bottom_bar.addWidget(_btn("📝 Éditer",       "#3498db", self.open_quick_edit))
     bottom_bar.addWidget(_btn("⚡ Sortie",      "#27ae60", self.direct_use_process))
     bottom_bar.addWidget(_btn("✏️ Ajustement",  "#f39c12", self.adjust_stock))
     bottom_bar.addWidget(_btn("🗑️ Rebut",       "#c0392b", self.waste_batch))

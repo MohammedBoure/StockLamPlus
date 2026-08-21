@@ -15,10 +15,6 @@ from ..quick_actions import QuickTransferDialog, QuickConsumeDialog
 from ui.formatting import format_quantity, quantity_to_int
 
 
-# ---------------------------------------------------------------------------
-# معلومات المستخدم
-# ---------------------------------------------------------------------------
-
 def get_current_user_id(self):
     try:
         return self.window().current_user.get('User_ID')
@@ -95,8 +91,17 @@ def _to_date(val):
 # إجراءات الجدول الرئيسية
 # ---------------------------------------------------------------------------
 
+def on_cell_clicked(self, row, col):
+    """فتح حوار تعديل الشكوى فقط عند النقر على خلية الشكوى (العمود 16)"""
+    if col == 16:
+        item = self.table.item(row, 0)
+        if item:
+            batch_data = item.data(Qt.UserRole)
+            if batch_data:
+                self.edit_reclamation(batch_data)
+
 def on_vertical_header_clicked(self, logicalIndex):
-    """فتح reclamation من أيقونة رأس الصف فقط عندما توجد ملاحظة فعلية."""
+    """فتح حوار الشكوى عند النقر على الأيقونة الدائرية في الشريط الجانبي فقط إذا كان الصف يحتوي على شكوى"""
     try:
         item = self.table.item(logicalIndex, 0)
         if item:
@@ -109,18 +114,6 @@ def on_vertical_header_clicked(self, logicalIndex):
     except Exception as e:
         logging.error(f"Error handling vertical header click: {e}")
 
-def on_cell_clicked(self, row, col):
-    """فتح reclamation من خلية الملاحظة الفعلية فقط."""
-    if col != 21:
-        return
-    item = self.table.item(row, 0)
-    if item:
-        batch_data = item.data(Qt.UserRole)
-        if batch_data:
-            raw_note = batch_data.get('Reception_Note')
-            note = str(raw_note).strip() if raw_note is not None else ""
-            if note and note.lower() not in ("none", "null"):
-                self.edit_reclamation(batch_data)
 def edit_reclamation(self, batch_data):
     """تعديل ملاحظة/شكوى الاستلام (Réclamation) للوط"""
     raw_note = batch_data.get('Reception_Note')
@@ -324,11 +317,11 @@ def go_to_reception(self, br_id, target_batch_id=None):
         if target_batch_id:
             # التحقق مما إذا كان اللوط موجوداً ضمن اللوطات الأصلية للوصل
             valid_ids = [b['Batch_ID'] for b in reception_data.get('Batches', [])]
-            
+
             if target_batch_id not in valid_ids:
                 # إذا لم يكن موجوداً (يعني أنه منتج محول)، نجلبه من بيانات الجدول الحالية
                 clicked_batch = next((b for b in self.all_data if b.get('Batch_ID') == target_batch_id), None)
-                
+
                 if clicked_batch:
                     clicked_barcode = str(clicked_batch.get('Internal_Barcode') or '').strip()
                     clicked_lot = str(clicked_batch.get('Lot_Number') or '').strip()
@@ -348,7 +341,7 @@ def go_to_reception(self, br_id, target_batch_id=None):
                              and str(b.get('Lot_Number') or '').strip() == clicked_lot),
                             None
                         )
-                    
+
                     if parent_batch:
                         # استبدال المعرف بمعرف اللوط الأصلي ليتم تلوينه في الواجهة
                         target_batch_id = parent_batch['Batch_ID']
@@ -392,7 +385,6 @@ def go_to_reception(self, br_id, target_batch_id=None):
 
 def handle_barcode_scan(self):
     txt = self.search_input.text().strip().lower()
-    txt = self.search_input.text().strip().lower()
     if not txt:
         return
     found_rows = []
@@ -400,71 +392,10 @@ def handle_barcode_scan(self):
         data = self.table.item(r, 0).data(Qt.UserRole)
         bc1  = str(data.get('Internal_Barcode', '')).lower()
         bc2  = str(data.get('Barcode', '')).lower()
-        bc3  = str(data.get('External_Barcode', '')).lower()
-        if txt in (bc1, bc2, bc3):
+        if txt in (bc1, bc2):
             found_rows.append(r)
 
     if len(found_rows) == 1:
         self.table.selectRow(found_rows[0])
         self.table.scrollToItem(self.table.item(found_rows[0], 0))
         self.search_input.selectAll()
-
-def open_quick_add(self):
-    """فتح نافذة الإضافة السريعة وتنفيذ الإضافة"""
-    from .quick_add_dialog import QuickAddDialog
-    dialog = QuickAddDialog(self.manager, self)
-
-    if dialog.exec():
-        data = dialog.get_data()
-        success = self.manager.batches.add_direct_batch(
-            data,
-            user_id=get_current_user_id(self)
-        )
-
-        if success:
-            if data.get('Print_Label') and data.get('Generated_Barcode'):
-                self.manager.printer.print_label(
-                    data['Product_Name'],
-                    data['Generated_Barcode'],
-                    data['Lot_Number'],
-                    str(data['Expiry_Date']),
-                    data['Quantity']
-                )
-            self.load_data()
-            self.data_changed.emit()
-        else:
-            QMessageBox.critical(self, "Erreur", "Échec de l'ajout rapide du stock.")
-
-def open_quick_edit(self):
-    """يفتح نافذة التعديل السريع للحصة المحددة (إذا لم تكن من إيصال استلام رسمي)"""
-    from PySide6.QtWidgets import QMessageBox
-    from PySide6.QtCore import Qt
-
-    selected_rows = set(item.row() for item in self.table.selectedItems())
-    if not selected_rows or len(selected_rows) != 1:
-        QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un (1) seul lot à modifier.")
-        return
-
-    row = list(selected_rows)[0]
-    batch_data = self.table.item(row, 0).data(Qt.UserRole)
-
-    if batch_data.get('BR_ID') is not None:
-        QMessageBox.warning(self, "Action non permise", "Ce lot appartient à un Bon de Réception.\nVeuillez le modifier depuis l'historique des réceptions.")
-        return
-
-    from .quick_add_dialog import QuickAddDialog
-    dialog = QuickAddDialog(self.manager, self, batch_data=batch_data)
-
-    if dialog.exec():
-        data = dialog.get_data()
-        success = self.manager.batches.update_direct_batch(
-            batch_data['Batch_ID'],
-            data,
-            user_id=get_current_user_id(self)
-        )
-
-        if success:
-            self.load_data()
-            self.data_changed.emit()
-        else:
-            QMessageBox.critical(self, "Erreur", "Échec de la modification du stock.")

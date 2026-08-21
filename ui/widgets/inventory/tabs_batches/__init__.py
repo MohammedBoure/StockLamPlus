@@ -38,13 +38,12 @@ from ._actions      import (
     direct_use_process, adjust_stock, waste_batch,
     show_batch_details, open_quick_transfer, open_quick_consume,
     go_to_history, open_history_via_barcode, go_to_reception,
-    handle_barcode_scan, open_quick_add, open_quick_edit,
-    edit_reclamation, on_vertical_header_clicked, on_cell_clicked,
+    handle_barcode_scan, edit_reclamation, on_vertical_header_clicked, on_cell_clicked
 )
 from ._export       import (
     print_batch_label, export_to_excel, export_to_pdf, get_table_data,
 )
-from ._combos       import populate_families, populate_manufacturers, populate_automates, populate_suppliers
+from ._combos       import populate_families, populate_manufacturers, populate_automates
 from ._context_menu import show_context_menu
 from ._permissions  import apply_role_permissions
 
@@ -128,8 +127,6 @@ class BatchesTab(QWidget):
     open_history_via_barcode = open_history_via_barcode
     go_to_reception         = go_to_reception
     handle_barcode_scan     = handle_barcode_scan
-    open_quick_add          = open_quick_add
-    open_quick_edit         = open_quick_edit
     edit_reclamation        = edit_reclamation
     on_vertical_header_clicked = on_vertical_header_clicked
     on_cell_clicked         = on_cell_clicked
@@ -144,7 +141,6 @@ class BatchesTab(QWidget):
     populate_families      = populate_families
     populate_manufacturers = populate_manufacturers
     populate_automates     = populate_automates
-    populate_suppliers     = populate_suppliers
 
     # قائمة السياق
     show_context_menu = show_context_menu

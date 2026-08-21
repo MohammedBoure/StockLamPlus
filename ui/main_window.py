@@ -552,19 +552,22 @@ class MainWindow(QMainWindow):
             if self.connection_error:
                 widget.tabs.addTab(widget.tab_db, "Base de données")
                 widget.tabs.setCurrentWidget(widget.tab_db)
-            if self.has_permission("tab_config"):
+            if self.has_permission("tab_config") and hasattr(widget, 'tab_general'):
                 widget.tabs.addTab(widget.tab_general, "🏢 Général / Gestion des données")
-            if self.has_permission("tab_set_db"):
+            if self.has_permission("tab_set_db") and hasattr(widget, 'tab_db'):
                 widget.tabs.addTab(widget.tab_db, "🗄️ Base de données")
             if self.has_permission("tab_set_printer"):
-                widget.tabs.addTab(widget.tab_printer, "🖨️ Imprimante")
-                widget.tabs.addTab(widget.tab_barcode_config, "🏷️ Éditeur Étiquettes")
-                widget.tabs.addTab(widget.tab_receipt_config, "🧾 Facture Thermique")
-            if self.has_permission("tab_set_system"):
+                if hasattr(widget, 'tab_printer'):
+                    widget.tabs.addTab(widget.tab_printer, "🖨️ Imprimante")
+                if hasattr(widget, 'tab_barcode_config'):
+                    widget.tabs.addTab(widget.tab_barcode_config, "🏷️ Éditeur Étiquettes")
+                if hasattr(widget, 'tab_receipt_config'):
+                    widget.tabs.addTab(widget.tab_receipt_config, "🧾 Facture Thermique")
+            if self.has_permission("tab_set_system") and hasattr(widget, 'tab_system'):
                 widget.tabs.addTab(widget.tab_system, "⚙️ Système")
-            if self.has_permission("tab_system_logs"):
+            if self.has_permission("tab_system_logs") and hasattr(widget, 'tab_system_logs'):
                 widget.tabs.addTab(widget.tab_system_logs, "📝 Logs Système")
-            if self.has_permission("tab_set_pdf"):
+            if self.has_permission("tab_set_pdf") and hasattr(widget, 'tab_pdf_config'):
                 widget.tabs.addTab(widget.tab_pdf_config, "🎨 Configuration PDF")
 
         # --- 5. Users ---

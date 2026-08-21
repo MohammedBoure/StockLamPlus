@@ -15,6 +15,8 @@ import mysql.connector
 import sys
 from dotenv import dotenv_values
 
+from .barcode_visual_editor import BarcodeVisualEditor
+from .receipt_visual_editor import ReceiptVisualEditor
 from .pdf.pdf_config_dialog import PdfConfigDialog
 from .local_settings import LocalSettingsStore
 from .system_logs_tab import SystemLogsTab
@@ -73,6 +75,7 @@ class SettingsTab(QWidget):
             "max_content_length": 16777216,
 
             "selected_printer": "",
+            "selected_receipt_printer": "",
             "label_width": 50,
             "label_height": 30,
             "gap": 2
@@ -99,6 +102,9 @@ class SettingsTab(QWidget):
 
         self.tab_system = QWidget()
         self._setup_system_tab()
+
+        self.tab_barcode_config = BarcodeVisualEditor(self.data_manager) if hasattr(self, 'data_manager') and self.data_manager else QWidget()
+        self.tab_receipt_config = ReceiptVisualEditor(self.data_manager) if hasattr(self, 'data_manager') and self.data_manager else QWidget()
 
         self.tab_pdf_config = QWidget()
         self._setup_pdf_launcher()
@@ -300,12 +306,15 @@ class SettingsTab(QWidget):
 
     def _setup_printer_tab(self):
         layout = QVBoxLayout(self.tab_printer)
-        grp_print = QGroupBox("Paramètres des étiquettes code-barres")
-        form_print = QFormLayout()
+
+        # === 1. Section: Imprimante Code-Barres ===
+        grp_barcode = QGroupBox("🖨️ Paramètres de l'imprimante Code-Barres (Melsoqates)")
+        form_barcode = QFormLayout()
 
         self.combo_printers = QComboBox()
+        printer_names = []
         try:
-            printers = win32print.EnumPrinters(2)
+            printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
             printer_names = [p[2] for p in printers]
             self.combo_printers.addItems(printer_names)
         except:
@@ -317,23 +326,42 @@ class SettingsTab(QWidget):
             if idx >= 0: self.combo_printers.setCurrentIndex(idx)
 
         self.spin_width = QSpinBox()
-        self.spin_width.setRange(10, 150)
+        self.spin_width.setRange(10, 200)
         self.spin_width.setValue(int(self.settings.get("label_width", 50)))
 
         self.spin_height = QSpinBox()
-        self.spin_height.setRange(10, 150)
+        self.spin_height.setRange(10, 200)
         self.spin_height.setValue(int(self.settings.get("label_height", 30)))
 
         self.spin_gap = QSpinBox()
         self.spin_gap.setRange(0, 10)
         self.spin_gap.setValue(int(self.settings.get("gap", 2)))
 
-        form_print.addRow("Imprimante :", self.combo_printers)
-        form_print.addRow("Largeur (mm) :", self.spin_width)
-        form_print.addRow("Hauteur (mm) :", self.spin_height)
-        form_print.addRow("Espacement (mm) :", self.spin_gap)
-        grp_print.setLayout(form_print)
-        layout.addWidget(grp_print)
+        form_barcode.addRow("Imprimante :", self.combo_printers)
+        form_barcode.addRow("Largeur étiquette (mm) :", self.spin_width)
+        form_barcode.addRow("Hauteur étiquette (mm) :", self.spin_height)
+        form_barcode.addRow("Espacement (gap) (mm) :", self.spin_gap)
+        grp_barcode.setLayout(form_barcode)
+        layout.addWidget(grp_barcode)
+
+        # === 2. Section: Imprimante Fiches/Tickets (Receipts) ===
+        grp_receipt = QGroupBox("🧾 Paramètres de l'imprimante Fiches/Factures (Tickets)")
+        form_receipt = QFormLayout()
+
+        self.combo_receipt_printers = QComboBox()
+        try:
+            self.combo_receipt_printers.addItems(printer_names)
+        except:
+            self.combo_receipt_printers.addItem("Erreur lors de la liste des imprimantes")
+
+        current_rp = self.settings.get("selected_receipt_printer", "")
+        if current_rp:
+            idx_r = self.combo_receipt_printers.findText(current_rp)
+            if idx_r >= 0: self.combo_receipt_printers.setCurrentIndex(idx_r)
+
+        form_receipt.addRow("Imprimante :", self.combo_receipt_printers)
+        grp_receipt.setLayout(form_receipt)
+        layout.addWidget(grp_receipt)
 
         btn_test_print = QPushButton("🖨️ Imprimer une étiquette test")
         btn_test_print.clicked.connect(self.test_print_label)
@@ -480,6 +508,8 @@ class SettingsTab(QWidget):
         self.settings["db_name"] = self.txt_db_name.text()
 
         self.settings["selected_printer"] = self.combo_printers.currentText()
+        if hasattr(self, 'combo_receipt_printers'):
+            self.settings["selected_receipt_printer"] = self.combo_receipt_printers.currentText()
         self.settings["label_width"] = self.spin_width.value()
         self.settings["label_height"] = self.spin_height.value()
         self.settings["gap"] = self.spin_gap.value()

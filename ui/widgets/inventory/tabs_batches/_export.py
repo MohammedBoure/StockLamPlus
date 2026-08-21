@@ -31,21 +31,27 @@ except ImportError:
 
 EXPORT_COLUMN_KEYS = {
     0: 'Product_Name',
-    1: 'Quantity_Current',
-    2: 'Lot_Number',
-    3: 'Expiry_Date',
-    4: 'Quantity_Initial',
-    5: 'Internal_Barcode',
-    6: 'Unit_Price_Received',
-    7: 'Unit_Price_Received_TTC',
-    8: 'Total_Value',
-    9: 'Location_Name',
-    10: 'Family_Name',
-    11: 'Manuf_Name',
-    12: 'Automate_Name',
-    13: 'Supplier_Name',
-    14: 'PO_ID',
-    15: 'Date_Received',
+    1: 'Family_Name',
+    2: 'Manuf_Name',
+    3: 'Automate_Name',
+    4: 'Supplier_Name',
+    5: 'Quantity_Current',
+    6: 'Date_Received',
+    7: 'Lot_Number',
+    8: 'Expiry_Date',
+    9: 'Quantity_Initial',
+    10: 'Internal_Barcode',
+    11: 'External_Barcode',
+    12: 'Unit_Price_Received',
+    13: 'Unit_Price_Received_TTC',
+    14: 'Total_Value',
+    15: 'Selling_Price_HT',
+    16: 'Selling_Price_HT_2',
+    17: 'Selling_Price_HT_3',
+    18: 'Selling_Price_HT_4',
+    19: 'PO_ID',
+    20: 'Location_Name',
+    21: 'Reception_Note',
 }
 
 
@@ -61,7 +67,7 @@ def _export_column_indices(self):
     is_tech = _is_technician(self)
     return [
         c for c in range(self.table.columnCount())
-        if not (is_tech and c in [6, 7, 8])
+        if not (is_tech and c in range(12, 19))
     ]
 
 
@@ -71,31 +77,41 @@ def _header_text(self, column_index):
 
 
 def _format_export_cell(row, column_index):
-    if column_index == 1:
-        return format_quantity(row.get('Quantity_Current', 0))
-    if column_index == 2:
-        return row.get('Lot_Number', '') or ''
-    if column_index == 3:
-        return str(row.get('Expiry_Date', ''))[:10]
-    if column_index == 4:
-        return format_quantity(row.get('Quantity_Initial', 0))
     if column_index == 5:
-        return row.get('Internal_Barcode') or row.get('Barcode') or ''
+        return format_quantity(row.get('Quantity_Current', 0))
     if column_index == 6:
-        return format_money(float(row.get('Unit_Price_Received', 0) or 0))
+        return str(row.get('Date_Received') or row.get('Created_At', ''))[:10]
     if column_index == 7:
+        return row.get('Lot_Number', '') or ''
+    if column_index == 8:
+        return str(row.get('Expiry_Date', ''))[:10]
+    if column_index == 9:
+        return format_quantity(row.get('Quantity_Initial', 0))
+    if column_index == 10:
+        return row.get('Internal_Barcode') or row.get('Barcode') or ''
+    if column_index == 11:
+        return row.get('External_Barcode') or ''
+    if column_index == 12:
+        return format_money(float(row.get('Unit_Price_Received', 0) or 0))
+    if column_index == 13:
         price = float(row.get('Unit_Price_Received', 0) or 0)
         discount = float(row.get('Discount_Percent', 0) or 0) / 100.0
         tax = float(row.get('Tax_Rate_Percent', 0) or 0) / 100.0
         return format_money(price * (1 - discount) * (1 + tax))
-    if column_index == 8:
+    if column_index == 14:
         qty = float(row.get('Quantity_Current', 0) or 0)
         price = float(row.get('Unit_Price_Received', 0) or 0)
         discount = float(row.get('Discount_Percent', 0) or 0) / 100.0
         tax = float(row.get('Tax_Rate_Percent', 0) or 0) / 100.0
         return format_money(qty * price * (1 - discount) * (1 + tax))
-    if column_index == 15:
-        return str(row.get('Date_Received') or row.get('Created_At', ''))[:10]
+    if column_index in (15, 16, 17, 18):
+        keys = {
+            15: 'Selling_Price_HT',
+            16: 'Selling_Price_HT_2',
+            17: 'Selling_Price_HT_3',
+            18: 'Selling_Price_HT_4',
+        }
+        return format_money(float(row.get(keys[column_index], 0) or 0))
 
     key = EXPORT_COLUMN_KEYS.get(column_index)
     return row.get(key, '') if key else ''

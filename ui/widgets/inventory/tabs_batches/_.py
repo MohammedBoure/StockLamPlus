@@ -204,10 +204,10 @@ class BatchesTab(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(30)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         cols = [
-            "Désignation Produit", "Stock (Actuel)", "N° Lot", "Date Exp.",
-            "Qté Init.", "Code-Barres", "Prix U.", "Valeur (DA)",
-            "Famille", "Marque", "Automate", "Fournisseur",
-            "Ref PO", "Date Entrée", "Emplacement"
+            "Désignation Produit", "Famille", "Marque", "Automate",
+            "Fournisseur", "Stock (Actuel)", "Date Entrée", "N° Lot",
+            "Date Exp.", "Qté Init.", "Code-Barres", "Prix U.",
+            "Valeur (DA)", "Ref PO", "Emplacement"
         ]
 
         self.table.setColumnCount(len(cols))
@@ -471,11 +471,16 @@ class BatchesTab(QWidget):
             prod_item = make_item(b.get('Product_Name', '---'), Qt.AlignLeft | Qt.AlignVCenter)
             prod_item.setData(Qt.UserRole, b)
             self.table.setItem(r, 0, prod_item)
-            self.table.setItem(r, 1, make_item(f"{qty:g}", color=QColor("#27ae60"), font=QFont("", -1, QFont.Bold)))
-            self.table.setItem(r, 2, make_item(b.get('Lot_Number', '---')))
-            self.table.setItem(r, 3, make_item(str(b.get('Expiry_Date', ''))[:10]))
-            self.table.setItem(r, 4, make_item(f"{float(b.get('Quantity_Initial',0)):g}"))
-            self.table.setItem(r, 5, make_item(b.get('Internal_Barcode') or b.get('Barcode')))
+            self.table.setItem(r, 1, make_item(b.get('Family_Name', '---')))
+            self.table.setItem(r, 2, make_item(b.get('Manuf_Name', '---')))
+            self.table.setItem(r, 3, make_item(b.get('Automate_Name', '---')))
+            self.table.setItem(r, 4, make_item(b.get('Supplier_Name', '---')))
+            self.table.setItem(r, 5, make_item(f"{qty:g}", color=QColor("#27ae60"), font=QFont("", -1, QFont.Bold)))
+            self.table.setItem(r, 6, make_item(str(b.get('Date_Received') or b.get('Created_At', ''))[:10]))
+            self.table.setItem(r, 7, make_item(b.get('Lot_Number', '---')))
+            self.table.setItem(r, 8, make_item(str(b.get('Expiry_Date', ''))[:10]))
+            self.table.setItem(r, 9, make_item(f"{float(b.get('Quantity_Initial',0)):g}"))
+            self.table.setItem(r, 10, make_item(b.get('Internal_Barcode') or b.get('Barcode')))
 
             # الأعمدة المالية
             if not is_tech:
@@ -484,22 +489,17 @@ class BatchesTab(QWidget):
                 tax = float(b.get('Tax_Rate_Percent', 0)) / 100.0
                 line_val = qty * price_u * (1 - discount) * (1 + tax)
 
-                self.table.setItem(r, 6, make_item(f"{price_u:,.2f}"))
-                self.table.setItem(r, 7, make_item(f"{line_val:,.2f}"))
+                self.table.setItem(r, 11, make_item(f"{price_u:,.2f}"))
+                self.table.setItem(r, 12, make_item(f"{line_val:,.2f}"))
             else:
-                self.table.setItem(r, 6, QTableWidgetItem(""))
-                self.table.setItem(r, 7, QTableWidgetItem(""))
+                self.table.setItem(r, 11, QTableWidgetItem(""))
+                self.table.setItem(r, 12, QTableWidgetItem(""))
 
-            self.table.setItem(r, 8, make_item(b.get('Family_Name', '---')))
-            self.table.setItem(r, 9, make_item(b.get('Manuf_Name', '---')))
-            self.table.setItem(r, 10, make_item(b.get('Automate_Name', '---')))
-            self.table.setItem(r, 11, make_item(b.get('Supplier_Name', '---')))
-            self.table.setItem(r, 12, make_item(b.get('PO_ID')))
-            self.table.setItem(r, 13, make_item(str(b.get('Date_Received') or b.get('Created_At', ''))[:10]))
+            self.table.setItem(r, 13, make_item(b.get('PO_ID')))
             self.table.setItem(r, 14, make_item(b.get('Location_Name')))
 
-        self.table.setColumnHidden(6, is_tech)
-        self.table.setColumnHidden(7, is_tech)
+        self.table.setColumnHidden(11, is_tech)
+        self.table.setColumnHidden(12, is_tech)
 
     def on_header_clicked(self, col_index):
         """يتم استدعاؤها فقط عند ضغط المستخدم على رأس العمود"""
@@ -558,43 +558,43 @@ class BatchesTab(QWidget):
             self.table.insertRow(r)
             qty = float(b.get('Quantity_Current', 0))
 
-            # تعبئة البيانات العامة
+            # تعبئة البيانات العامة (0-10)
             prod_item = make_item(b.get('Product_Name', '---'), Qt.AlignLeft | Qt.AlignVCenter)
             prod_item.setData(Qt.UserRole, b)
             self.table.setItem(r, 0, prod_item)
-            self.table.setItem(r, 1, make_item(f"{qty:g}", color=QColor("#27ae60"), font=QFont("", -1, QFont.Bold)))
-            self.table.setItem(r, 2, make_item(b.get('Lot_Number', '---')))
-            self.table.setItem(r, 3, make_item(str(b.get('Expiry_Date', ''))[:10]))
-            self.table.setItem(r, 4, make_item(f"{float(b.get('Quantity_Initial',0)):g}"))
-            self.table.setItem(r, 5, make_item(b.get('Internal_Barcode') or b.get('Barcode')))
+            self.table.setItem(r, 1, make_item(b.get('Family_Name', '---')))
+            self.table.setItem(r, 2, make_item(b.get('Manuf_Name', '---')))
+            self.table.setItem(r, 3, make_item(b.get('Automate_Name', '---')))
+            self.table.setItem(r, 4, make_item(b.get('Supplier_Name', '---')))
+            self.table.setItem(r, 5, make_item(f"{qty:g}", color=QColor("#27ae60"), font=QFont("", -1, QFont.Bold)))
+            self.table.setItem(r, 6, make_item(str(b.get('Date_Received') or b.get('Created_At', ''))[:10]))
+            self.table.setItem(r, 7, make_item(b.get('Lot_Number', '---')))
+            self.table.setItem(r, 8, make_item(str(b.get('Expiry_Date', ''))[:10]))
+            self.table.setItem(r, 9, make_item(f"{float(b.get('Quantity_Initial',0)):g}"))
+            self.table.setItem(r, 10, make_item(b.get('Internal_Barcode') or b.get('Barcode')))
 
-            # البيانات المالية
+            # 11-12: البيانات المالية (حساب للصف المعروض)
             if not is_tech:
                 price_u = float(b.get('Unit_Price_Received', 0))
                 discount = float(b.get('Discount_Percent', 0)) / 100.0
                 tax = float(b.get('Tax_Rate_Percent', 0)) / 100.0
                 line_val = qty * price_u * (1 - discount) * (1 + tax)
 
-                self.table.setItem(r, 6, make_item(f"{price_u:,.2f}"))
-                self.table.setItem(r, 7, make_item(f"{line_val:,.2f}"))
+                self.table.setItem(r, 11, make_item(f"{price_u:,.2f}"))
+                self.table.setItem(r, 12, make_item(f"{line_val:,.2f}"))
             else:
-                self.table.setItem(r, 6, QTableWidgetItem(""))
-                self.table.setItem(r, 7, QTableWidgetItem(""))
+                self.table.setItem(r, 11, QTableWidgetItem(""))
+                self.table.setItem(r, 12, QTableWidgetItem(""))
 
-            self.table.setItem(r, 8, make_item(b.get('Family_Name', '---')))
-            self.table.setItem(r, 9, make_item(b.get('Manuf_Name', '---')))
-            self.table.setItem(r, 10, make_item(b.get('Automate_Name', '---')))
-            self.table.setItem(r, 11, make_item(b.get('Supplier_Name', '---')))
-            self.table.setItem(r, 12, make_item(b.get('PO_ID')))
-            self.table.setItem(r, 13, make_item(str(b.get('Date_Received') or b.get('Created_At', ''))[:10]))
+            self.table.setItem(r, 13, make_item(b.get('PO_ID')))
             self.table.setItem(r, 14, make_item(b.get('Location_Name')))
 
         # تأكيد تعطيل الفرز مرة أخرى بعد الرسم
         self.table.setSortingEnabled(False)
 
         # الإخفاء والتحكم في الليبل السفلي والأعمدة حسب الصلاحيات
-        self.table.setColumnHidden(6, is_tech)
-        self.table.setColumnHidden(7, is_tech)
+        self.table.setColumnHidden(11, is_tech)
+        self.table.setColumnHidden(12, is_tech)
 
         if is_tech:
             self.lbl_total_value.hide()
@@ -1033,7 +1033,7 @@ class BatchesTab(QWidget):
         try:
             status_idx = self.combo_status.currentIndex()
             search_text = self.search_input.text().strip()
-            fetch_zero = (status_idx in [5, 6]) or (len(search_text) > 0)
+            fetch_zero = (status_idx == 5) or (len(search_text) > 0)
 
             selected_batch_id = None
             if self.table.currentRow() >= 0:
@@ -1080,12 +1080,10 @@ class BatchesTab(QWidget):
             # 2. حلقة الفلترة
             for row in self.all_data:
                 qty = float(row.get('Quantity_Current', 0))
-                has_waste = bool(row.get('Has_Waste')) or (float(row.get('Quantity_Wasted', 0) or 0) > 0)
 
                 # الحالة
                 if status_idx in [0, 1, 2, 3, 4] and qty <= 0: continue
                 elif status_idx == 5 and qty > 0: continue
-                elif status_idx == 6 and not has_waste: continue
 
                 # النص
                 bc_internal = str(row.get('Internal_Barcode', '')).lower()

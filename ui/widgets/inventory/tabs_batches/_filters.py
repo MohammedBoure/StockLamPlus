@@ -63,6 +63,7 @@ def apply_filters_local(self):
         family_id    = self.combo_family.currentData()
         manuf_id     = self.combo_manuf.currentData()
         automate_id  = self.combo_automate.currentData()
+        supplier_id  = self.combo_supplier.currentData() if hasattr(self, 'combo_supplier') else None
         status_idx   = self.combo_status.currentIndex()
 
         use_exp_date  = self.chk_date_filter.isChecked()
@@ -94,10 +95,11 @@ def apply_filters_local(self):
             if search_txt:
                 bc_int = str(row.get('Internal_Barcode', '')).lower()
                 bc_man = str(row.get('Barcode', '')).lower()
+                bc_ext = str(row.get('External_Barcode', '')).lower()
                 full   = (
                     f"{row.get('Product_Name', '')} "
                     f"{row.get('Lot_Number', '')} "
-                    f"{bc_int} {bc_man} "
+                    f"{bc_int} {bc_man} {bc_ext} "
                     f"{row.get('PO_ID', '')}"
                 ).lower()
                 if search_txt not in full:
@@ -108,6 +110,7 @@ def apply_filters_local(self):
             if family_id   and row.get('Family_ID')              != family_id:   continue
             if manuf_id    and row.get('Manuf_ID')               != manuf_id:    continue
             if automate_id and row.get('Preferred_Automate_ID')  != automate_id: continue
+            if supplier_id and row.get('Supplier_ID')            != supplier_id: continue
 
             # --- فلتر الحالة المتقدمة (Seuil / Périmés / Bientôt Exp.) ---
             min_threshold = float(row.get('Minimum_Stock_Level') or 5)
@@ -250,6 +253,8 @@ def reset_filters(self):
     self.combo_family.setCurrentIndex(0)
     self.combo_manuf.setCurrentIndex(0)
     self.combo_automate.setCurrentIndex(0)
+    if hasattr(self, 'combo_supplier'):
+        self.combo_supplier.setCurrentIndex(0)
     self.combo_status.setCurrentIndex(1)
     self.chk_date_filter.setChecked(False)
     toggle_date_filter(self, 0)

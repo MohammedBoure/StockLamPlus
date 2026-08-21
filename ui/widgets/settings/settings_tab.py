@@ -15,8 +15,6 @@ import mysql.connector
 import sys
 from dotenv import dotenv_values
 
-from .barcode_visual_editor import BarcodeVisualEditor
-from .receipt_visual_editor import ReceiptVisualEditor
 from .pdf.pdf_config_dialog import PdfConfigDialog
 from .local_settings import LocalSettingsStore
 from .system_logs_tab import SystemLogsTab
@@ -47,11 +45,7 @@ class SettingsTab(QWidget):
             if can_manage_stamps is not None
             else bool(getattr(data_manager, "can_manage_stamps", False))
         )
-        self.local_store = (
-            local_store
-            or getattr(data_manager, "local_settings", None)
-            or LocalSettingsStore(self.current_user)
-        )
+        self.local_store = local_store or LocalSettingsStore(self.current_user)
         self.config_file = self.local_store.general_path
         self.pdf_config_dialog = None
 
@@ -79,7 +73,6 @@ class SettingsTab(QWidget):
             "max_content_length": 16777216,
 
             "selected_printer": "",
-            "selected_receipt_printer": "",
             "label_width": 50,
             "label_height": 30,
             "gap": 2
@@ -107,20 +100,10 @@ class SettingsTab(QWidget):
         self.tab_system = QWidget()
         self._setup_system_tab()
 
-        self.tab_barcode_config = BarcodeVisualEditor(self.data_manager)
-        self.tab_receipt_config = ReceiptVisualEditor(self.data_manager)
         self.tab_pdf_config = QWidget()
         self._setup_pdf_launcher()
-        self.tab_system_logs = SystemLogsTab(self.data_manager) if self.data_manager else QWidget()
 
-        self.tabs.addTab(self.tab_general, "Général")
-        self.tabs.addTab(self.tab_db, "Base de données")
-        self.tabs.addTab(self.tab_printer, "Imprimantes")
-        self.tabs.addTab(self.tab_system, "Système")
-        self.tabs.addTab(self.tab_barcode_config, "Éditeur Code-Barres")
-        self.tabs.addTab(self.tab_receipt_config, "Éditeur Fiches")
-        self.tabs.addTab(self.tab_pdf_config, "PDF / En-têtes")
-        self.tabs.addTab(self.tab_system_logs, "Logs Système")
+        self.tab_system_logs = SystemLogsTab(self.data_manager) if self.data_manager else QWidget()
 
         main_layout.addWidget(self.tabs)
 
@@ -317,10 +300,8 @@ class SettingsTab(QWidget):
 
     def _setup_printer_tab(self):
         layout = QVBoxLayout(self.tab_printer)
-
-        # === 1. Section: Imprimante Code-Barres ===
-        grp_barcode = QGroupBox("🖨️ Paramètres de l'imprimante Code-Barres (Melsoqates)")
-        form_barcode = QFormLayout()
+        grp_print = QGroupBox("Paramètres des étiquettes code-barres")
+        form_print = QFormLayout()
 
         self.combo_printers = QComboBox()
         try:
@@ -347,31 +328,12 @@ class SettingsTab(QWidget):
         self.spin_gap.setRange(0, 10)
         self.spin_gap.setValue(int(self.settings.get("gap", 2)))
 
-        form_barcode.addRow("Imprimante :", self.combo_printers)
-        form_barcode.addRow("Largeur étiquette (mm) :", self.spin_width)
-        form_barcode.addRow("Hauteur étiquette (mm) :", self.spin_height)
-        form_barcode.addRow("Espacement (gap) (mm) :", self.spin_gap)
-        grp_barcode.setLayout(form_barcode)
-        layout.addWidget(grp_barcode)
-
-        # === 2. Section: Imprimante Fiches/Tickets (Receipts) ===
-        grp_receipt = QGroupBox("🧾 Paramètres de l'imprimante Fiches/Factures (Tickets)")
-        form_receipt = QFormLayout()
-
-        self.combo_receipt_printers = QComboBox()
-        try:
-            self.combo_receipt_printers.addItems(printer_names)
-        except:
-            self.combo_receipt_printers.addItem("Erreur lors de la liste des imprimantes")
-
-        current_rp = self.settings.get("selected_receipt_printer", "")
-        if current_rp:
-            idx_r = self.combo_receipt_printers.findText(current_rp)
-            if idx_r >= 0: self.combo_receipt_printers.setCurrentIndex(idx_r)
-
-        form_receipt.addRow("Imprimante :", self.combo_receipt_printers)
-        grp_receipt.setLayout(form_receipt)
-        layout.addWidget(grp_receipt)
+        form_print.addRow("Imprimante :", self.combo_printers)
+        form_print.addRow("Largeur (mm) :", self.spin_width)
+        form_print.addRow("Hauteur (mm) :", self.spin_height)
+        form_print.addRow("Espacement (mm) :", self.spin_gap)
+        grp_print.setLayout(form_print)
+        layout.addWidget(grp_print)
 
         btn_test_print = QPushButton("🖨️ Imprimer une étiquette test")
         btn_test_print.clicked.connect(self.test_print_label)
@@ -382,10 +344,12 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(self.tab_pdf_config)
         layout.setContentsMargins(30, 30, 30, 30)
 
-        title = QLabel("<h2>Configuration PDF locale</h2>")
+        title = QLabel("<h2>Configuration PDF</h2>")
         description = QLabel(
-            "Les réglages PDF, les cachets et leur position sont propres à l'utilisateur "
-            "sur cet appareil. Ouvrez la fenêtre dédiée pour disposer de tout l'espace nécessaire."
+            "Les reglages de mise en page restent propres a chaque utilisateur, "
+            "mais la bibliotheque des cachets est partagee dans la base de donnees. "
+            "Tout utilisateur qui a acces a cette interface peut ajouter, choisir, "
+            "activer ou desactiver le cachet utilise dans les PDF."
         )
         description.setWordWrap(True)
 
@@ -398,8 +362,8 @@ class SettingsTab(QWidget):
         open_button.clicked.connect(self.open_pdf_config_dialog)
 
         load_hint = QLabel(
-            "La fenêtre propose aussi un chargement volontaire depuis la base de données. "
-            "Aucun chargement distant n'est effectué automatiquement."
+            "Les cachets disponibles sont charges depuis la bibliotheque partagee. "
+            "Le bouton de sauvegarde dans la base conserve les reglages communs du modele PDF."
         )
         load_hint.setWordWrap(True)
         load_hint.setStyleSheet("color: #566573;")
@@ -516,7 +480,6 @@ class SettingsTab(QWidget):
         self.settings["db_name"] = self.txt_db_name.text()
 
         self.settings["selected_printer"] = self.combo_printers.currentText()
-        self.settings["selected_receipt_printer"] = self.combo_receipt_printers.currentText()
         self.settings["label_width"] = self.spin_width.value()
         self.settings["label_height"] = self.spin_height.value()
         self.settings["gap"] = self.spin_gap.value()

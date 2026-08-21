@@ -45,7 +45,7 @@ class LocalSettingsStoreTests(unittest.TestCase):
             self.assertEqual(store.get_active_stamp()["Stamp_ID"], second)
 
             self.assertTrue(store.delete_stamp(second))
-            self.assertEqual(store.get_active_stamp()["Stamp_ID"], first)
+            self.assertIsNone(store.get_active_stamp())
 
     def test_pdf_banner_round_trip(self):
         with tempfile.TemporaryDirectory() as root:

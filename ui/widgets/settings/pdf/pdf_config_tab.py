@@ -1,13 +1,12 @@
 import os
 import logging
-from uuid import uuid4
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QGroupBox, QFormLayout, QDoubleSpinBox,
     QFileDialog, QColorDialog, QTabWidget, QScrollArea,
     QFrame, QMessageBox, QSizePolicy, QRadioButton, QButtonGroup,
-    QListWidget, QListWidgetItem
+    QCheckBox, QListWidget, QListWidgetItem
 )
 from PySide6.QtCore import Qt, Signal, QRectF, QRect, QByteArray, QBuffer, QIODevice
 from PySide6.QtGui import QColor, QPixmap, QFont, QPainter, QPen, QBrush, QImage
@@ -56,7 +55,7 @@ class PdfConfigWidget(QWidget):
 
             # Textes BL
             "doc_title_bl": "BON DE LIVRAISON",
-            "dest_label_bl": "Destinataire :",
+            "dest_label_bl": "Correspondant :",
             "qty_header_bl": "Qté",
             "total_label_bl": "MONTANT TOTAL À PAYER",
             "footer_left_bl": "Responsable Stock",
@@ -64,7 +63,7 @@ class PdfConfigWidget(QWidget):
 
             # Textes Retour
             "doc_title_rt": "BON DE RETOUR",
-            "dest_label_rt": "Retourné à (Sous-traitant) :",
+            "dest_label_rt": "Correspondant :",
             "qty_header_rt": "Qté Rtr.",
             "total_label_rt": "VALEUR TOTALE DU RETOUR",
             "footer_left_rt": "Signature Magasin / Expéditeur",
@@ -80,9 +79,31 @@ class PdfConfigWidget(QWidget):
             "bank_acc": "00475017000761081",
             "bank_y_offset_cm": 6.6,
             "dest_box_x_cm": 11.5,
-            "dest_box_y_cm": 6.0,
+            "dest_box_y_cm": 5.4,
             "dest_box_w_cm": 8.0,
-            "table_start_y_cm": 9.5,
+            "dest_box_h_cm": 6.5,
+            "partner_show_name": True,
+            "partner_show_contact_person": True,
+            "partner_show_phone": True,
+            "partner_show_email": True,
+            "partner_show_website": True,
+            "partner_show_address_line1": True,
+            "partner_show_address_line2": True,
+            "partner_show_postal_code": True,
+            "partner_show_city": True,
+            "partner_show_type": True,
+            "partner_show_agrement": True,
+            "partner_show_tax_id": True,
+            "partner_show_commercial_reg": True,
+            "partner_show_bank_name": True,
+            "partner_show_iban": True,
+            "header_info_x_cm": 1.0,
+            "header_info_y_cm": 5.4,
+            "header_info_w_cm": 9.5,
+            "creation_date_x_cm": 1.0,
+            "creation_date_y_cm": 9.3,
+            "table_start_x_cm": 1.0,
+            "table_start_y_cm": 10.5,
 
             "footer_y_offset_cm": 1.5,
             "footer_height_cm": 2.5,
@@ -93,12 +114,76 @@ class PdfConfigWidget(QWidget):
             "footer_stamp_area_h_cm": 3.5
         }
 
+    @staticmethod
+    def _normalize_correspondant_labels(settings):
+        legacy_labels = {
+            "destinataire :",
+            "destinataire:",
+            "retourné à (sous-traitant) :",
+            "retourne a (sous-traitant) :",
+        }
+        for key in ("dest_label_bl", "dest_label_rt"):
+            value = str(settings.get(key) or "").strip()
+            if not value or value.lower() in legacy_labels:
+                settings[key] = "Correspondant :"
+        return settings
+
+    @staticmethod
+    def _setting_enabled(settings, key, default=True):
+        value = settings.get(key, default)
+        if isinstance(value, str):
+            return value.strip().lower() not in {"0", "false", "no", "non", "off", ""}
+        return bool(value)
+
     def load_settings(self):
         defaults = self.get_default_settings()
-        return self.local_store.load_pdf(defaults)
+        return self._normalize_correspondant_labels(self.local_store.load_pdf(defaults))
+
+    def _shared_stamp_manager(self):
+        manager = getattr(self.data_manager, "company_settings", None)
+        required_methods = (
+            "get_stamps",
+            "add_stamp",
+            "update_stamp",
+            "set_active_stamp",
+            "delete_stamp",
+        )
+        if manager is None or not all(hasattr(manager, name) for name in required_methods):
+            return None
+        return manager
+
+    @staticmethod
+    def _stamp_is_active(stamp):
+        value = stamp.get("Is_Active") if isinstance(stamp, dict) else False
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
 
     def load_stamps(self):
-        return self.local_store.load_stamps()
+        manager = self._shared_stamp_manager()
+        if manager is None:
+            return self.local_store.load_stamps()
+
+        stamps = manager.get_stamps(include_image=True) or []
+        if stamps:
+            return stamps
+
+        # One-time compatibility migration for installations that still have
+        # stamps only in the old per-user JSON store.
+        legacy_stamps = self.local_store.load_stamps()
+        if legacy_stamps and self.can_manage_stamps:
+            for stamp in legacy_stamps:
+                manager.add_stamp(
+                    stamp.get("Stamp_Name") or "Cachet",
+                    stamp.get("Image_Data"),
+                    stamp.get("Position_X_CM") or 13.0,
+                    stamp.get("Position_Y_CM") or 22.0,
+                    stamp.get("Width_CM") or 4.0,
+                    stamp.get("Height_CM") or 4.0,
+                    is_active=bool(stamp.get("Is_Active")),
+                )
+            stamps = manager.get_stamps(include_image=True) or []
+        return stamps
 
     def refresh_stamp_list(self, select_id=None, reload=True):
         if not hasattr(self, "list_stamps"):
@@ -110,7 +195,7 @@ class PdfConfigWidget(QWidget):
         self.list_stamps.clear()
 
         active_id = next(
-            (str(stamp["Stamp_ID"]) for stamp in self.stamps if stamp.get("Is_Active")),
+            (str(stamp["Stamp_ID"]) for stamp in self.stamps if self._stamp_is_active(stamp)),
             None,
         )
         row_to_select = None
@@ -125,7 +210,7 @@ class PdfConfigWidget(QWidget):
 
         if row_to_select is None and self.stamps:
             row_to_select = next(
-                (row for row, stamp in enumerate(self.stamps) if stamp.get("Is_Active")),
+                (row for row, stamp in enumerate(self.stamps) if self._stamp_is_active(stamp)),
                 0,
             )
         self.list_stamps.blockSignals(False)
@@ -168,14 +253,17 @@ class PdfConfigWidget(QWidget):
         image_bytes = stamp.get("Image_Data")
         if image_bytes:
             image.loadFromData(bytes(image_bytes))
-        self.lbl_stamp_file.setText("Image PNG enregistrée localement")
+        self.lbl_stamp_file.setText("Image PNG disponible dans la bibliotheque partagee")
         self.stamp_preview.setText("" if not image.isNull() else "Image PNG invalide")
         self.stamp_preview.setPixmap(
             image.scaled(180, 130, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             if not image.isNull() else QPixmap()
         )
-        self.preview_canvas.active_stamp = stamp
-        self.preview_canvas.active_stamp_pixmap = image
+        # The PDF preview must reflect the shared active stamp, not merely
+        # the stamp currently selected for editing.
+        active_stamp = stamp if self._stamp_is_active(stamp) else None
+        self.preview_canvas.active_stamp = active_stamp
+        self.preview_canvas.active_stamp_pixmap = image if active_stamp else QPixmap()
         self.preview_canvas.update()
 
     def update_stamp_preview(self):
@@ -194,12 +282,15 @@ class PdfConfigWidget(QWidget):
             "Width_CM": self.sp_stamp_w.value(),
             "Height_CM": self.sp_stamp_h.value(),
         })
-        self.preview_canvas.active_stamp = stamp
+        active_stamp = stamp if self._stamp_is_active(stamp) else None
+        self.preview_canvas.active_stamp = active_stamp
+        if active_stamp is None:
+            self.preview_canvas.active_stamp_pixmap = QPixmap()
         self.preview_canvas.update()
 
     def add_stamp(self):
         if not self.can_manage_stamps:
-            QMessageBox.warning(self, "Cachets", "Vous n'avez pas la permission de gérer les cachets.")
+            QMessageBox.warning(self, "Cachets", "Vous n'avez pas la permission de gerer les cachets.")
             return
 
         path, _ = QFileDialog.getOpenFileName(
@@ -216,23 +307,37 @@ class PdfConfigWidget(QWidget):
                 image_bytes = image_file.read()
             image = QPixmap()
             if not image.loadFromData(image_bytes):
-                raise ValueError("Le fichier sélectionné n'est pas une image PNG valide.")
+                raise ValueError("Le fichier selectionne n'est pas une image PNG valide.")
 
-            stamp_id = uuid4().hex
-            self.stamps.append({
-                "Stamp_ID": stamp_id,
-                "Stamp_Name": os.path.splitext(os.path.basename(path))[0][:150],
-                "Image_Data": image_bytes,
-                "Position_X_CM": 13.0,
-                "Position_Y_CM": 22.0,
-                "Width_CM": 4.0,
-                "Height_CM": 4.0,
-                "Is_Active": not self.stamps,
-            })
+            stamp_name = os.path.splitext(os.path.basename(path))[0][:150]
+            manager = self._shared_stamp_manager()
+            if manager is not None:
+                stamp_id = manager.add_stamp(
+                    stamp_name,
+                    image_bytes,
+                    position_x_cm=13.0,
+                    position_y_cm=22.0,
+                    width_cm=4.0,
+                    height_cm=4.0,
+                    is_active=False,
+                )
+            else:
+                stamp_id = self.local_store.add_stamp(
+                    stamp_name,
+                    image_bytes,
+                    13.0,
+                    22.0,
+                    4.0,
+                    4.0,
+                )
+            if not stamp_id:
+                raise RuntimeError("Impossible d'enregistrer le cachet dans la bibliotheque partagee.")
+
+            self.stamps = self.load_stamps()
             self.refresh_stamp_list(select_id=stamp_id, reload=False)
         except Exception as exc:
             logging.error(f"Error adding PDF stamp: {exc}")
-            QMessageBox.critical(self, "Cachets", f"Échec de l'ajout du cachet :\n{exc}")
+            QMessageBox.critical(self, "Cachets", f"Echec de l'ajout du cachet :\n{exc}")
 
     def save_current_stamp(self, show_message=True):
         if self.current_stamp_id is None:
@@ -248,8 +353,9 @@ class PdfConfigWidget(QWidget):
             None,
         )
         if stamp is None:
-            QMessageBox.critical(self, "Cachets", "Impossible de trouver le cachet sélectionné.")
+            QMessageBox.critical(self, "Cachets", "Impossible de trouver le cachet selectionne.")
             return False
+
         stamp.update({
             "Stamp_Name": stamp_name,
             "Position_X_CM": self.sp_stamp_x.value(),
@@ -258,9 +364,34 @@ class PdfConfigWidget(QWidget):
             "Height_CM": self.sp_stamp_h.value(),
         })
 
+        manager = self._shared_stamp_manager()
+        if manager is not None:
+            success = manager.update_stamp(
+                int(self.current_stamp_id),
+                stamp_name,
+                self.sp_stamp_x.value(),
+                self.sp_stamp_y.value(),
+                self.sp_stamp_w.value(),
+                self.sp_stamp_h.value(),
+            )
+        else:
+            success = self.local_store.update_stamp(
+                self.current_stamp_id,
+                stamp_name,
+                self.sp_stamp_x.value(),
+                self.sp_stamp_y.value(),
+                self.sp_stamp_w.value(),
+                self.sp_stamp_h.value(),
+            )
+
+        if not success:
+            QMessageBox.critical(self, "Cachets", "Echec de l'enregistrement du cachet.")
+            return False
+
+        self.stamps = self.load_stamps()
         self.refresh_stamp_list(select_id=self.current_stamp_id, reload=False)
         if show_message:
-            QMessageBox.information(self, "Cachets", "Les proprietes du cachet ont ete enregistrees.")
+            QMessageBox.information(self, "Cachets", "Les proprietes du cachet partage ont ete enregistrees.")
         return True
 
     def activate_stamp(self):
@@ -268,41 +399,59 @@ class PdfConfigWidget(QWidget):
             return
         if not self.save_current_stamp(show_message=False):
             return
-        found = False
-        for stamp in self.stamps:
-            active = str(stamp.get("Stamp_ID")) == self.current_stamp_id
-            stamp["Is_Active"] = active
-            found = found or active
-        if found:
-            self.refresh_stamp_list(select_id=self.current_stamp_id, reload=False)
+
+        manager = self._shared_stamp_manager()
+        if manager is not None:
+            success = manager.set_active_stamp(int(self.current_stamp_id))
+        else:
+            success = self.local_store.set_active_stamp(self.current_stamp_id)
+        if not success:
+            QMessageBox.warning(self, "Cachets", "Impossible d'activer le cachet.")
+            return
+
+        self.stamps = self.load_stamps()
+        self.refresh_stamp_list(select_id=self.current_stamp_id, reload=False)
+
+    def deactivate_stamp(self):
+        manager = self._shared_stamp_manager()
+        if manager is not None:
+            success = manager.set_active_stamp(None)
+        else:
+            success = self.local_store.set_active_stamp(None)
+        if not success:
+            QMessageBox.warning(self, "Cachets", "Impossible de desactiver le cachet.")
+            return
+
+        self.stamps = self.load_stamps()
+        self.refresh_stamp_list(select_id=self.current_stamp_id, reload=False)
 
     def delete_stamp(self):
         if not self.can_manage_stamps:
-            QMessageBox.warning(self, "Cachets", "Vous n'avez pas la permission de gérer les cachets.")
+            QMessageBox.warning(self, "Cachets", "Vous n'avez pas la permission de gerer les cachets.")
             return
         if self.current_stamp_id is None:
             return
         reply = QMessageBox.question(
             self,
             "Supprimer le cachet",
-            "Supprimer définitivement le cachet sélectionné ?",
+            "Supprimer definitivement le cachet selectionne ?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
             return
-        stamp_id = self.current_stamp_id
-        remaining = [
-            stamp for stamp in self.stamps
-            if str(stamp.get("Stamp_ID")) != stamp_id
-        ]
-        if len(remaining) == len(self.stamps):
+
+        manager = self._shared_stamp_manager()
+        if manager is not None:
+            success = manager.delete_stamp(int(self.current_stamp_id))
+        else:
+            success = self.local_store.delete_stamp(self.current_stamp_id)
+        if not success:
             QMessageBox.warning(self, "Cachets", "Impossible de supprimer le cachet.")
             return
-        if remaining and not any(stamp.get("Is_Active") for stamp in remaining):
-            remaining[0]["Is_Active"] = True
-        self.stamps = remaining
+
         self.current_stamp_id = None
+        self.stamps = self.load_stamps()
         self.refresh_stamp_list(reload=False)
 
     def get_updated_settings(self):
@@ -333,9 +482,16 @@ class PdfConfigWidget(QWidget):
             "sp_img_w": "banner_img_w_cm",
             "sp_img_h": "banner_img_h_cm",
             "sp_bank_y": "bank_y_offset_cm",
+            "sp_header_x": "header_info_x_cm",
+            "sp_header_y": "header_info_y_cm",
+            "sp_header_w": "header_info_w_cm",
+            "sp_date_x": "creation_date_x_cm",
+            "sp_date_y": "creation_date_y_cm",
+            "sp_table_x": "table_start_x_cm",
             "sp_dest_x": "dest_box_x_cm",
             "sp_dest_y": "dest_box_y_cm",
             "sp_dest_w": "dest_box_w_cm",
+            "sp_dest_h": "dest_box_h_cm",
             "sp_table_y": "table_start_y_cm",
             "sp_footer_y": "footer_y_offset_cm",
             "sp_footer_h": "footer_height_cm",
@@ -346,8 +502,26 @@ class PdfConfigWidget(QWidget):
             "sp_footer_stamp_h": "footer_stamp_area_h_cm",
         }
 
+        checkbox_fields = {
+            "chk_partner_name": "partner_show_name",
+            "chk_partner_contact_person": "partner_show_contact_person",
+            "chk_partner_phone": "partner_show_phone",
+            "chk_partner_email": "partner_show_email",
+            "chk_partner_website": "partner_show_website",
+            "chk_partner_address_line1": "partner_show_address_line1",
+            "chk_partner_address_line2": "partner_show_address_line2",
+            "chk_partner_postal_code": "partner_show_postal_code",
+            "chk_partner_city": "partner_show_city",
+            "chk_partner_type": "partner_show_type",
+            "chk_partner_agrement": "partner_show_agrement",
+            "chk_partner_tax_id": "partner_show_tax_id",
+            "chk_partner_commercial_reg": "partner_show_commercial_reg",
+            "chk_partner_bank_name": "partner_show_bank_name",
+            "chk_partner_iban": "partner_show_iban",
+        }
         controls = [getattr(self, name) for name in text_fields]
         controls += [getattr(self, name) for name in spin_fields]
+        controls += [getattr(self, name) for name in checkbox_fields]
         for control in controls:
             control.blockSignals(True)
         try:
@@ -355,6 +529,8 @@ class PdfConfigWidget(QWidget):
                 getattr(self, widget_name).setText(str(self.settings.get(setting_name, "")))
             for widget_name, setting_name in spin_fields.items():
                 getattr(self, widget_name).setValue(float(self.settings.get(setting_name, 0.0)))
+            for widget_name, setting_name in checkbox_fields.items():
+                getattr(self, widget_name).setChecked(self._setting_enabled(self.settings, setting_name, True))
         finally:
             for control in controls:
                 control.blockSignals(False)
@@ -376,7 +552,7 @@ class PdfConfigWidget(QWidget):
 
         try:
             db_settings = manager.get_settings() or {}
-            self.settings = {**self.get_default_settings(), **db_settings}
+            self.settings = self._normalize_correspondant_labels({**self.get_default_settings(), **db_settings})
 
             banner_bytes = manager.get_banner_image()
             self.new_image_bytes = bytes(banner_bytes) if banner_bytes else None
@@ -388,11 +564,9 @@ class PdfConfigWidget(QWidget):
                 "Image chargée depuis la base de données" if not self.banner_pixmap.isNull() else "Aucune image"
             )
 
-            self.stamps = self.local_store.import_database_stamps(
-                manager.get_stamps(include_image=True)
-            )
+            self.stamps = self.load_stamps()
             active_id = next(
-                (stamp["Stamp_ID"] for stamp in self.stamps if stamp.get("Is_Active")),
+                (stamp["Stamp_ID"] for stamp in self.stamps if self._stamp_is_active(stamp)),
                 None,
             )
             self.current_stamp_id = None
@@ -405,9 +579,7 @@ class PdfConfigWidget(QWidget):
             return False
 
     def save_settings(self):
-        """Save this user's PDF settings and stamp library locally only."""
-        if self.current_stamp_id is not None and not self.save_current_stamp(show_message=False):
-            raise Exception("Échec de l'enregistrement du cachet sélectionné.")
+        """Save this user's local PDF layout without changing shared stamps."""
         banner_bytes = self.new_image_bytes
         if banner_bytes is None and not self.clear_banner_on_save:
             banner_bytes = self.local_store.load_banner_bytes(self.settings)
@@ -416,7 +588,6 @@ class PdfConfigWidget(QWidget):
             banner_bytes=banner_bytes,
             clear_banner=self.clear_banner_on_save,
         )
-        self.local_store.save_stamps(self.stamps)
         self.new_image_bytes = None
         self.clear_banner_on_save = False
 
@@ -425,6 +596,9 @@ class PdfConfigWidget(QWidget):
         manager = getattr(self.data_manager, "company_settings", None)
         if manager is None or not hasattr(manager, "update_settings"):
             raise Exception("Le gestionnaire des paramètres PDF de la base de données est indisponible.")
+
+        if self.current_stamp_id is not None and not self.save_current_stamp(show_message=False):
+            raise Exception("Echec de la sauvegarde du cachet selectionne.")
 
         self.sync_settings()
         banner_bytes = self.new_image_bytes
@@ -498,7 +672,7 @@ class PdfConfigWidget(QWidget):
         self.edit_tot_bl = QLineEdit(self.settings.get('total_label_bl', ''))
 
         bl_form.addRow("Titre Document:", self.edit_title_bl)
-        bl_form.addRow("Label Destinataire:", self.edit_dest_bl)
+        bl_form.addRow("Label Correspondant:", self.edit_dest_bl)
         bl_form.addRow("En-tête Quantité:", self.edit_qty_bl)
         bl_form.addRow("Label Total:", self.edit_tot_bl)
 
@@ -517,7 +691,7 @@ class PdfConfigWidget(QWidget):
         self.edit_tot_rt = QLineEdit(self.settings.get('total_label_rt', ''))
 
         rt_form.addRow("Titre Document:", self.edit_title_rt)
-        rt_form.addRow("Label Retourné à:", self.edit_dest_rt)
+        rt_form.addRow("Label Correspondant:", self.edit_dest_rt)
         rt_form.addRow("En-tête Quantité:", self.edit_qty_rt)
         rt_form.addRow("Label Total:", self.edit_tot_rt)
 
@@ -533,11 +707,52 @@ class PdfConfigWidget(QWidget):
         self.edit_bank = QLineEdit(self.settings.get('bank_name', ''))
         self.edit_rib = QLineEdit(self.settings.get('bank_acc', ''))
         self.sp_bank_y = self._create_spin(0, 25, self.settings.get('bank_y_offset_cm', 6.6))
+        self.sp_header_x = self._create_spin(0, 21, self.settings.get('header_info_x_cm', 1.0))
+        self.sp_header_y = self._create_spin(0, 29, self.settings.get('header_info_y_cm', 5.4))
+        self.sp_header_w = self._create_spin(3, 15, self.settings.get('header_info_w_cm', 9.5))
+        self.sp_date_x = self._create_spin(0, 21, self.settings.get('creation_date_x_cm', 1.0))
+        self.sp_date_y = self._create_spin(0, 29, self.settings.get('creation_date_y_cm', 9.3))
 
+        self.sp_table_x = self._create_spin(0, 3, self.settings.get('table_start_x_cm', 1.0))
         self.sp_dest_x = self._create_spin(0, 21, self.settings.get('dest_box_x_cm', 11.5))
-        self.sp_dest_y = self._create_spin(0, 29, self.settings.get('dest_box_y_cm', 6.0))
+        self.sp_dest_y = self._create_spin(0, 29, self.settings.get('dest_box_y_cm', 5.4))
         self.sp_dest_w = self._create_spin(1, 15, self.settings.get('dest_box_w_cm', 8.0))
-        self.sp_table_y = self._create_spin(5, 25, self.settings.get('table_start_y_cm', 9.5))
+        self.sp_dest_h = self._create_spin(2.5, 12, self.settings.get('dest_box_h_cm', 6.5))
+        self.chk_partner_name = QCheckBox("Nom du partenaire")
+        self.chk_partner_contact_person = QCheckBox("Personne de contact")
+        self.chk_partner_phone = QCheckBox("Téléphone")
+        self.chk_partner_email = QCheckBox("Email")
+        self.chk_partner_website = QCheckBox("Site web")
+        self.chk_partner_address_line1 = QCheckBox("Adresse ligne 1")
+        self.chk_partner_address_line2 = QCheckBox("Adresse ligne 2")
+        self.chk_partner_postal_code = QCheckBox("Code postal")
+        self.chk_partner_city = QCheckBox("Ville")
+        self.chk_partner_type = QCheckBox("Type de partenaire")
+        self.chk_partner_agrement = QCheckBox("Numéro d'agrément")
+        self.chk_partner_tax_id = QCheckBox("NIF")
+        self.chk_partner_commercial_reg = QCheckBox("Registre de commerce")
+        self.chk_partner_bank_name = QCheckBox("Nom de la banque")
+        self.chk_partner_iban = QCheckBox("RIB / IBAN")
+        self.partner_detail_checkboxes = (
+            ("partner_show_name", self.chk_partner_name),
+            ("partner_show_contact_person", self.chk_partner_contact_person),
+            ("partner_show_phone", self.chk_partner_phone),
+            ("partner_show_email", self.chk_partner_email),
+            ("partner_show_website", self.chk_partner_website),
+            ("partner_show_address_line1", self.chk_partner_address_line1),
+            ("partner_show_address_line2", self.chk_partner_address_line2),
+            ("partner_show_postal_code", self.chk_partner_postal_code),
+            ("partner_show_city", self.chk_partner_city),
+            ("partner_show_type", self.chk_partner_type),
+            ("partner_show_agrement", self.chk_partner_agrement),
+            ("partner_show_tax_id", self.chk_partner_tax_id),
+            ("partner_show_commercial_reg", self.chk_partner_commercial_reg),
+            ("partner_show_bank_name", self.chk_partner_bank_name),
+            ("partner_show_iban", self.chk_partner_iban),
+        )
+        for setting_name, checkbox in self.partner_detail_checkboxes:
+            checkbox.setChecked(self._setting_enabled(self.settings, setting_name, True))
+        self.sp_table_y = self._create_spin(5, 20, self.settings.get('table_start_y_cm', 10.5))
         self.sp_footer_y = self._create_spin(0, 10, self.settings.get('footer_y_offset_cm', 1.5))
         self.sp_footer_h = self._create_spin(1, 15, self.settings.get('footer_height_cm', 2.5))
         self.sp_footer_left_x = self._create_spin(0, 21, self.settings.get('footer_left_x_cm', 1.0))
@@ -549,12 +764,36 @@ class PdfConfigWidget(QWidget):
         pos_form.addRow("Nom Banque:", self.edit_bank)
         pos_form.addRow("N° Compte (RIB):", self.edit_rib)
         pos_form.addRow("Position Banque Y (cm):", self.sp_bank_y)
-        pos_form.addRow(QLabel(""))
-        pos_form.addRow("Boîte Destinataire X (cm):", self.sp_dest_x)
-        pos_form.addRow("Boîte Destinataire Y (cm):", self.sp_dest_y)
-        pos_form.addRow("Largeur Boîte (cm):", self.sp_dest_w)
-        pos_form.addRow(QLabel(""))
+        pos_form.addRow(QLabel("--- Informations d'en-tête ---"))
+        pos_form.addRow("Informations X (cm):", self.sp_header_x)
+        pos_form.addRow("Informations Y (cm):", self.sp_header_y)
+        pos_form.addRow("Largeur Informations (cm):", self.sp_header_w)
+        pos_form.addRow("Date de création X (cm):", self.sp_date_x)
+        pos_form.addRow("Date de création Y (cm):", self.sp_date_y)
+        pos_form.addRow(QLabel("--- Tableau ---"))
+        pos_form.addRow("Début Tableau X (cm):", self.sp_table_x)
         pos_form.addRow("Début Tableau Y (cm):", self.sp_table_y)
+        pos_form.addRow(QLabel("--- Correspondant ---"))
+        pos_form.addRow("Boîte Correspondant X (cm):", self.sp_dest_x)
+        pos_form.addRow("Boîte Correspondant Y (cm):", self.sp_dest_y)
+        pos_form.addRow("Largeur Boîte (cm):", self.sp_dest_w)
+        pos_form.addRow("Hauteur minimale Boîte (cm):", self.sp_dest_h)
+        pos_form.addRow(QLabel("--- Champs Correspondant ---"))
+        pos_form.addRow("Afficher:", self.chk_partner_name)
+        pos_form.addRow("Afficher:", self.chk_partner_contact_person)
+        pos_form.addRow("Afficher:", self.chk_partner_phone)
+        pos_form.addRow("Afficher:", self.chk_partner_email)
+        pos_form.addRow("Afficher:", self.chk_partner_website)
+        pos_form.addRow("Afficher:", self.chk_partner_address_line1)
+        pos_form.addRow("Afficher:", self.chk_partner_address_line2)
+        pos_form.addRow("Afficher:", self.chk_partner_postal_code)
+        pos_form.addRow("Afficher:", self.chk_partner_city)
+        pos_form.addRow("Afficher:", self.chk_partner_type)
+        pos_form.addRow("Afficher:", self.chk_partner_agrement)
+        pos_form.addRow("Afficher:", self.chk_partner_tax_id)
+        pos_form.addRow("Afficher:", self.chk_partner_commercial_reg)
+        pos_form.addRow("Afficher:", self.chk_partner_bank_name)
+        pos_form.addRow("Afficher:", self.chk_partner_iban)
 
         tab_pos.setWidget(pos_content)
         tab_pos.setWidgetResizable(True)
@@ -599,7 +838,7 @@ class PdfConfigWidget(QWidget):
         stamps_top = QHBoxLayout()
         self.list_stamps = QListWidget()
         self.list_stamps.setMinimumHeight(135)
-        self.list_stamps.setToolTip("Ajoutez plusieurs cachets ; un seul est actif à la fois dans les PDF.")
+        self.list_stamps.setToolTip("Bibliotheque partagee des cachets PDF ; un seul peut etre actif a la fois.")
 
         self.stamp_preview = QLabel("Aucun cachet sélectionné")
         self.stamp_preview.setAlignment(Qt.AlignCenter)
@@ -614,12 +853,14 @@ class PdfConfigWidget(QWidget):
         stamps_actions = QHBoxLayout()
         self.btn_add_stamp = QPushButton("Ajouter un cachet PNG")
         self.btn_delete_stamp = QPushButton("Supprimer le cachet")
-        self.btn_activate_stamp = QPushButton("Définir comme actif")
+        self.btn_deactivate_stamp = QPushButton("Desactiver le cachet")
+        self.btn_activate_stamp = QPushButton("Definir comme actif")
         self.btn_delete_stamp.setStyleSheet("color: #c0392b;")
         self.btn_activate_stamp.setStyleSheet("background-color: #2980b9; color: white; font-weight: bold;")
         stamps_actions.addWidget(self.btn_add_stamp)
         stamps_actions.addWidget(self.btn_delete_stamp)
         stamps_actions.addWidget(self.btn_activate_stamp)
+        stamps_actions.addWidget(self.btn_deactivate_stamp)
         stamps_group_layout.addLayout(stamps_actions)
 
         self.edit_stamp_name = QLineEdit()
@@ -629,8 +870,6 @@ class PdfConfigWidget(QWidget):
         self.sp_stamp_y = self._create_spin(0, 29.7, 22.0)
         self.sp_stamp_w = self._create_spin(0.5, 21, 4.0)
         self.sp_stamp_h = self._create_spin(0.5, 29.7, 4.0)
-        self.btn_save_stamp = QPushButton("Enregistrer le nom, la position et la taille")
-        self.btn_save_stamp.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold;")
         self.btn_add_stamp.setEnabled(self.can_manage_stamps)
         self.btn_delete_stamp.setEnabled(self.can_manage_stamps)
         if not self.can_manage_stamps:
@@ -646,13 +885,12 @@ class PdfConfigWidget(QWidget):
         ))
         stamp_form.addRow("Largeur (cm) :", self.sp_stamp_w)
         stamp_form.addRow("Hauteur (cm) :", self.sp_stamp_h)
-        stamp_form.addRow("", self.btn_save_stamp)
         stamps_group_layout.addLayout(stamp_form)
 
         stamps_layout.addWidget(stamps_group)
         stamps_layout.addWidget(QLabel(
             "Les images PNG transparentes ou classiques sont acceptées. "
-            "La position et la taille sont propres a chaque cachet et s'appliquent aux PDF de l'entreprise."
+            "La bibliotheque et le cachet actif sont partages par les utilisateurs autorises."
         ))
         stamps_layout.addStretch()
         tabs.addTab(tab_stamps, "6. Cachets")
@@ -709,7 +947,7 @@ class PdfConfigWidget(QWidget):
         self.btn_add_stamp.clicked.connect(self.add_stamp)
         self.btn_delete_stamp.clicked.connect(self.delete_stamp)
         self.btn_activate_stamp.clicked.connect(self.activate_stamp)
-        self.btn_save_stamp.clicked.connect(self.save_current_stamp)
+        self.btn_deactivate_stamp.clicked.connect(self.deactivate_stamp)
         self.list_stamps.currentRowChanged.connect(self.on_stamp_selected)
         for stamp_spin in (self.sp_stamp_x, self.sp_stamp_y, self.sp_stamp_w, self.sp_stamp_h):
             stamp_spin.valueChanged.connect(self.update_stamp_preview)
@@ -737,11 +975,15 @@ class PdfConfigWidget(QWidget):
 
         spin_widgets = [
             self.sp_banner_total_h, self.sp_img_x, self.sp_img_y, self.sp_img_w, self.sp_img_h,
-            self.sp_bank_y, self.sp_dest_x, self.sp_dest_y, self.sp_dest_w, self.sp_table_y,
+            self.sp_bank_y, self.sp_header_x, self.sp_header_y, self.sp_header_w,
+            self.sp_date_x, self.sp_date_y, self.sp_table_x,
+            self.sp_dest_x, self.sp_dest_y, self.sp_dest_w, self.sp_dest_h, self.sp_table_y,
             self.sp_footer_y, self.sp_footer_h, self.sp_footer_left_x, self.sp_footer_right_x,
             self.sp_footer_stamp_gap, self.sp_footer_stamp_w, self.sp_footer_stamp_h
         ]
         for s in spin_widgets: s.valueChanged.connect(self.sync_settings)
+        for setting_name, checkbox in self.partner_detail_checkboxes:
+            checkbox.stateChanged.connect(self.sync_settings)
 
     def open_visual_editor_dialog(self):
         dialog = VisualPdfEditorDialog(self.settings, self)
@@ -753,18 +995,39 @@ class PdfConfigWidget(QWidget):
         self.settings.update(new_settings)
 
         # Block signals temporarily
+        self.sp_header_x.blockSignals(True)
+        self.sp_header_y.blockSignals(True)
+        self.sp_header_w.blockSignals(True)
+        self.sp_date_x.blockSignals(True)
+        self.sp_date_y.blockSignals(True)
+        self.sp_table_x.blockSignals(True)
         self.sp_dest_x.blockSignals(True)
         self.sp_dest_y.blockSignals(True)
+        self.sp_dest_h.blockSignals(True)
         self.sp_footer_left_x.blockSignals(True)
         self.sp_footer_right_x.blockSignals(True)
 
+        self.sp_header_x.setValue(self.settings.get('header_info_x_cm', 1.0))
+        self.sp_header_y.setValue(self.settings.get('header_info_y_cm', 5.4))
+        self.sp_header_w.setValue(self.settings.get('header_info_w_cm', 9.5))
+        self.sp_date_x.setValue(self.settings.get('creation_date_x_cm', 1.0))
+        self.sp_date_y.setValue(self.settings.get('creation_date_y_cm', 9.3))
+        self.sp_table_x.setValue(self.settings.get('table_start_x_cm', 1.0))
         self.sp_dest_x.setValue(self.settings.get('dest_box_x_cm', 11.5))
-        self.sp_dest_y.setValue(self.settings.get('dest_box_y_cm', 6.0))
+        self.sp_dest_y.setValue(self.settings.get('dest_box_y_cm', 5.4))
+        self.sp_dest_h.setValue(self.settings.get('dest_box_h_cm', 6.5))
         self.sp_footer_left_x.setValue(self.settings.get('footer_left_x_cm', 1.0))
         self.sp_footer_right_x.setValue(self.settings.get('footer_right_x_cm', 12.0))
 
+        self.sp_header_x.blockSignals(False)
+        self.sp_header_y.blockSignals(False)
+        self.sp_header_w.blockSignals(False)
+        self.sp_date_x.blockSignals(False)
+        self.sp_date_y.blockSignals(False)
+        self.sp_table_x.blockSignals(False)
         self.sp_dest_x.blockSignals(False)
         self.sp_dest_y.blockSignals(False)
+        self.sp_dest_h.blockSignals(False)
         self.sp_footer_left_x.blockSignals(False)
         self.sp_footer_right_x.blockSignals(False)
 
@@ -831,9 +1094,31 @@ class PdfConfigWidget(QWidget):
             "bank_name": self.edit_bank.text(),
             "bank_acc": self.edit_rib.text(),
             "bank_y_offset_cm": self.sp_bank_y.value(),
+            "header_info_x_cm": self.sp_header_x.value(),
+            "header_info_y_cm": self.sp_header_y.value(),
+            "header_info_w_cm": self.sp_header_w.value(),
+            "creation_date_x_cm": self.sp_date_x.value(),
+            "creation_date_y_cm": self.sp_date_y.value(),
+            "table_start_x_cm": self.sp_table_x.value(),
             "dest_box_x_cm": self.sp_dest_x.value(),
             "dest_box_y_cm": self.sp_dest_y.value(),
             "dest_box_w_cm": self.sp_dest_w.value(),
+            "dest_box_h_cm": self.sp_dest_h.value(),
+            "partner_show_name": self.chk_partner_name.isChecked(),
+            "partner_show_contact_person": self.chk_partner_contact_person.isChecked(),
+            "partner_show_phone": self.chk_partner_phone.isChecked(),
+            "partner_show_email": self.chk_partner_email.isChecked(),
+            "partner_show_website": self.chk_partner_website.isChecked(),
+            "partner_show_address_line1": self.chk_partner_address_line1.isChecked(),
+            "partner_show_address_line2": self.chk_partner_address_line2.isChecked(),
+            "partner_show_postal_code": self.chk_partner_postal_code.isChecked(),
+            "partner_show_city": self.chk_partner_city.isChecked(),
+            "partner_show_type": self.chk_partner_type.isChecked(),
+            "partner_show_agrement": self.chk_partner_agrement.isChecked(),
+            "partner_show_tax_id": self.chk_partner_tax_id.isChecked(),
+            "partner_show_commercial_reg": self.chk_partner_commercial_reg.isChecked(),
+            "partner_show_bank_name": self.chk_partner_bank_name.isChecked(),
+            "partner_show_iban": self.chk_partner_iban.isChecked(),
             "table_start_y_cm": self.sp_table_y.value(),
             "footer_y_offset_cm": self.sp_footer_y.value(),
             "footer_height_cm": self.sp_footer_h.value(),
@@ -891,7 +1176,9 @@ class LivePreviewCanvas(QWidget):
 
         # Get dynamic texts
         title = s.get('doc_title_rt', 'BON DE RETOUR') if self.is_retour else s.get('doc_title_bl', 'BON DE LIVRAISON')
-        dest_label = s.get('dest_label_rt', 'Retourné à (Sous-traitant) :') if self.is_retour else s.get('dest_label_bl', 'Destinataire :')
+        dest_label = s.get('dest_label_rt', 'Correspondant :') if self.is_retour else s.get('dest_label_bl', 'Correspondant :')
+        if str(dest_label).strip().lower() in {'destinataire :', 'destinataire:', 'retourné à (sous-traitant) :'}:
+            dest_label = 'Correspondant :'
         f_left = s.get('footer_left_rt', 'Signature Magasin / Expéditeur') if self.is_retour else s.get('footer_left_bl', 'Responsable Stock')
         f_right = s.get('footer_right_rt', 'Accusé de Réception (Fournisseur)') if self.is_retour else s.get('footer_right_bl', 'Accusé de réception (Client)')
 
@@ -908,24 +1195,64 @@ class LivePreviewCanvas(QWidget):
         p.drawText(15, bank_y, f"Banque : {s.get('bank_name', '')}")
         p.drawText(15, bank_y + 4, f"N° Compte : {s.get('bank_acc', '')}")
 
-        # Destinataire Box
-        dx, dy, dw = int(s.get('dest_box_x_cm', 11.5) * 10), int(s.get('dest_box_y_cm', 6.0) * 10), int(s.get('dest_box_w_cm', 8.0) * 10)
+        # Correspondant Box
+        dx, dy, dw = int(s.get('dest_box_x_cm', 11.5) * 10), int(s.get('dest_box_y_cm', 5.4) * 10), int(s.get('dest_box_w_cm', 8.0) * 10)
         p.setBrush(QColor(245, 245, 245))
         p.setPen(QPen(Qt.lightGray, 0.2))
-        p.drawRect(dx, dy, dw, 25)
+        dest_h = int(s.get('dest_box_h_cm', 6.5) * 10)
+        p.drawRect(dx, dy, dw, dest_h)
         p.setPen(Qt.black)
         p.drawText(dx + 2, dy + 5, dest_label)
-        p.drawText(dx + 2, dy + 10, "Nom du Partenaire")
-        p.drawText(dx + 2, dy + 14, "NIF : 123456789")
+
+        def show_partner_field(key):
+            value = s.get(key, True)
+            if isinstance(value, str):
+                return value.strip().lower() not in {"0", "false", "no", "non", "off", ""}
+            return bool(value)
+
+        detail_preview_lines = []
+        preview_fields = (
+            ("partner_show_name", "Nom du partenaire"),
+            ("partner_show_contact_person", "Personne de contact"),
+            ("partner_show_phone", "Téléphone"),
+            ("partner_show_email", "Email"),
+            ("partner_show_website", "Site web"),
+            ("partner_show_address_line1", "Adresse ligne 1"),
+            ("partner_show_address_line2", "Adresse ligne 2"),
+            ("partner_show_postal_code", "Code postal"),
+            ("partner_show_city", "Ville"),
+            ("partner_show_type", "Type de partenaire"),
+            ("partner_show_agrement", "Numéro d'agrément"),
+            ("partner_show_tax_id", "NIF"),
+            ("partner_show_commercial_reg", "Registre de commerce"),
+            ("partner_show_bank_name", "Nom de la banque"),
+            ("partner_show_iban", "RIB / IBAN"),
+        )
+        detail_preview_lines.extend(
+            label for key, label in preview_fields if show_partner_field(key)
+        )
+        for index, label in enumerate(detail_preview_lines):
+            p.drawText(dx + 2, dy + 10 + int(index * 3.8), label)
+
+        header_x = int(s.get('header_info_x_cm', 1.0) * 10)
+        header_y = int(s.get('header_info_y_cm', 5.4) * 10)
+        p.setPen(Qt.black)
+        p.drawText(header_x, header_y, "Adresse / informations de l'entreprise")
+        p.drawText(header_x, header_y + 5, "NIF / RC / Banque")
+
+        date_x = int(s.get('creation_date_x_cm', 1.0) * 10)
+        date_y = int(s.get('creation_date_y_cm', 9.3) * 10)
+        p.drawText(date_x, date_y, "Date de creation")
 
         # Table
-        table_y = int(s.get('table_start_y_cm', 9.5) * 10)
+        table_x = int(s.get('table_start_x_cm', 1.0) * 10)
+        table_y = int(s.get('table_start_y_cm', 10.5) * 10)
         p.setBrush(color)
         p.setPen(Qt.NoPen)
-        p.drawRect(10, table_y, 190, 8)
+        p.drawRect(table_x, table_y, 190, 8)
         p.setBrush(Qt.NoBrush)
         p.setPen(QPen(Qt.lightGray, 0.5))
-        p.drawRect(10, table_y + 8, 190, 50) # fake table body
+        p.drawRect(table_x, table_y + 8, 190, 50) # fake table body
 
         # Footer
         table_end_y = table_y + 58

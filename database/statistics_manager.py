@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
-from .system_logger import log_methods 
+from .system_logger import log_methods
 
 @log_methods()
 class StatisticsManager:
@@ -18,14 +18,14 @@ class StatisticsManager:
     def get_kpi_summary(self):
         """
         واجهة القياس الرئيسية (Dashboard).
-        تم التعديل: حساب الاستهلاك والحذف يعرض الآن (وحدات الاستخدام - Tests/Units) 
+        تم التعديل: حساب الاستهلاك والحذف يعرض الآن (وحدات الاستخدام - Tests/Units)
         بدلاً من (وحدات المخزون - Boxes) لإزالة الفواصل العشرية غير المرغوبة في العدد.
         """
         stats = {
             'total_products': 0,
             'total_stock_value': Decimal('0.00'),
             'total_consumed_units': 0,        # تم تغيير النوع إلى int ليكون رقم صحيح
-            'total_consumed_value': Decimal('0.00'), 
+            'total_consumed_value': Decimal('0.00'),
             'total_waste_units': 0,           # تم تغيير النوع إلى int ليكون رقم صحيح
             'total_waste_value': Decimal('0.00'),
             'critical_alerts': 0
@@ -33,7 +33,7 @@ class StatisticsManager:
         try:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 # 1. عدد المنتجات النشطة حالياً
                 cursor.execute("SELECT COUNT(*) FROM Products_Master WHERE Deleted_At IS NULL")
                 stats['total_products'] = cursor.fetchone()[0]
@@ -41,14 +41,14 @@ class StatisticsManager:
                 # 2. قيمة المخزون الحالي (المتوفر فقط)
                 query_stock_val = """
                     SELECT SUM(
-                        ib.Quantity_Current * 
-                        COALESCE(ib.Unit_Price_Received, 0) * 
-                        (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) * 
+                        ib.Quantity_Current *
+                        COALESCE(ib.Unit_Price_Received, 0) *
+                        (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) *
                         (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
-                    ) 
+                    )
                     FROM Inventory_Batches ib
                     JOIN Products_Master pm ON ib.Product_ID = pm.Product_ID
-                    WHERE ib.Quantity_Current > 0 
+                    WHERE ib.Quantity_Current > 0
                     AND ib.Status = 'Available'
                     AND pm.Deleted_At IS NULL
                 """
@@ -59,15 +59,15 @@ class StatisticsManager:
                 # 3. حساب الاستهلاك (Consumption) - وحدة الاستخدام (Tests)
                 # التعديل: تم إزالة القسمة في العمود الأول لعرض عدد الاختبارات الفعلي
                 query_consumption = """
-                    SELECT 
+                    SELECT
                         -- العمود 1: الكمية (عدد الاختبارات/الوحدات المفتوحة)
                         SUM(ABS(sml.Qty_Change)),
-                        
+
                         -- العمود 2: القيمة المالية (تبقى معادلة القسمة هنا ضرورية لحساب التكلفة الجزئية من العلبة)
                         SUM(
-                            (ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)) * 
-                            COALESCE(ib.Unit_Price_Received, 0) * 
-                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) * 
+                            (ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)) *
+                            COALESCE(ib.Unit_Price_Received, 0) *
+                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) *
                             (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
                         )
                     FROM Stock_Movement_Log sml
@@ -82,22 +82,37 @@ class StatisticsManager:
                     stats['total_consumed_units'] = int(row_cons[0]) if row_cons[0] is not None else 0
                     stats['total_consumed_value'] = Decimal(str(row_cons[1])) if row_cons[1] is not None else Decimal('0.00')
 
-                # 4. حساب الحذف/التلف (Waste) - وحدة الاستخدام
-                # التعديل: نفس التعديل السابق، عرض عدد الوحدات التالفة مباشرة
+                # 4. حساب الحذف/التلف (Waste) - وحدة الاستخدام والقيمة المالية الدقيقة
                 query_waste = """
-                    SELECT 
-                        -- العمود 1: الكمية (عدد الوحدات التالفة)
-                        SUM(ABS(sml.Qty_Change)),
-                        
-                        -- العمود 2: القيمة المالية
+                    SELECT
+                        -- العمود 1: الكمية الإجمالية بوحدة الاستخدام/الوحدات
                         SUM(
-                            (ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)) * 
-                            COALESCE(ib.Unit_Price_Received, 0) * 
-                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) * 
+                            CASE
+                                WHEN sml.Container_ID IS NOT NULL OR LOWER(COALESCE(sml.Unit_Used, '')) = LOWER(COALESCE(pm.Usage_Unit, ''))
+                                    THEN ABS(sml.Qty_Change)
+                                ELSE ABS(sml.Qty_Change) * COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)
+                            END
+                        ),
+
+                        -- العمود 2: القيمة المالية الإجمالية للفاقد (TTC مع التخفيض والضريبة)
+                        SUM(
+                            (
+                                CASE
+                                    WHEN sml.Container_ID IS NOT NULL OR LOWER(COALESCE(sml.Unit_Used, '')) = LOWER(COALESCE(pm.Usage_Unit, ''))
+                                        THEN ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)
+                                    ELSE ABS(sml.Qty_Change)
+                                END
+                            ) *
+                            COALESCE(
+                                NULLIF(ib.Unit_Price_Received, 0),
+                                (SELECT NULLIF(ib2.Unit_Price_Received, 0) FROM Inventory_Batches ib2 WHERE ib2.Product_ID = pm.Product_ID AND ib2.Unit_Price_Received > 0 ORDER BY ib2.Batch_ID DESC LIMIT 1),
+                                0.0
+                            ) *
+                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) *
                             (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
                         )
                     FROM Stock_Movement_Log sml
-                    LEFT JOIN Products_Master pm ON sml.Product_ID = pm.Product_ID
+                    JOIN Products_Master pm ON sml.Product_ID = pm.Product_ID
                     LEFT JOIN Inventory_Batches ib ON sml.Batch_ID = ib.Batch_ID
                     WHERE sml.Movement_Type = 'Waste'
                 """
@@ -117,7 +132,7 @@ class StatisticsManager:
             logging.error(f"Erreur KPIs: {e}")
             return stats
 
-        
+
     def get_active_alerts(self):
         """
         جلب التنبيهات مع:
@@ -129,11 +144,11 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 today = datetime.now().date()
-                
+
                 # 1. تنبيهات انتهاء الصلاحية (Péremption) - مجمعة حسب المنتوج
                 query_expiry = """
-                    SELECT 
-                        p.Product_Name, 
+                    SELECT
+                        p.Product_Name,
                         GROUP_CONCAT(DISTINCT b.Lot_Number SEPARATOR ', ') as Lot_Number,
                         MIN(b.Expiry_Date) as Expiry_Date,
                         SUM(b.Quantity_Current) as Total_Qty,
@@ -155,7 +170,7 @@ class StatisticsManager:
                 for item in cursor.fetchall():
                     days_diff = (item['Expiry_Date'] - today).days
                     fixed_threshold = item['Alert_Before_Expiry_Days'] or 2
-                    
+
                     # تصنيف نوع الخطر
                     if days_diff <= fixed_threshold:
                         alert_type = "Péremption Urgente"
@@ -163,9 +178,9 @@ class StatisticsManager:
                     else:
                         alert_type = "Péremption Anticipée"
                         crit = "Medium"
-                    
+
                     dynamic_threshold = item['Total_Qty'] * fixed_threshold
-                    
+
                     alerts.append({
                         "Product": item['Product_Name'],
                         "Type": alert_type,
@@ -180,8 +195,8 @@ class StatisticsManager:
 
                 # 2. تنبيهات نفاد المخزون (Rupture)
                 query_stock = """
-                    SELECT 
-                        p.Product_Name, 
+                    SELECT
+                        p.Product_Name,
                         MIN(p.Minimum_Stock_Level) as Minimum_Stock_Level,
                         COALESCE(SUM(b.Quantity_Current), 0) as Total,
                         COALESCE(pf.Family_Name, 'Autre') as Family_Name,
@@ -210,12 +225,12 @@ class StatisticsManager:
                         "Criticality": "High" if float(item['Total']) == 0 else "Medium",
                         "TotalQty": item['Total']
                     })
-            
+
             return alerts
         except Exception as e:
             logging.error(f"Alerts Error: {e}")
             return []
-        
+
     def get_all_families(self):
         """جلب جميع العائلات المفعلة لاستخدامها في الفلاتر."""
         try:
@@ -313,33 +328,137 @@ class StatisticsManager:
 
     def get_waste_analysis(self, start_date, end_date):
         """
-        Analyse des déchets par raison (Valeur TTC avec Remise).
+        Analyse des déchets par raison / motif (Valeur TTC avec Remise).
         """
         try:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
-                        wr.Reason_Name,
-                        COUNT(*) as frequency,
-                        -- Calcul perte TTC
-                        SUM(ABS(sml.Qty_Change) * 
-                            ib.Unit_Price_Received * 
-                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) * 
+                    SELECT
+                        COALESCE(wr.Reason_Name, 'Autre / Non spécifié') as Reason_Name,
+                        COUNT(sml.Movement_ID) as frequency,
+                        -- Calcul perte TTC exacte
+                        SUM(
+                            (
+                                CASE
+                                    WHEN sml.Container_ID IS NOT NULL OR LOWER(COALESCE(sml.Unit_Used, '')) = LOWER(COALESCE(pm.Usage_Unit, ''))
+                                        THEN ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)
+                                    ELSE ABS(sml.Qty_Change)
+                                END
+                            ) *
+                            COALESCE(
+                                NULLIF(ib.Unit_Price_Received, 0),
+                                (SELECT NULLIF(ib2.Unit_Price_Received, 0) FROM Inventory_Batches ib2 WHERE ib2.Product_ID = pm.Product_ID AND ib2.Unit_Price_Received > 0 ORDER BY ib2.Batch_ID DESC LIMIT 1),
+                                0.0
+                            ) *
+                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) *
                             (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
                         ) as estimated_loss
                     FROM Stock_Movement_Log sml
+                    JOIN Products_Master pm ON sml.Product_ID = pm.Product_ID
                     LEFT JOIN Waste_Reasons wr ON sml.Reason_ID = wr.Reason_ID
-                    JOIN Inventory_Batches ib ON sml.Batch_ID = ib.Batch_ID
+                    LEFT JOIN Inventory_Batches ib ON sml.Batch_ID = ib.Batch_ID
                     WHERE sml.Movement_Type = 'Waste'
                       AND DATE(sml.Transaction_Date) BETWEEN %s AND %s
-                    GROUP BY wr.Reason_Name
+                    GROUP BY COALESCE(wr.Reason_Name, 'Autre / Non spécifié')
                     ORDER BY estimated_loss DESC
                 """
                 cursor.execute(query, (start_date, end_date))
                 return cursor.fetchall()
         except Exception as e:
             logging.error(f"Erreur Waste Analysis: {e}")
+            return []
+
+    def get_waste_products_detailed(self, start_date, end_date, search_text=None):
+        """
+        Rapport détaillé des pertes et rebuts groupé STRICTEMENT par produit unique.
+        Un produit = Une seule ligne dans le tableau (sans distinction de lot, code-barres ou fournisseur).
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                query = """
+                    SELECT
+                        pm.Product_ID,
+                        pm.Product_Name,
+                        COALESCE(pf.Family_Name, 'Non définie') as Family_Name,
+                        COALESCE(m.Manuf_Name, 'Non défini') as Manuf_Name,
+                        pm.Stock_Unit,
+                        COALESCE(pm.Usage_Unit, 'Unité') as Usage_Unit,
+                        COALESCE(pm.Usage_Qty_Per_Stock_Unit, 1) as Usage_Qty_Per_Stock_Unit,
+
+                        -- 1. Nombre d'événements de rebut pour ce produit
+                        COUNT(sml.Movement_ID) as frequency,
+
+                        -- 2. Quantité totale perdue en unité de stock (Boîtes)
+                        SUM(
+                            CASE
+                                WHEN sml.Container_ID IS NOT NULL OR LOWER(COALESCE(sml.Unit_Used, '')) = LOWER(COALESCE(pm.Usage_Unit, ''))
+                                    THEN ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)
+                                ELSE ABS(sml.Qty_Change)
+                            END
+                        ) as total_qty_stock,
+
+                        -- 3. Quantité totale perdue en unité d'usage (Tests/Unités)
+                        SUM(
+                            CASE
+                                WHEN sml.Container_ID IS NOT NULL OR LOWER(COALESCE(sml.Unit_Used, '')) = LOWER(COALESCE(pm.Usage_Unit, ''))
+                                    THEN ABS(sml.Qty_Change)
+                                ELSE ABS(sml.Qty_Change) * COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)
+                            END
+                        ) as total_qty_usage,
+
+                        -- 4. Motifs distincts regroupés
+                        GROUP_CONCAT(DISTINCT COALESCE(wr.Reason_Name, 'Non spécifié') SEPARATOR ', ') as reasons,
+
+                        -- 5. Perte financière totale TTC avec Remise
+                        SUM(
+                            (
+                                CASE
+                                    WHEN sml.Container_ID IS NOT NULL OR LOWER(COALESCE(sml.Unit_Used, '')) = LOWER(COALESCE(pm.Usage_Unit, ''))
+                                        THEN ABS(sml.Qty_Change) / COALESCE(NULLIF(pm.Usage_Qty_Per_Stock_Unit, 0), 1)
+                                    ELSE ABS(sml.Qty_Change)
+                                END
+                            ) *
+                            COALESCE(
+                                NULLIF(ib.Unit_Price_Received, 0),
+                                (SELECT NULLIF(ib2.Unit_Price_Received, 0) FROM Inventory_Batches ib2 WHERE ib2.Product_ID = pm.Product_ID AND ib2.Unit_Price_Received > 0 ORDER BY ib2.Batch_ID DESC LIMIT 1),
+                                0.0
+                            ) *
+                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) *
+                            (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
+                        ) as total_loss_ttc
+
+                    FROM Stock_Movement_Log sml
+                    JOIN Products_Master pm ON sml.Product_ID = pm.Product_ID
+                    LEFT JOIN Product_Families pf ON pm.Family_ID = pf.Family_ID
+                    LEFT JOIN Manufacturers m ON pm.Manuf_ID = m.Manuf_ID
+                    LEFT JOIN Inventory_Batches ib ON sml.Batch_ID = ib.Batch_ID
+                    LEFT JOIN Waste_Reasons wr ON sml.Reason_ID = wr.Reason_ID
+                    WHERE sml.Movement_Type = 'Waste'
+                      AND DATE(sml.Transaction_Date) BETWEEN %s AND %s
+                """
+                params = [start_date, end_date]
+                if search_text:
+                    term = f"%{search_text.lower()}%"
+                    query += " AND (LOWER(pm.Product_Name) LIKE %s OR LOWER(COALESCE(pf.Family_Name, '')) LIKE %s)"
+                    params.extend([term, term])
+
+                query += """
+                    GROUP BY
+                        pm.Product_ID,
+                        pm.Product_Name,
+                        pf.Family_Name,
+                        m.Manuf_Name,
+                        pm.Stock_Unit,
+                        pm.Usage_Unit,
+                        pm.Usage_Qty_Per_Stock_Unit
+                    ORDER BY total_loss_ttc DESC
+                """
+                cursor.execute(query, tuple(params))
+                return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Erreur Waste Products Detailed: {e}")
             return []
 
     def get_stock_valuation_detailed(self):
@@ -350,23 +469,23 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
+                    SELECT
                         p.Product_Name,
                         SUM(b.Quantity_Current) as total_boxes,
                         p.Stock_Unit,
                         SUM(b.Quantity_Current * p.Usage_Qty_Per_Stock_Unit) as total_tests,
                         p.Usage_Unit,
-                        
+
                         -- Valeur TTC Réelle (avec Remise)
-                        SUM(b.Quantity_Current * 
-                            b.Unit_Price_Received * 
-                            (1 - COALESCE(b.Discount_Percent, 0) / 100.0) * 
+                        SUM(b.Quantity_Current *
+                            b.Unit_Price_Received *
+                            (1 - COALESCE(b.Discount_Percent, 0) / 100.0) *
                             (1 + COALESCE(b.Tax_Rate_Percent, 0) / 100.0)
                         ) as total_value_ht
-                        
+
                     FROM Inventory_Batches b
                     JOIN Products_Master p ON b.Product_ID = p.Product_ID
-                    WHERE b.Quantity_Current > 0 
+                    WHERE b.Quantity_Current > 0
                       AND b.Status = 'Available'
                       AND p.Deleted_At IS NULL
                     GROUP BY p.Product_ID, p.Product_Name, p.Stock_Unit, p.Usage_Unit, p.Usage_Qty_Per_Stock_Unit
@@ -387,21 +506,21 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
+                    SELECT
                         DATE(sml.Transaction_Date) as date,
                         COUNT(sml.Movement_ID) as transaction_count,
-                        
+
                         -- حساب التكلفة: الكمية المستهلكة * سعر الشراء الصافي (بعد الخصم والضريبة)
                         SUM(ABS(sml.Qty_Change) * ib.Unit_Price_Received * (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) * (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
                         ) as daily_value
-                        
+
                     FROM Stock_Movement_Log sml
                     JOIN Inventory_Batches ib ON sml.Batch_ID = ib.Batch_ID
-                    
+
                     -- تحديد أنواع الحركات التي تعتبر "خروج أموال/استهلاك"
                     WHERE sml.Movement_Type IN ('Patient_Test', 'QC_Run', 'Waste', 'Open_Pack')
                       AND DATE(sml.Transaction_Date) BETWEEN %s AND %s
-                      
+
                     GROUP BY DATE(sml.Transaction_Date)
                     ORDER BY date ASC
                 """
@@ -410,7 +529,7 @@ class StatisticsManager:
         except Exception as e:
             logging.error(f"Erreur Consumption Trend: {e}")
             return []
-    
+
     def get_deleted_products_consumption(self, start_date, end_date):
         """
         Statistiques pour les produits supprimés (Valeur TTC).
@@ -419,14 +538,14 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
-                        p.Product_Name, 
+                    SELECT
+                        p.Product_Name,
                         p.Deleted_At,
                         SUM(ABS(sml.Qty_Change)) as qty_consumed,
                         -- Valeur consommée TTC
-                        SUM(ABS(sml.Qty_Change) * 
-                            ib.Unit_Price_Received * 
-                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) * 
+                        SUM(ABS(sml.Qty_Change) *
+                            ib.Unit_Price_Received *
+                            (1 - COALESCE(ib.Discount_Percent, 0) / 100.0) *
                             (1 + COALESCE(ib.Tax_Rate_Percent, 0) / 100.0)
                         ) as value_consumed
                     FROM Stock_Movement_Log sml
@@ -451,16 +570,16 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
-                        p.Product_Name, 
-                        b.Batch_ID, 
-                        b.Lot_Number, 
+                    SELECT
+                        p.Product_Name,
+                        b.Batch_ID,
+                        b.Lot_Number,
                         b.Quantity_Current,
                         l.Location_Name
                     FROM Inventory_Batches b
                     JOIN Products_Master p ON b.Product_ID = p.Product_ID
                     LEFT JOIN Locations l ON b.Location_ID = l.Location_ID
-                    WHERE p.Deleted_At IS NOT NULL 
+                    WHERE p.Deleted_At IS NOT NULL
                       AND b.Quantity_Current > 0
                 """
                 cursor.execute(query)
@@ -504,10 +623,10 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 family_condition = "AND pm.Family_ID = %s" if family_id else ""
-                
+
                 query = f"""
-                    SELECT 
-                        pm.Product_ID, 
+                    SELECT
+                        pm.Product_ID,
                         TRIM(pm.Product_Name) as Product_Name,
                         pf.Family_Name,
                         LEFT(rl.Reception_Date, 7) as Month_Year,
@@ -523,7 +642,7 @@ class StatisticsManager:
                     JOIN Products_Master pm ON ib.Product_ID = pm.Product_ID
                     LEFT JOIN Product_Families pf ON pm.Family_ID = pf.Family_ID
                     WHERE rl.Reception_Date BETWEEN %s AND %s {family_condition}
-                    GROUP BY 
+                    GROUP BY
                         pm.Product_ID, Month_Year -- التجميع حسب المعرف لضمان الدقة
                     ORDER BY pm.Product_Name ASC, Month_Year ASC
                 """
@@ -534,7 +653,7 @@ class StatisticsManager:
         except Exception as e:
             logging.error(f"Error fetching reception matrix: {e}")
             return []
-        
+
     def get_reception_trend(self, start_date, end_date):
         """
         بيانات المشتريات (Entrées/Achats).
@@ -545,7 +664,7 @@ class StatisticsManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
+                    SELECT
                         DATE(Reception_Date) as date,
                         COUNT(BR_ID) as transaction_count,
                         -- نجمع إجمالي الفواتير مباشرة (أدق مالياً)

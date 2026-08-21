@@ -40,9 +40,9 @@ from PySide6.QtCore import QSettings, QLockFile, QDir
 from database.base import Database, get_external_path
 from database import LabDataManager
 from ui.main_window import MainWindow
-from ui.login_dialog import LoginDialog 
-from tools.inventory_mobile_api import build_server as build_inventory_mobile_server
-from tools.inventory_mobile_api import build_discovery_server as build_inventory_discovery_server
+from ui.login_dialog import LoginDialog
+from api import build_server as build_inventory_mobile_server
+from api import build_discovery_server as build_inventory_discovery_server
 from tools.mobile_barcode_bridge import MobileBarcodeBridge
 
 # =========================================================================
@@ -51,11 +51,16 @@ from tools.mobile_barcode_bridge import MobileBarcodeBridge
 os.environ["QT_LOGGING_RULES"] = "*.warning=false"
 
 # مسار ملف السجل
-log_file_path = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.abspath("."), "app.log")
+if getattr(sys, "frozen", False):
+    _runtime_data_dir = os.path.join(os.getenv("LOCALAPPDATA") or os.path.expanduser("~"), "StockLam")
+    os.makedirs(_runtime_data_dir, exist_ok=True)
+else:
+    _runtime_data_dir = os.path.abspath(".")
+log_file_path = os.path.join(_runtime_data_dir, "app.log")
 
 # تدوير السجلات: 5 ميجابايت كحد أقصى، مع الاحتفاظ بـ 3 نسخ قديمة
 file_handler = RotatingFileHandler(
-    log_file_path, 
+    log_file_path,
     maxBytes=5 * 1024 * 1024, # 5 MB
     backupCount=3,
     encoding='utf-8'
@@ -215,13 +220,13 @@ def start_inventory_mobile_api(data_manager, window):
             remote_scan_callback=_mobile_barcode_bridge.submit,
         )
         _mobile_api_thread = threading.Thread(
-            target=_mobile_api_server.serve_forever,
+            target=_serve_mobile_api,
             name="InventoryMobileAPI",
             daemon=True,
         )
         _mobile_api_thread.start()
         logger.info("Inventory mobile API started on http://%s:%s", host, port)
-    except OSError as error:
+    except Exception as error:
         _mobile_api_server = None
         _mobile_api_thread = None
         logger.warning("Inventory mobile API could not start on %s:%s: %s", host, port, error)
@@ -242,7 +247,7 @@ def start_inventory_mobile_api(data_manager, window):
         )
         _mobile_discovery_thread.start()
         logger.info("Inventory mobile discovery started on UDP %s:%s", host, discovery_port)
-    except OSError as error:
+    except Exception as error:
         _mobile_discovery_server = None
         _mobile_discovery_thread = None
         logger.warning(
@@ -251,6 +256,13 @@ def start_inventory_mobile_api(data_manager, window):
             discovery_port,
             error,
         )
+
+
+def _serve_mobile_api():
+    try:
+        _mobile_api_server.serve_forever()
+    except Exception:
+        logger.exception("Inventory mobile API worker stopped unexpectedly.")
 
 
 def stop_inventory_mobile_api():
@@ -287,26 +299,26 @@ def main():
     app.setApplicationName(branding.get_app_name())
     app.setOrganizationName(branding.get_organization_name())
     app.aboutToQuit.connect(stop_inventory_mobile_api)
-    
+
     # --- منع تشغيل البرنامج مرتين (Single Instance) ---
     lock_file_path = os.path.join(QDir.tempPath(), branding.get_lock_file_name())
     lock_file = QLockFile(lock_file_path)
-    
+
     if not lock_file.tryLock(100):
         QMessageBox.warning(
-            None, 
-            "Déjà ouvert", 
+            None,
+            "Déjà ouvert",
             "Le programme est déjà en cours d'exécution !\n(Impossible d'ouvrir une seconde instance)"
         )
         sys.exit(1)
-    
+
     # إعدادات البرنامج
     settings = QSettings(branding.get_organization_name(), branding.get_settings_app_name())
-    
+
     # --- الحماية ضد التلاعب بالتاريخ (Time-Travel Protection) ---
     current_date = datetime.now().date()
     last_run_str = settings.value("last_run_date")
-    
+
     if last_run_str:
         try:
             last_run_date = datetime.strptime(last_run_str, "%Y-%m-%d").date()
@@ -358,7 +370,7 @@ def main():
             login_dlg = LoginDialog(data_manager)
             if login_dlg.exec() == QDialog.Accepted:
                 current_user = login_dlg.user_data
-                
+
                 if login_dlg.remember_me.isChecked():
                     settings.setValue("saved_username", current_user['Username'])
                     settings.setValue("saved_password", login_dlg.password_input.text().strip())
@@ -366,23 +378,23 @@ def main():
                     settings.remove("saved_username")
                     settings.remove("saved_password")
             else:
-                return 
+                return
 
         # تشغيل النافذة الرئيسية
         window = MainWindow(data_manager, current_user, connection_error)
         if data_manager and not connection_error:
             start_inventory_mobile_api(data_manager, window)
-        window.showMaximized() 
-        
+        window.showMaximized()
+
         exit_code = app.exec()
-        
+
         # منطق تسجيل الخروج وإعادة التشغيل
         if hasattr(window, 'want_logout') and window.want_logout:
             logger.info("User requested logout. Restarting login process...")
             settings.remove("saved_username")
             settings.remove("saved_password")
             del window
-            continue  
+            continue
         else:
             sys.exit(exit_code)
 

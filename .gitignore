@@ -44,4 +44,6 @@ pdf_settings.json
 *.sqlite
 *.sqlite3
 *.zip
+*.rar
+*.apk
 *.png

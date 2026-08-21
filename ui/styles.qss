@@ -54,16 +54,20 @@ QPushButton.nav_button {
 }
 
 QPushButton.nav_button:hover {
-    background-color: #e0f2f1; /* خلفية خضراء فاتحة جداً عند التمرير */
+    background-color: transparent;
     color: #007572;
 }
 
+QPushButton.nav_button:pressed {
+    background-color: transparent;
+    color: #004d40;
+}
+
 QPushButton.nav_button:checked {
-    background-color: #007572; /* خلفية خضراء غامقة عند التحديد */
-    color: #ffffff; /* نص أبيض */
-    font-weight: 700;
-    /* ظل خفيف للزر النشط لإبرازه */
-    qproperty-iconSize: 20px 20px; 
+    background-color: transparent;
+    color: #007572;
+    font-weight: 800;
+    qproperty-iconSize: 20px 20px;
 }
 
 /* ============================================================
@@ -100,10 +104,10 @@ QHeaderView::section:vertical {
     border: none;
     border-right: 1px solid #cfd8dc; /* خط فاصل عن البيانات */
     border-bottom: 1px solid #f0f0f0;
-    
+
     padding-left: 0px;   /* إزالة الحشو الداخلي */
     padding-right: 0px;
-    
+
     font-size: 12px;
     font-weight: 600;
     min-width: 35px;     /* هام: عرض أدنى كافٍ لظهور الرقمين */
@@ -113,7 +117,7 @@ QHeaderView::section:vertical {
 
 /* --- محتوى الخلايا --- */
 QTableWidget::item {
-    padding: 8px; 
+    padding: 8px;
     border-bottom: 1px solid #f5f5f5;
     color: #2c3e50;
 }
@@ -278,16 +282,16 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
    ============================================================ */
 
 /* جعل الحقول تملأ الخلية تماماً وتختفي حدودها */
-QTableWidget QLineEdit, 
-QTableWidget QComboBox, 
-QTableWidget QSpinBox, 
-QTableWidget QDoubleSpinBox, 
+QTableWidget QLineEdit,
+QTableWidget QComboBox,
+QTableWidget QSpinBox,
+QTableWidget QDoubleSpinBox,
 QTableWidget QDateEdit {
-    background-color: transparent; 
-    border: none;                  
-    border-radius: 0px;            
+    background-color: transparent;
+    border: none;
+    border-radius: 0px;
     padding: 5px 8px;             /* زدنا الـ padding العلوي والسفلي من 0 إلى 5 */
-    margin: 0px;                   
+    margin: 0px;
     color: #2c3e50;
     font-size: 13px;
     font-weight: 600;
@@ -295,12 +299,12 @@ QTableWidget QDateEdit {
 }
 
 /* عند الضغط على الخلية للكتابة */
-QTableWidget QLineEdit:focus, 
-QTableWidget QComboBox:focus, 
-QTableWidget QSpinBox:focus, 
-QTableWidget QDoubleSpinBox:focus, 
+QTableWidget QLineEdit:focus,
+QTableWidget QComboBox:focus,
+QTableWidget QSpinBox:focus,
+QTableWidget QDoubleSpinBox:focus,
 QTableWidget QDateEdit:focus {
-    background-color: #ffffff;     
+    background-color: #ffffff;
     border: 1px solid #007572;    /* تقليل السمك من 2px إلى 1px ليكون أنعم */
     color: #000000;
 }
@@ -313,7 +317,7 @@ QTableWidget QComboBox::drop-down {
 
 /* إخفاء الأزرار الصغيرة (الأسهم) للأرقام داخل الجدول لتوفير المساحة */
 /* (اختياري: إذا أردت إخفاءها تماماً والاعتماد على الكتابة أو الأسهم في الكيبورد) */
-QTableWidget QAbstractSpinBox::up-button, 
+QTableWidget QAbstractSpinBox::up-button,
 QTableWidget QAbstractSpinBox::down-button {
     width: 0px;
     border: none;
@@ -338,7 +342,7 @@ QComboBox QAbstractItemView {
 
 /* الخلفية العامة للتقويم */
 QCalendarWidget QWidget {
-    background-color: #ffffff; 
+    background-color: #ffffff;
     color: #2c3e50;
 }
 
@@ -375,27 +379,27 @@ QCalendarWidget QTableView {
     alternate-background-color: #ffffff;
 }
 
-/* تنسيق أزرار القائمة الجانبية */
 .nav_button {
     text-align: left;
     padding: 12px 20px;
     border: none;
     border-radius: 8px;
     background-color: transparent;
-    color: #2c3e50; /* لون النص */
+    color: #607d8b;
     font-size: 14px;
     font-weight: 500;
 }
 
-/* عند اختيار الزر */
-.nav_button:checked {
-    background-color: #007572; /* لون MODERNLAM الأخضر */
-    color: white;
+.nav_button:hover {
+    background-color: transparent;
+    color: #007572;
 }
 
-/* لجعل الأيقونة تتحول للأبيض عند الضغط (إذا كانت SVG تدعم ذلك) */
+/* عند اختيار الزر */
 .nav_button:checked {
-    border-left: 5px solid #004d4a;
+    background-color: transparent;
+    color: #007572;
+    font-weight: 800;
 }
 
 
@@ -559,7 +563,7 @@ QPushButton[class="nav_button"] {
 /* --- التفاعل عند التمرير (Hover) --- */
 QPushButton[class="nav_button"]:hover {
     color: #007572;            /* يتغير لون النص للـ Teal */
-    background-color: #f0f7f7; /* خلفية شفافة جداً جداً للمساعدة البصرية */
+    background-color: transparent;
 }
 
 /* ==========================================================
@@ -568,10 +572,10 @@ QPushButton[class="nav_button"]:hover {
 QPushButton[class="nav_button"]:checked {
     /* 1. لا شريط جانبي */
     border: none;
-    
+
     /* 2. لا خلفية (أو شفافة تماماً) */
-    background-color: transparent; 
-    
+    background-color: transparent;
+
     /* 3. النص يصبح أغمق وأغلظ */
     color: #007572;      /* لون الـ Teal الغامق */
     font-weight: 800;    /* خط سميك جداً (Extra Bold) */
@@ -602,9 +606,12 @@ QFrame[state="compact"] QPushButton[class="nav_button"] {
     border-radius: 8px;
 }
 
+QFrame[state="compact"] QPushButton[class="nav_button"]:hover {
+    background-color: transparent;
+}
+
 /* في الوضع الصغير: الأيقونة تصبح خضراء (بفضل كود بايثون) */
 QFrame[state="compact"] QPushButton[class="nav_button"]:checked {
-    /* لا نحتاج لشيء إضافي هنا، الأيقونة ستتغير واللون سيتغير */
     background-color: transparent;
 }
 

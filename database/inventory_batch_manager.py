@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional
 from decimal import Decimal
 
-from .system_logger import log_methods 
+from .system_logger import log_methods
 
 @log_methods()
 class InventoryBatchManager:
@@ -47,9 +47,9 @@ class InventoryBatchManager:
         return int(serial_text)
 
 
-    def _create_inventory_batch_legacy(self, product_id, br_id, lot_number, expiry_date, 
-                               initial_stock_qty, location_id, date_received, 
-                               po_id=None, unit_price=0.0, tax_rate=0.0, discount=0.0, 
+    def _create_inventory_batch_legacy(self, product_id, br_id, lot_number, expiry_date,
+                               initial_stock_qty, location_id, date_received,
+                               po_id=None, unit_price=0.0, tax_rate=0.0, discount=0.0,
                                item_index=1, internal_barcode=None):
         """
         تم دمج التعريفين في تعريف واحد قوي.
@@ -67,33 +67,33 @@ class InventoryBatchManager:
 
             # التحقق من وجود نفس الباركود في نفس الموقع لدمج الكمية
             cursor.execute("""
-                SELECT Batch_ID FROM Inventory_Batches 
+                SELECT Batch_ID FROM Inventory_Batches
                 WHERE Internal_Barcode = %s AND Location_ID = %s
             """, (final_barcode, location_id))
-            
+
             existing = cursor.fetchone()
             if existing:
                 logging.info(f"Mise à jour quantité pour code {final_barcode} loc {location_id}.")
                 cursor.execute("""
-                    UPDATE Inventory_Batches 
+                    UPDATE Inventory_Batches
                     SET Quantity_Current = Quantity_Current + %s, Quantity_Initial = Quantity_Initial + %s
                     WHERE Batch_ID = %s
                 """, (initial_stock_qty, initial_stock_qty, existing[0]))
                 batch_id = existing[0]
             else:
                 query = """
-                    INSERT INTO Inventory_Batches 
-                    (Product_ID, Location_ID, Lot_Number, Expiry_Date, 
+                    INSERT INTO Inventory_Batches
+                    (Product_ID, Location_ID, Lot_Number, Expiry_Date,
                     Quantity_Initial, Quantity_Current, PO_ID, BR_ID, Status, Created_At,
-                    Unit_Price_Received, Tax_Rate_Percent, Discount_Percent, Internal_Barcode) 
+                    Unit_Price_Received, Tax_Rate_Percent, Discount_Percent, Internal_Barcode)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Available', %s, %s, %s, %s, %s)
                 """
-                params = (product_id, location_id, lot_number, expiry_date, 
-                        initial_stock_qty, initial_stock_qty, po_id, br_id, 
+                params = (product_id, location_id, lot_number, expiry_date,
+                        initial_stock_qty, initial_stock_qty, po_id, br_id,
                         date_received, unit_price, tax_rate, discount, final_barcode)
-                
+
                 cursor.execute(query, params)
-                batch_id = cursor.lastrowid 
+                batch_id = cursor.lastrowid
 
             conn.commit()
             return batch_id
@@ -275,11 +275,11 @@ class InventoryBatchManager:
     def update_batch_location_status(self, batch_id: int, location_id: Optional[int] = None, new_status: Optional[str] = None) -> bool:
         updates = []
         params = []
-        
+
         if location_id is not None:
             updates.append("Location_ID = %s")
             params.append(location_id)
-            
+
         if new_status is not None:
             valid_statuses = ['Available', 'Quarantined', 'Expired', 'Depleted']
             if new_status not in valid_statuses:
@@ -287,13 +287,13 @@ class InventoryBatchManager:
                 return False
             updates.append("Status = %s")
             params.append(new_status)
-            
+
         if not updates:
             return False
 
         params.append(batch_id)
         query = f"UPDATE Inventory_Batches SET {', '.join(updates)} WHERE Batch_ID = %s"
-        
+
         try:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor()
@@ -309,9 +309,9 @@ class InventoryBatchManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
-                        b.Batch_ID, b.Product_ID, b.Location_ID, b.Lot_Number, 
-                        b.Expiry_Date, b.Quantity_Initial, b.Quantity_Current, 
+                    SELECT
+                        b.Batch_ID, b.Product_ID, b.Location_ID, b.Lot_Number,
+                        b.Expiry_Date, b.Quantity_Initial, b.Quantity_Current,
                         b.Unit_Price_Received, b.Internal_Barcode, b.Status,
                         l.Location_Name, p.Product_Name, p.Stock_Unit
                     FROM Inventory_Batches b
@@ -325,15 +325,15 @@ class InventoryBatchManager:
         except mysql.connector.Error as e:
             logging.error(f"Error fetching batches: {e}")
             return []
-            
-    def adjust_batch_quantity(self, batch_id: int, quantity_change: int, movement_type: str, 
+
+    def adjust_batch_quantity(self, batch_id: int, quantity_change: int, movement_type: str,
                                reason_id: Optional[int] = None, user_id: Optional[int] = None) -> bool:
         try:
             change = Decimal(str(quantity_change))
             with self.db.get_db_connection() as conn:
                 conn.autocommit = False
                 cursor = conn.cursor(dictionary=True)
-                
+
                 cursor.execute(
                     """
                     SELECT b.Product_ID, b.Quantity_Current, p.Stock_Unit
@@ -378,7 +378,7 @@ class InventoryBatchManager:
                 if not movement_id:
                     conn.rollback()
                     return False
-                
+
                 conn.commit()
                 return True
         except Exception as e:
@@ -395,11 +395,11 @@ class InventoryBatchManager:
                 cursor = conn.cursor(dictionary=True)
                 # تم التحديث لجلب البيانات المالية أيضاً
                 query = """
-                    SELECT 
-                        Product_ID, 
-                        Quantity_Initial AS Received_Qty, 
-                        Lot_Number, 
-                        Expiry_Date, 
+                    SELECT
+                        Product_ID,
+                        Quantity_Initial AS Received_Qty,
+                        Lot_Number,
+                        Expiry_Date,
                         Location_ID,
                         Unit_Price_Received,
                         Tax_Rate_Percent,
@@ -506,7 +506,7 @@ class InventoryBatchManager:
                     cursor.close()
                 conn.close()
 
-    def direct_consume_batch_unit(self, batch_id: int, qty: int = 1, user_id: Optional[int] = None) -> bool:
+    def direct_consume_batch_unit(self, batch_id: int, qty: int = 1, user_id: Optional[int] = None, notes: Optional[str] = None) -> bool:
         """
         تم تصحيح الخطأ Ambiguous Product_ID هنا عن طريق تحديد b.Product_ID
         """
@@ -516,43 +516,43 @@ class InventoryBatchManager:
 
         try:
             with self.db.get_db_connection() as conn:
-                conn.autocommit = False 
+                conn.autocommit = False
                 cursor = conn.cursor()
-                
+
                 # تصحيح SQL: تحديد p أو b لمنع الغموض
                 query = """
                     SELECT b.Product_ID, b.Quantity_Current, b.Status, p.Stock_Unit
-                    FROM Inventory_Batches b 
-                    JOIN Products_Master p ON b.Product_ID = p.Product_ID 
+                    FROM Inventory_Batches b
+                    JOIN Products_Master p ON b.Product_ID = p.Product_ID
                     WHERE b.Batch_ID = %s
                     FOR UPDATE
                 """
                 cursor.execute(query, (batch_id,))
                 res = cursor.fetchone()
-                
+
                 if not res:
                     logging.warning(f"Batch {batch_id} not found.")
                     conn.rollback()
                     return False
-                
+
                 product_id, current_qty, current_status, unit_used = res
                 current_qty = Decimal(str(current_qty))
                 if current_qty < qty_to_consume:
                     logging.warning(f"Insufficient quantity in batch {batch_id}")
                     conn.rollback()
                     return False
-                
+
                 # تنفيذ عملية الخصم
                 new_qty = current_qty - qty_to_consume
                 new_status = 'Depleted' if new_qty <= 0 else current_status
                 update_query = """
-                    UPDATE Inventory_Batches 
+                    UPDATE Inventory_Batches
                     SET Quantity_Current = %s,
                         Status = %s
                     WHERE Batch_ID = %s
                 """
                 cursor.execute(update_query, (new_qty, new_status, batch_id))
-                
+
                 if cursor.rowcount == 0:
                     logging.warning(f"Insufficient quantity in batch {batch_id}")
                     conn.rollback()
@@ -566,16 +566,16 @@ class InventoryBatchManager:
                     unit_used=unit_used if unit_used else 'Unit',
                     batch_id=batch_id,
                     user_id=user_id,
-                    notes="Consommation Directe",
+                    notes=notes or "Consommation Directe",
                     external_cursor=cursor
                 )
                 if not movement_id:
                     conn.rollback()
                     return False
-                
+
                 conn.commit()
                 return True
-                
+
         except Exception as e:
             logging.error(f"Error in direct_consume_batch_unit: {e}", exc_info=True)
             return False
@@ -628,12 +628,12 @@ class InventoryBatchManager:
                 try:
                     # 1. جلب البيانات الأصلية وقفل السطر
                     cursor.execute("""
-                        SELECT b.*, p.Stock_Unit 
-                        FROM Inventory_Batches b 
-                        JOIN Products_Master p ON b.Product_ID = p.Product_ID 
+                        SELECT b.*, p.Stock_Unit
+                        FROM Inventory_Batches b
+                        JOIN Products_Master p ON b.Product_ID = p.Product_ID
                         WHERE b.Batch_ID = %s FOR UPDATE
                     """, (batch_id,))
-                    
+
                     original = cursor.fetchone()
 
                     if not original or float(original['Quantity_Current']) < qty:
@@ -653,7 +653,7 @@ class InventoryBatchManager:
                     source_new_qty = Decimal(str(original['Quantity_Current'])) - Decimal(str(qty))
                     source_status = 'Depleted' if source_new_qty <= 0 else original.get('Status', 'Available')
                     cursor.execute("""
-                        UPDATE Inventory_Batches 
+                        UPDATE Inventory_Batches
                         SET Quantity_Current = %s,
                             Status = %s
                         WHERE Batch_ID = %s
@@ -661,12 +661,12 @@ class InventoryBatchManager:
 
                     # 3. معالجة الوجهة (دمج أو إنشاء)
                     cursor.execute("""
-                        SELECT Batch_ID 
-                        FROM Inventory_Batches 
+                        SELECT Batch_ID
+                        FROM Inventory_Batches
                         WHERE Internal_Barcode = %s AND Location_ID = %s
                         LIMIT 1 FOR UPDATE
                     """, (target_barcode, new_location_id))
-                    
+
                     target_batch = cursor.fetchone()
                     final_target_id = None
 
@@ -674,16 +674,16 @@ class InventoryBatchManager:
                         # دمج الكمية إذا كان المنتج موجوداً مسبقاً بنفس الكود بار في الموقع الجديد
                         final_target_id = target_batch['Batch_ID']
                         cursor.execute("""
-                            UPDATE Inventory_Batches 
+                            UPDATE Inventory_Batches
                             SET Quantity_Current = Quantity_Current + %s,
                                 Status = CASE WHEN Status = 'Depleted' THEN 'Available' ELSE Status END
                             WHERE Batch_ID = %s
                         """, (qty, final_target_id))
                     else:
                         insert_query = """
-                            INSERT INTO Inventory_Batches 
-                            (Product_ID, Location_ID, Lot_Number, Expiry_Date, Quantity_Initial, 
-                            Quantity_Current, PO_ID, BR_ID, Status, Internal_Barcode, 
+                            INSERT INTO Inventory_Batches
+                            (Product_ID, Location_ID, Lot_Number, Expiry_Date, Quantity_Initial,
+                            Quantity_Current, PO_ID, BR_ID, Status, Internal_Barcode,
                             Unit_Price_Received, Tax_Rate_Percent, Discount_Percent, Created_At)
                             VALUES (%s, %s, %s, %s, 0, %s, %s, %s, 'Available', %s, %s, %s, %s, NOW())
                         """
@@ -721,7 +721,7 @@ class InventoryBatchManager:
                         movement_type='Transfer',
                         qty_change=Decimal(str(qty)),
                         unit_used=unit_label,
-                        batch_id=final_target_id, 
+                        batch_id=final_target_id,
                         user_id=user_id,
                         notes=f"Transfert: Loc {original['Location_ID']} -> {new_location_id}",
                         external_cursor=cursor
@@ -744,9 +744,9 @@ class InventoryBatchManager:
             logging.error(f"Critical Error in transfer_batch_location: {e}", exc_info=True)
             return False
 
-    def create_inventory_batch(self, product_id, br_id, lot_number, expiry_date, 
-                               initial_stock_qty, location_id, date_received, 
-                               po_id=None, unit_price=0.0, tax_rate=0.0, discount=0.0, 
+    def create_inventory_batch(self, product_id, br_id, lot_number, expiry_date,
+                               initial_stock_qty, location_id, date_received,
+                               po_id=None, unit_price=0.0, tax_rate=0.0, discount=0.0,
                                item_index=1, internal_barcode=None, batch_id_override=None):
         """
         تم تحديث هذه الدالة لتكون آمنة مع القيود الجديدة.
@@ -788,16 +788,16 @@ class InventoryBatchManager:
 
             # 2. التحقق مما إذا كان الباركود موجوداً في نفس الموقع (لتجنب الخطأ)
             cursor.execute("""
-                SELECT Batch_ID FROM Inventory_Batches 
+                SELECT Batch_ID FROM Inventory_Batches
                 WHERE Internal_Barcode = %s AND Location_ID = %s
             """, (final_barcode, location_id))
-            
+
             existing = cursor.fetchone()
             if existing:
                 # إذا وجدنا نفس الباركود في نفس الموقع، ندمج الكمية (في حالة الاستلام المتكرر)
                 logging.info(f"Reception: Code-barres {final_barcode} existe déjà dans Loc {location_id}. Mise à jour de la quantité.")
                 cursor.execute("""
-                    UPDATE Inventory_Batches 
+                    UPDATE Inventory_Batches
                     SET Quantity_Current = Quantity_Current + %s, Quantity_Initial = Quantity_Initial + %s
                     WHERE Batch_ID = %s
                 """, (initial_stock_qty, initial_stock_qty, existing[0]))
@@ -805,18 +805,18 @@ class InventoryBatchManager:
             else:
                 # إنشاء سطر جديد
                 query = """
-                    INSERT INTO Inventory_Batches 
-                    (Product_ID, Location_ID, Lot_Number, Expiry_Date, 
+                    INSERT INTO Inventory_Batches
+                    (Product_ID, Location_ID, Lot_Number, Expiry_Date,
                     Quantity_Initial, Quantity_Current, PO_ID, BR_ID, Status, Created_At,
-                    Unit_Price_Received, Tax_Rate_Percent, Discount_Percent, Internal_Barcode) 
+                    Unit_Price_Received, Tax_Rate_Percent, Discount_Percent, Internal_Barcode)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Available', %s, %s, %s, %s, %s)
                 """
-                params = (product_id, location_id, lot_number, expiry_date, 
-                        initial_stock_qty, initial_stock_qty, po_id, br_id, 
+                params = (product_id, location_id, lot_number, expiry_date,
+                        initial_stock_qty, initial_stock_qty, po_id, br_id,
                         date_received, unit_price, tax_rate, discount, final_barcode)
-                
+
                 cursor.execute(query, params)
-                batch_id = cursor.lastrowid 
+                batch_id = cursor.lastrowid
 
             conn.commit()
             return batch_id
@@ -997,7 +997,7 @@ class InventoryBatchManager:
         except:
             current_year = datetime.now().strftime('%y')
             return f"{current_year}{item_serial}"
-    
+
 
     def process_full_reception(self, header_data, items, user_id=None):
         """
@@ -1016,22 +1016,22 @@ class InventoryBatchManager:
             with self.db.get_db_connection() as conn:
                 # التأكد من تحديث البيانات
                 if conn.is_connected():
-                    conn.commit() 
+                    conn.commit()
 
                 cursor = conn.cursor(dictionary=True)
-                
+
                 # شرط استبعاد المنتجات المحذوفة
-                where_clauses = ["P.Deleted_At IS NULL"] 
-                
+                where_clauses = ["P.Deleted_At IS NULL"]
+
                 if not include_zero_stock:
                     where_clauses.append("B.Quantity_Current > 0")
-                
+
                 where_str = " WHERE " + " AND ".join(where_clauses)
-                
+
                 # --- التعديل الجوهري في الاستعلام (JOIN) ---
                 # نربط مع Reception_Log (RL) ثم مع Suppliers (S) لضمان ظهور المورد
                 query = f"""
-                    SELECT 
+                    SELECT
                         B.Batch_ID,
                         B.Product_ID,
                         P.Is_Billable,
@@ -1042,15 +1042,15 @@ class InventoryBatchManager:
                         F.Family_Name,
                         P.Family_ID,
                         IFNULL(A.Automate_Name, 'Général') AS Automate_Name,
-                        M.Manuf_Name,  
-                        
+                        M.Manuf_Name,
+
                         -- جلب اسم المورد بدقة: الأولوية للمربوط بالاستلام، ثم المربوط بالطلب
                         COALESCE(S_DIR.Supplier_Name, S_RL.Supplier_Name, S_PO.Supplier_Name, '---') AS Supplier_Name,
                         COALESCE(B.Supplier_ID, RL.Supplier_ID, PO.Supplier_ID) AS Supplier_ID,
-                        
+
                         P.Manuf_ID,
                         P.Preferred_Automate_ID,
-                        P.Minimum_Stock_Level,       
+                        P.Minimum_Stock_Level,
                         P.Alert_Before_Expiry_Days,
                         B.Lot_Number,
                         B.Expiry_Date,
@@ -1076,27 +1076,36 @@ class InventoryBatchManager:
                         B.PO_ID,
                         B.BR_ID,
                         B.Status,
+                        (
+                            SELECT COALESCE(SUM(ABS(SML.Qty_Change)), 0)
+                            FROM Stock_Movement_Log SML
+                            WHERE SML.Batch_ID = B.Batch_ID AND SML.Movement_Type = 'Waste'
+                        ) AS Quantity_Wasted,
+                        EXISTS(
+                            SELECT 1 FROM Stock_Movement_Log SML_W
+                            WHERE SML_W.Batch_ID = B.Batch_ID AND SML_W.Movement_Type = 'Waste'
+                        ) AS Has_Waste,
                         B.Created_At AS Date_Received,
                         B.Reception_Note
-                    FROM 
+                    FROM
                         Inventory_Batches B
-                    INNER JOIN 
+                    INNER JOIN
                         Products_Master P ON B.Product_ID = P.Product_ID
-                    LEFT JOIN 
+                    LEFT JOIN
                         Product_Families F ON P.Family_ID = F.Family_ID
-                    LEFT JOIN 
+                    LEFT JOIN
                         Manufacturers M ON P.Manuf_ID = M.Manuf_ID
-                    LEFT JOIN 
+                    LEFT JOIN
                         Automates A ON P.Preferred_Automate_ID = A.Automate_ID
-                    LEFT JOIN 
+                    LEFT JOIN
                         Locations L ON B.Location_ID = L.Location_ID
-                    
+
                     -- الربط مع سجل الاستلام لجلب المورد
                     LEFT JOIN
                         Reception_Log RL ON B.BR_ID = RL.BR_ID
                     LEFT JOIN
                         Suppliers S_RL ON RL.Supplier_ID = S_RL.Supplier_ID
-                        
+
                     -- الربط مع أمر الشراء (كخطة بديلة)
                     LEFT JOIN
                         Purchase_Orders PO ON B.PO_ID = PO.PO_ID
@@ -1104,22 +1113,22 @@ class InventoryBatchManager:
                         Suppliers S_PO ON PO.Supplier_ID = S_PO.Supplier_ID
                     LEFT JOIN
                         Suppliers S_DIR ON B.Supplier_ID = S_DIR.Supplier_ID
-                    
+
                     {where_str}
-                    
-                    ORDER BY 
+
+                    ORDER BY
                         B.Quantity_Current > 0 DESC,
-                        P.Product_Name ASC, 
+                        P.Product_Name ASC,
                         B.Expiry_Date ASC;
                 """
-                
+
                 cursor.execute(query)
                 return cursor.fetchall()
-                
+
         except Exception as e:
             logging.error(f"Error fetching all batches with details: {e}")
             return []
-        
+
     def get_product_pricing_info(self):
         """
         جلب معلومات التسعير لكل منتج بناءً على المخزون الحالي.
@@ -1129,8 +1138,8 @@ class InventoryBatchManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT 
-                        Product_ID, 
+                    SELECT
+                        Product_ID,
                         SUM(Quantity_Current * Unit_Price_Received) / NULLIF(SUM(Quantity_Current), 0) as Avg_Price
                     FROM Inventory_Batches
                     WHERE Quantity_Current > 0
@@ -1141,7 +1150,7 @@ class InventoryBatchManager:
         except Exception as e:
             logging.error(f"Error calculating product pricing: {e}")
             return {}
-        
+
     def get_products_stock_levels(self) -> Dict[int, float]:
         """
         جلب إجمالي المخزون المتوفر لكل منتج (مجموع الكميات في الدفعات الحالية).
@@ -1153,19 +1162,19 @@ class InventoryBatchManager:
                 cursor = conn.cursor()
                 # نجمع الكميات للدفعات التي بها رصيد فقط
                 query = """
-                    SELECT Product_ID, SUM(Quantity_Current) 
-                    FROM Inventory_Batches 
-                    WHERE Quantity_Current > 0 
+                    SELECT Product_ID, SUM(Quantity_Current)
+                    FROM Inventory_Batches
+                    WHERE Quantity_Current > 0
                     GROUP BY Product_ID
                 """
                 cursor.execute(query)
                 results = cursor.fetchall()
-                
+
                 for row in results:
                     # row[0] = Product_ID, row[1] = Sum(Quantity)
                     stock_map[row[0]] = float(row[1])
-                    
+
         except Exception as e:
             logging.error(f"Error fetching stock levels: {e}")
-        
+
         return stock_map

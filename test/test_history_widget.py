@@ -3,9 +3,14 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
-
-from ui.widgets.history import MovementHistoryTab
+try:
+    from PySide6.QtWidgets import QApplication
+    from ui.widgets.history import MovementHistoryTab
+    HAS_PYSIDE6 = True
+except ImportError:
+    HAS_PYSIDE6 = False
+    QApplication = None
+    MovementHistoryTab = None
 
 
 class FakeMovementManager:
@@ -48,10 +53,12 @@ class FakeDataManager:
         self.movement = FakeMovementManager()
 
 
+@unittest.skipUnless(HAS_PYSIDE6, "PySide6 is not installed in the current environment")
 class MovementHistoryWidgetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
+        if HAS_PYSIDE6:
+            cls.app = QApplication.instance() or QApplication([])
 
     def test_incremental_loading_and_target_movement_types(self):
         manager = FakeDataManager()

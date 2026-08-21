@@ -2,9 +2,9 @@
 
 import os
 import logging
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                               QStackedWidget, QLabel, QPushButton, QFrame, QButtonGroup, 
-                               QTabWidget, QMessageBox) 
+from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                               QStackedWidget, QLabel, QPushButton, QFrame, QButtonGroup,
+                               QTabWidget, QMessageBox)
 from PySide6.QtCore import Qt, QSize, QFile, QTextStream, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup
 from PySide6.QtGui import QPixmap, QIcon
 import qtawesome as qta
@@ -42,10 +42,10 @@ from branding import (
 )
 
 class MainWindow(QMainWindow):
-    def __init__(self, data_manager, current_user, connection_error=None): 
+    def __init__(self, data_manager, current_user, connection_error=None):
         super().__init__()
         self.data_manager = data_manager
-        self.current_user = current_user 
+        self.current_user = current_user
         self.connection_error = connection_error
         self.local_settings = LocalSettingsStore(current_user)
         if self.data_manager is not None:
@@ -61,15 +61,15 @@ class MainWindow(QMainWindow):
             if u_id:
                 active_user_id.set(u_id)
         # ---------------------
-        
+
         # --- تحسين: تخزين الصفحات التي تم تحميلها فقط ---
-        self.loaded_pages = {} 
+        self.loaded_pages = {}
 
         # --- حالة الشريط الجانبي ---
         self.is_sidebar_expanded = True
         self.sidebar_full_width = 260
         self.sidebar_compact_width = 70
-        self.button_texts = {} 
+        self.button_texts = {}
 
         full_name = self.current_user.get('Full_Name', 'Utilisateur') if self.current_user else 'Invité'
         self.setWindowTitle(f"{get_app_name()} | {full_name}")
@@ -92,15 +92,15 @@ class MainWindow(QMainWindow):
 
         self.content_area = QStackedWidget()
         self.main_layout.addWidget(self.content_area)
-        
+
         # تهيئة الـ StackedWidget بعناصر فارغة
         self._init_placeholders()
         self.load_stylesheet()
-        
+
         self.apply_permissions()
 
         if connection_error:
-            self.switch_page(4) 
+            self.switch_page(4)
         else:
             # خريطة الصفحات مرتبطة بصلاحياتها
             mapping = {
@@ -119,14 +119,14 @@ class MainWindow(QMainWindow):
             }
 
             first_permitted_page = None
-            
+
             # المرور على الصفحات بالترتيب والتحقق من الصلاحية برمجياً
             for page_id in sorted(mapping.keys()):
                 perm_key = mapping[page_id]
                 if self.has_navigation_permission(perm_key):
                     first_permitted_page = page_id
                     break
-            
+
             # فتح أول صفحة يملك المستخدم صلاحيتها
             if first_permitted_page is not None:
                 self.switch_page(first_permitted_page)
@@ -139,26 +139,26 @@ class MainWindow(QMainWindow):
             self.auto_backup_thread = AutoBackupWorker(self.data_manager)
             self.auto_backup_thread.start()
 
-                
+
 
 
     def open_product_history(self, search_text):
         """تستقبل طلب البحث من صفحة المخزون وتفتح السجل"""
         # 1. الانتقال لصفحة السجل (رقم 7)
         self.switch_page(7)
-        
+
         # 2. تحديث الزر الجانبي ليظهر كمحدد
         if self.nav_group.button(7):
             self.nav_group.button(7).setChecked(True)
 
         # 3. الوصول للكائن الخاص بصفحة السجل
         history_widget = self.loaded_pages.get(7)
-        
+
         if history_widget:
             # 4. وضع النص في مربع البحث (نفترض أن اسمه search_input)
             if hasattr(history_widget, 'search_input'):
                 history_widget.search_input.setText(search_text)
-                
+
                 # 5. تشغيل عملية البحث/الفلترة
                 # نحاول استدعاء دوال التحديث المعتادة
                 if hasattr(history_widget, 'filter_data'):
@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):
 
     def _setup_show_sidebar_button(self):
         self.show_sidebar_container = QFrame()
-        self.show_sidebar_container.setObjectName("show_sidebar_container") 
+        self.show_sidebar_container.setObjectName("show_sidebar_container")
         self.show_sidebar_container.setFixedWidth(0)
         layout = QVBoxLayout(self.show_sidebar_container)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -209,7 +209,7 @@ class MainWindow(QMainWindow):
         if compact:
             layout = QVBoxLayout(self.header_container)
             layout.setContentsMargins(5, 10, 5, 5)
-            layout.setSpacing(5) 
+            layout.setSpacing(5)
             self.header_container.setFixedHeight(90)
             layout.addWidget(self.btn_toggle, alignment=Qt.AlignHCenter)
             layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
@@ -234,14 +234,14 @@ class MainWindow(QMainWindow):
         self.sidebar_container.setObjectName("sidebar_container")
         self.sidebar_container.setProperty("state", "expanded")
         self.sidebar_container.setFixedWidth(self.sidebar_full_width)
-        
+
         sidebar_layout = QVBoxLayout(self.sidebar_container)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(6)
 
         self.header_container = QWidget()
         self.header_container.setObjectName("header_container")
-        self.header_container.setFixedHeight(80) 
+        self.header_container.setFixedHeight(80)
 
         self.logo_label = QLabel()
         logo_path = get_logo_path()
@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
         lbl_sub.setStyleSheet("font-size: 10px; font-weight: 600; color: #007572; letter-spacing: 1px;")
         text_layout.addWidget(lbl_title)
         text_layout.addWidget(lbl_sub)
-        
+
         self.btn_toggle = QPushButton()
         self.btn_toggle.setIcon(qta.icon("fa5s.bars", color="#546e7a"))
         self.btn_toggle.setFixedSize(35, 35)
@@ -284,22 +284,22 @@ class MainWindow(QMainWindow):
         self.nav_group.idClicked.connect(self.switch_page)
 
         buttons_info = [
-            (0, "Tableau de Bord", "fa5s.chart-pie"),
-            (1, "Données de Base", "fa5s.layer-group"),
-            (2, "Achats & Entrées", "fa5s.shopping-cart"), 
-            (3, "Stock & Magasin",  "fa5s.boxes"),
-            (8, "Réclamations", "fa5s.exclamation-circle"),
-            (6, "Sous-Traitants",   "fa5s.file-invoice-dollar"), 
-            (9, "Inventaire", "fa5s.clipboard-list"),
-            (10, "Point de Vente",  "fa5s.cash-register"),
-            (12, "Historique Ventes", "fa5s.chart-line"),
-            (7, "Traçabilité",      "fa5s.history"),
-            (5, "Utilisateurs",    "fa5s.users"),
-            (4, "Paramètres",      "fa5s.sliders-h")
+            (0, "Tableau de Bord", "fa5s.chart-pie",          "#2563eb"),  # Royal Blue
+            (1, "Données de Base", "fa5s.layer-group",         "#7c3aed"),  # Deep Violet
+            (2, "Achats & Entrées", "fa5s.shopping-cart",      "#059669"),  # Emerald Green
+            (3, "Stock & Magasin",  "fa5s.boxes",              "#d97706"),  # Amber / Warm Orange
+            (6, "Sous-Traitants",   "fa5s.file-invoice-dollar","#0d9488"),  # Teal
+            (8, "Réclamations",    "fa5s.exclamation-circle",  "#dc2626"),  # Crimson Red
+            (9, "Inventaire",       "fa5s.clipboard-list",     "#0284c7"),  # Sky Blue
+            (10, "Point de Vente",  "fa5s.cash-register",      "#e11d48"),  # Rose Red
+            (12, "Historique Ventes", "fa5s.chart-line",       "#0891b2"),  # Cyan
+            (7, "Traçabilité",      "fa5s.history",            "#9333ea"),  # Vibrant Purple
+            (5, "Utilisateurs",    "fa5s.users",              "#4f46e5"),  # Indigo
+            (4, "Paramètres",      "fa5s.sliders-h",          "#64748b"),  # Slate Gray
         ]
 
-        for btn_id, text, icon_name in buttons_info:
-            icon = qta.icon(icon_name, color="#546e7a", color_active="#007572")
+        for btn_id, text, icon_name, icon_color in buttons_info:
+            icon = qta.icon(icon_name, color=icon_color)
             btn = QPushButton(text)
             btn.setIcon(icon)
             btn.setIconSize(QSize(20, 20))
@@ -377,7 +377,7 @@ class MainWindow(QMainWindow):
         self.anim_vis.setStartValue(start_val)
         self.anim_vis.setEndValue(end_val)
         self.anim_vis.setEasingCurve(QEasingCurve.InOutSine)
-        
+
         self.anim_vis_min = QPropertyAnimation(self.sidebar_container, b"minimumWidth")
         self.anim_vis_min.setDuration(300)
         self.anim_vis_min.setStartValue(start_val)
@@ -392,20 +392,20 @@ class MainWindow(QMainWindow):
         """تأكيد الخروج وإيقاف المهام الخلفية قبل إغلاق التطبيق."""
         # إظهار رسالة تأكيد باللغة الفرنسية (لتطابق باقي النظام)
         reply = QMessageBox.question(
-            self, 
-            "Confirmation de sortie",  
-            "Voulez-vous vraiment quitter l'application ?",  
-            QMessageBox.Yes | QMessageBox.No,  
-            QMessageBox.No  
+            self,
+            "Confirmation de sortie",
+            "Voulez-vous vraiment quitter l'application ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
         )
-        
+
         # إذا وافق المستخدم على الخروج
         if reply == QMessageBox.Yes:
             # إيقاف خيط النسخ الاحتياطي التلقائي إن وجد
             if self.auto_backup_thread and self.auto_backup_thread.isRunning():
                 logging.info("Stopping auto-backup thread...")
                 self.auto_backup_thread.stop()
-            
+
             # قبول حدث الإغلاق (يتم إغلاق البرنامج)
             event.accept()
         else:
@@ -415,7 +415,7 @@ class MainWindow(QMainWindow):
     def apply_permissions(self):
         """التحكم في ظهور أزرار القائمة الجانبية بناءً على الصلاحيات"""
         if not self.current_user: return
-        
+
         # ربط المعرف (ID) الخاص بالزر بمفتاح الصلاحية (Permission Key)
         mapping = {
             0: "nav_dashboard",
@@ -439,19 +439,19 @@ class MainWindow(QMainWindow):
     def logout(self):
         """تسجيل الخروج مع طلب التأكيد"""
         ans = QMessageBox.question(
-            self, 
-            "Confirmation",  
-            "Voulez-vous vraiment vous déconnecter ?",  
-            QMessageBox.Yes | QMessageBox.No,  
-            QMessageBox.No  
+            self,
+            "Confirmation",
+            "Voulez-vous vraiment vous déconnecter ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
         )
-        
+
         if ans == QMessageBox.Yes:
-            self.want_logout = True 
-            
+            self.want_logout = True
+
             from PySide6.QtCore import QSettings
             settings = QSettings(get_organization_name(), get_settings_app_name())
-            
+
             self.close()
 
     def _init_placeholders(self):
@@ -470,7 +470,7 @@ class MainWindow(QMainWindow):
             return self.loaded_pages[page_id]
 
         widget = None
-        
+
         # --- 0. Dashboard ---
         if page_id == 0:
             widget = DashboardTab(self.data_manager)
@@ -491,24 +491,24 @@ class MainWindow(QMainWindow):
         elif page_id == 1:
             from .widgets.master_data.master_data_tabs import MasterDataTabs
             widget = MasterDataTabs(self.data_manager)
-            
+
             if self.has_permission("tab_data_products"):
                 widget.tabs.addTab(widget.tab_products, "Produits")
-            if hasattr(self.data_manager, 'families') and self.has_permission("tab_data_families"): 
+            if hasattr(self.data_manager, 'families') and self.has_permission("tab_data_families"):
                 widget.tabs.addTab(widget.tab_families, "Familles")
-            if hasattr(self.data_manager, 'packaging_units') and self.has_permission("tab_data_units"): 
+            if hasattr(self.data_manager, 'packaging_units') and self.has_permission("tab_data_units"):
                 widget.tabs.addTab(widget.tab_units, "Unités (Pkg)")
-            if hasattr(self.data_manager, 'suppliers') and self.has_permission("tab_data_suppliers"): 
+            if hasattr(self.data_manager, 'suppliers') and self.has_permission("tab_data_suppliers"):
                 widget.tabs.addTab(widget.tab_suppliers, "Fournisseurs")
-            if hasattr(self.data_manager, 'manufacturers') and self.has_permission("tab_data_manufacturers"): 
+            if hasattr(self.data_manager, 'manufacturers') and self.has_permission("tab_data_manufacturers"):
                 widget.tabs.addTab(widget.tab_manufacturers, "Fabricants")
-            if hasattr(self.data_manager, 'partners') and self.has_permission("tab_data_partners"): 
+            if hasattr(self.data_manager, 'partners') and self.has_permission("tab_data_partners"):
                 widget.tabs.addTab(widget.tab_partners, "Partenaires")
             if hasattr(self.data_manager, 'automates') and self.has_permission("tab_data_automates"):
                 widget.tabs.addTab(widget.tab_automates, "Automates")
-            if hasattr(self.data_manager, 'locations') and self.has_permission("tab_data_locations"): 
+            if hasattr(self.data_manager, 'locations') and self.has_permission("tab_data_locations"):
                 widget.tabs.addTab(widget.tab_locations, "Emplacements")
-            if hasattr(self.data_manager, 'waste_reasons') and self.has_permission("tab_data_waste_reasons"): 
+            if hasattr(self.data_manager, 'waste_reasons') and self.has_permission("tab_data_waste_reasons"):
                 widget.tabs.addTab(widget.tab_waste, "Motifs Rebut")
             if hasattr(self.data_manager, 'clients') and self.has_permission("tab_clients"):
                 widget.tabs.addTab(widget.tab_clients, "Clients")
@@ -531,14 +531,14 @@ class MainWindow(QMainWindow):
             widget = ReclamationTab(self.data_manager)
             if hasattr(widget, "load_data"):
                 widget.load_data()
-                
+
         elif page_id == 3:
             widget = InventoryTab(self.data_manager)
             if hasattr(widget, 'batches_tab'):
                 widget.batches_tab.request_product_history.connect(self.open_product_history)
-            if self.has_permission("tab_inv_list"): 
+            if self.has_permission("tab_inv_list"):
                 widget.tabs.addTab(widget.batches_tab, "📦 1. Stock Actuel")
-            if self.has_permission("tab_inv_dispatch"): 
+            if self.has_permission("tab_inv_dispatch"):
                 widget.tabs.addTab(widget.dispatch_tab, "🚚 2. Transfert & Consommation")
 
         elif page_id == 9:
@@ -575,7 +575,9 @@ class MainWindow(QMainWindow):
         elif page_id == 6:
             try:
                 widget = BillingTab(self.data_manager)
-            except:
+                widget.list_view.request_view_partner.connect(self.navigate_to_partner_profile)
+            except Exception as e:
+                logging.error(f"Error loading Billing module: {e}")
                 widget = QLabel("Module Facturation non chargé")
 
         elif page_id == 7:
@@ -587,7 +589,7 @@ class MainWindow(QMainWindow):
         # --- 10. Point de Vente ---
         elif page_id == 10:
             widget = PointOfSaleTab(self.data_manager)
-            
+
         # --- 12. Sales History ---
         elif page_id == 12:
             widget = SalesHistoryTab(self.data_manager)
@@ -599,6 +601,36 @@ class MainWindow(QMainWindow):
             self.loaded_pages[page_id] = widget
             return widget
         return None
+
+    def navigate_to_partner_profile(self, partner_id):
+        """تستقبل طلب الانتقال من صفحة الفواتير وتفتح ملف المقاول (Sous-traitant)"""
+        # 1. الانتقال لصفحة البيانات الأساسية (رقم 1)
+        self.switch_page(1)
+
+        # 2. تحديث الزر الجانبي ليظهر كمحدد
+        if self.nav_group.button(1):
+            self.nav_group.button(1).setChecked(True)
+
+        # 3. الوصول للكائن الخاص بصفحة (Données de Base)
+        master_data_widget = self.loaded_pages.get(1)
+
+        if master_data_widget and hasattr(master_data_widget, 'tabs'):
+            # 4. فتح التبويب الفرعي الخاص بالشركاء (Partenaires)
+            for i in range(master_data_widget.tabs.count()):
+                if "Partenaires" in master_data_widget.tabs.tabText(i):
+                    master_data_widget.tabs.setCurrentIndex(i)
+                    break
+
+            # 5. التركيز على الشريك المطلوب في الواجهة
+            if hasattr(master_data_widget, 'tab_partners'):
+                partners_tab = master_data_widget.tab_partners
+
+                if hasattr(partners_tab, 'search_input'):
+                    partner_data = self.data_manager.partners.get_partner_by_id(partner_id)
+                    if partner_data:
+                        partners_tab.search_input.setText(partner_data.get('Partner_Name', ''))
+                    else:
+                        partners_tab.search_input.setText(str(partner_id))
 
     def switch_page(self, page_id):
         if self.connection_error and page_id != 4:
@@ -621,7 +653,7 @@ class MainWindow(QMainWindow):
             5: "tab_users",
             4: "nav_settings"
         }
-        
+
         required_perm = None if self.connection_error and page_id == 4 else mapping.get(page_id)
         # التحقق: إذا كانت الصفحة تتطلب صلاحية والمستخدم لا يملكها، امنع الدخول
         if required_perm and not self.has_navigation_permission(required_perm):

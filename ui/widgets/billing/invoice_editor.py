@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QDate, QDateTime, Signal, QStringListModel, QTime
 from PySide6.QtGui import QColor, QFont
 import qtawesome as qta
 
-from ui.formatting import quantity_to_int, format_quantity
+from ui.formatting import quantity_to_int, format_quantity, format_money
 
 
 class BarcodeLineEdit(QLineEdit):
@@ -187,7 +187,7 @@ class InvoiceEditorWidget(QWidget):
         footer_frame.setStyleSheet("background-color: #ecf0f1; border-radius: 8px; padding: 10px;")
         footer_layout = QHBoxLayout(footer_frame)
 
-        self.lbl_total = QLabel("0.00 DA")
+        self.lbl_total = QLabel("0,00 DA")
         self.lbl_total.setStyleSheet("font-size: 26px; font-weight: bold; color: #c0392b;")
 
         footer_layout.addWidget(QLabel("<b>MONTANT TOTAL À PAYER :</b>"))
@@ -256,7 +256,7 @@ class InvoiceEditorWidget(QWidget):
                 details = mgr.get_transfer_details(transfer_id)
             self.table.setRowCount(0)
             self.is_loading_transfer = True
-
+            
             if header and header.get('Ref_Transfer_ID'):
                 self.ref_transfer_id = header.get('Ref_Transfer_ID')
 
@@ -737,9 +737,12 @@ class InvoiceEditorWidget(QWidget):
         sb_qty = QSpinBox()
         sb_qty.setRange(1, max_allowed); sb_qty.setValue(initial_qty); sb_qty.setAlignment(Qt.AlignCenter)
 
-        unit_price = float(batch.get('Unit_Price_Received', 0))
+        unit_price = float(batch.get('Unit_Price_Received', 0)) if is_billable else 0.0
         sb_price = QDoubleSpinBox()
         sb_price.setRange(0, 1000000); sb_price.setValue(unit_price); sb_price.setGroupSeparatorShown(True)
+        if not is_billable:
+            sb_price.setSpecialValueText("/")
+            sb_price.setEnabled(False)
 
         txt_obs = QLineEdit()
         txt_obs.setPlaceholderText("Note...")
@@ -759,7 +762,7 @@ class InvoiceEditorWidget(QWidget):
         available_batches = [b for b in self.batches_cache if b['Product_ID'] == batch['Product_ID']]
         if not available_batches:
             available_batches = [batch] # Fallback
-
+            
         current_index = 0
         for i, b in enumerate(available_batches):
             loc_name = b.get('Location_Name') or 'Inconnu'
@@ -773,7 +776,7 @@ class InvoiceEditorWidget(QWidget):
             if b['Batch_ID'] == batch['Batch_ID']:
                 current_index = i
         cb_source.setCurrentIndex(current_index)
-
+        
         def update_max_qty():
             selected_b = cb_source.currentData()
             if not selected_b: return
@@ -786,7 +789,7 @@ class InvoiceEditorWidget(QWidget):
                 max_allow = curr_stock + prev_qty
             sb_qty.setRange(1, max(1, max_allow))
             self.persist_current_transfer()
-
+            
         cb_source.currentIndexChanged.connect(update_max_qty)
 
         # وضع الـ Widgets في الجدول
@@ -836,16 +839,25 @@ class InvoiceEditorWidget(QWidget):
         """حساب المجاميع مع حماية ضد NoneType"""
         grand = 0.0
         for r in range(self.table.rowCount()):
+            table_item = self.table.item(r, 0)
+            meta = table_item.data(Qt.UserRole) if table_item else {}
+            is_billable = bool(meta.get('is_billable', True)) if isinstance(meta, dict) else True
+
             qty_widget = self.table.cellWidget(r, 2)
             price_widget = self.table.cellWidget(r, 3)
             total_label = self.table.cellWidget(r, 5)
 
             if qty_widget and price_widget and total_label:
-                line = qty_widget.value() * price_widget.value()
-                total_label.setText(f"{line:,.2f}")
-                grand += line
+                if is_billable:
+                    line = qty_widget.value() * price_widget.value()
+                    total_label.setText(format_money(line))
+                    total_label.setStyleSheet("font-weight: bold; color: #2980b9; padding-right: 5px;")
+                    grand += line
+                else:
+                    total_label.setText("Gratuit")
+                    total_label.setStyleSheet("font-weight: bold; color: #e74c3c; padding-right: 5px;")
 
-        self.lbl_total.setText(f"{grand:,.2f} DA")
+        self.lbl_total.setText(format_money(grand, 'DA'))
 
     def save_invoice(self):
         """
@@ -884,3 +896,42 @@ class InvoiceEditorWidget(QWidget):
             )
             self.request_back.emit()
         return
+
+        items = []
+        for r in range(self.table.rowCount()):
+            table_item = self.table.item(r, 0)
+            if not table_item: continue
+
+            meta = table_item.data(Qt.UserRole)
+            items.append({
+                'product_id': meta['id'],
+                'batch_id': meta['batch_id'],
+                'qty': self.table.cellWidget(r, 1).value(), # تم تصحيح .value() بدلاً من .val
+                'price': self.table.cellWidget(r, 2).value(),
+                'note': self.table.cellWidget(r, 3).text()
+            })
+
+        try:
+            # الحصول على معرف المستخدم الحالي للتسجيل في الـ Log
+            u_id = 1
+            if hasattr(self.window(), 'current_user') and self.window().current_user:
+                u_id = self.window().current_user.get('User_ID', 1)
+
+            # استدعاء دالة المزامنة التي قمنا بتصحيحها سابقاً لتسجيل الـ Log
+            #
+            success, result = self.manager.external_transfers.save_and_sync_stock(
+                self.current_id, partner_id, items, u_id
+            )
+
+            if success:
+                QMessageBox.information(
+                    self,
+                    "Succès",
+                    "La transaction a été enregistrée et le stock mis à jour avec succès."
+                )
+                self.request_back.emit() # العودة للقائمة
+            else:
+                QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement : {result}")
+        except Exception as e:
+            logging.error(f"Save Invoice Error: {e}")
+            QMessageBox.critical(self, "Erreur Technique", str(e))

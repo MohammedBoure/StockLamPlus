@@ -5,13 +5,13 @@ from datetime import date, datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel,
-    QPushButton, QComboBox, QDateEdit, QButtonGroup,
+    QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, 
+    QPushButton, QComboBox, QDateEdit, QButtonGroup, 
     QSizePolicy, QGraphicsDropShadowEffect
 )
 from PySide6.QtCharts import (
-    QChart, QChartView, QBarSeries, QStackedBarSeries,
-    QBarSet, QBarCategoryAxis, QValueAxis, QLegend
+    QChart, QChartView, QBarSeries, QStackedBarSeries, 
+    QBarSet, QBarCategoryAxis, QValueAxis, QLegend, QCategoryAxis
 )
 from PySide6.QtCore import Qt, QDate, QMargins, Signal, QPoint, QRect, QEvent
 from PySide6.QtGui import (
@@ -69,7 +69,7 @@ class ChartHoverCard(QFrame):
         self.row_in = QHBoxLayout()
         self.lbl_in_title = QLabel("📥 Entrées (Achats) :", self)
         self.lbl_in_title.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
-        self.lbl_in_val = QLabel("0 DA", self)
+        self.lbl_in_val = QLabel("0,00 DA", self)
         self.lbl_in_val.setStyleSheet("font-size: 11px; font-weight: 800; color: #1e824c;")
         self.row_in.addWidget(self.lbl_in_title)
         self.row_in.addStretch()
@@ -80,7 +80,7 @@ class ChartHoverCard(QFrame):
         self.row_out = QHBoxLayout()
         self.lbl_out_title = QLabel("📤 Sorties (Consommation) :", self)
         self.lbl_out_title.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
-        self.lbl_out_val = QLabel("0 DA", self)
+        self.lbl_out_val = QLabel("0,00 DA", self)
         self.lbl_out_val.setStyleSheet("font-size: 11px; font-weight: 800; color: #c0392b;")
         self.row_out.addWidget(self.lbl_out_title)
         self.row_out.addStretch()
@@ -91,7 +91,7 @@ class ChartHoverCard(QFrame):
         self.row_net = QHBoxLayout()
         self.lbl_net_title = QLabel("⚖️ Solde Net (Flux) :", self)
         self.lbl_net_title.setStyleSheet("font-size: 11px; font-weight: 700; color: #334155;")
-        self.lbl_net_val = QLabel("0 DA", self)
+        self.lbl_net_val = QLabel("0,00 DA", self)
         self.lbl_net_val.setStyleSheet("font-size: 11px; font-weight: 800; color: #007572;")
         self.row_net.addWidget(self.lbl_net_title)
         self.row_net.addStretch()
@@ -124,11 +124,11 @@ class ChartHoverCard(QFrame):
         self.lbl_period.setText(f"📅 {data.get('detail', '')}")
 
         # 2. Valeurs formatées
-        self.lbl_in_val.setText(f"{format_money(val_in, 'DA').replace(',', ' ')}")
-        self.lbl_out_val.setText(f"{format_money(val_out, 'DA').replace(',', ' ')}")
+        self.lbl_in_val.setText(format_money(val_in, 'DA'))
+        self.lbl_out_val.setText(format_money(val_out, 'DA'))
 
         net_prefix = "+" if net_val > 0 else ""
-        self.lbl_net_val.setText(f"{net_prefix}{format_money(net_val, 'DA').replace(',', ' ')}")
+        self.lbl_net_val.setText(f"{net_prefix}{format_money(net_val, 'DA')}")
         if net_val > 0:
             self.lbl_net_val.setStyleSheet("font-size: 11px; font-weight: 800; color: #1e824c;")
         elif net_val < 0:
@@ -404,12 +404,12 @@ class ChartsSection(QWidget):
         self.combo_preset.addItem("📈 Année (YTD)", "YTD")
         self.combo_preset.addItem("📊 12 Mois", "12M")
         self.combo_preset.addItem("⚙️ Personnalisé...", "CUSTOM")
-
+        
         # Par défaut : 12 Mois (Dernière Année)
         idx_12m = self.combo_preset.findData("12M")
         if idx_12m != -1:
             self.combo_preset.setCurrentIndex(idx_12m)
-
+            
         self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
         layout.addWidget(self.combo_preset)
 
@@ -456,7 +456,7 @@ class ChartsSection(QWidget):
         custom_layout.addWidget(lbl_to)
         custom_layout.addWidget(self.date_to)
         custom_layout.addWidget(self.btn_apply_dates)
-
+        
         self.custom_dates_container.setVisible(False)
         layout.addWidget(self.custom_dates_container)
 
@@ -464,26 +464,26 @@ class ChartsSection(QWidget):
 
         # --- 5. Badges KPI Compacts (sur la droite) ---
         self.badge_in = self._create_compact_metric_pill(
-            title="Entrées :",
-            value="0 DA",
-            icon="📥",
-            bg_color=self.COLOR_IN_LIGHT,
+            title="Entrées :", 
+            value="0,00 DA", 
+            icon="📥", 
+            bg_color=self.COLOR_IN_LIGHT, 
             text_color=self.COLOR_IN_BORDER,
             border_color="#a7f3d0"
         )
         self.badge_out = self._create_compact_metric_pill(
-            title="Sorties :",
-            value="0 DA",
-            icon="📤",
-            bg_color=self.COLOR_OUT_LIGHT,
+            title="Sorties :", 
+            value="0,00 DA", 
+            icon="📤", 
+            bg_color=self.COLOR_OUT_LIGHT, 
             text_color=self.COLOR_OUT_BORDER,
             border_color="#fecaca"
         )
         self.badge_net = self._create_compact_metric_pill(
-            title="Solde :",
-            value="0 DA",
-            icon="⚖️",
-            bg_color="#f8fafc",
+            title="Solde :", 
+            value="0,00 DA", 
+            icon="⚖️", 
+            bg_color="#f8fafc", 
             text_color=self.COLOR_TEXT_MAIN,
             border_color="#e2e8f0"
         )
@@ -540,7 +540,7 @@ class ChartsSection(QWidget):
     # =========================================================================
     # 3. BADGES DE MÉTRIQUES RÉSUMÉES (KPI MINI-BADGES COMPACTS)
     # =========================================================================
-    def _create_compact_metric_pill(self, title: str, value: str, icon: str,
+    def _create_compact_metric_pill(self, title: str, value: str, icon: str, 
                                     bg_color: str, text_color: str, border_color: str) -> QFrame:
         pill = QFrame()
         pill.setFixedHeight(28)
@@ -577,16 +577,16 @@ class ChartsSection(QWidget):
 
         lbl_in = self.badge_in.findChild(QLabel, "val_label")
         if lbl_in:
-            lbl_in.setText(f"{format_money(total_in, 'DA').replace(',', ' ')}")
+            lbl_in.setText(format_money(total_in, 'DA'))
 
         lbl_out = self.badge_out.findChild(QLabel, "val_label")
         if lbl_out:
-            lbl_out.setText(f"{format_money(total_out, 'DA').replace(',', ' ')}")
+            lbl_out.setText(format_money(total_out, 'DA'))
 
         lbl_net = self.badge_net.findChild(QLabel, "val_label")
         if lbl_net:
             prefix = "+" if net_val > 0 else ""
-            lbl_net.setText(f"{prefix}{format_money(net_val, 'DA').replace(',', ' ')}")
+            lbl_net.setText(f"{prefix}{format_money(net_val, 'DA')}")
             if net_val > 0:
                 lbl_net.setStyleSheet(f"font-size: 11px; font-weight: 800; color: {self.COLOR_IN_BORDER}; border: none; background: transparent;")
             elif net_val < 0:
@@ -732,9 +732,9 @@ class ChartsSection(QWidget):
 
         return periods
 
-    def _aggregate_data(self, consumption_data: List[Dict[str, Any]],
-                        reception_data: List[Dict[str, Any]],
-                        start_date: date, end_date: date,
+    def _aggregate_data(self, consumption_data: List[Dict[str, Any]], 
+                        reception_data: List[Dict[str, Any]], 
+                        start_date: date, end_date: date, 
                         granularity: str) -> tuple[List[Dict[str, Any]], float, float, float]:
         """Agrège les transactions d'entrées et de sorties par période"""
         buckets = self._generate_period_buckets(start_date, end_date, granularity)
@@ -782,7 +782,7 @@ class ChartsSection(QWidget):
 
         total_in = sum(b['in'] for b in buckets)
         total_out = sum(b['out'] for b in buckets)
-
+        
         # Trouver la valeur maximale pour l'échelle de l'axe Y
         if self._view_mode == self.VIEW_STACKED:
             max_val = max([b['in'] + b['out'] for b in buckets] + [0.0])
@@ -810,7 +810,7 @@ class ChartsSection(QWidget):
 
             start_date, end_date = self._get_active_date_range()
             buckets, total_in, total_out, max_val = self._aggregate_data(
-                self._raw_consumption, self._raw_reception,
+                self._raw_consumption, self._raw_reception, 
                 start_date, end_date, self._granularity
             )
             self._aggregated_data = buckets
@@ -877,7 +877,7 @@ class ChartsSection(QWidget):
         axis_x.append(categories)
         axis_x.setLabelsFont(QFont("Segoe UI", 9))
         axis_x.setGridLineColor(QColor("#f1f5f9"))
-
+        
         if len(categories) > 14 and self._granularity == self.GRANULARITY_DAY:
             axis_x.setLabelsAngle(-45)
         else:
@@ -887,18 +887,42 @@ class ChartsSection(QWidget):
         series.attachAxis(axis_x)
 
         # --- Axe Y (Valeurs en DA) ---
-        axis_y = QValueAxis()
-        axis_y.setLabelsFont(QFont("Segoe UI", 9))
-        axis_y.setGridLineColor(QColor("#f1f5f9"))
-
-        y_max = max(max_val * 1.15, 1000.0)
-        axis_y.setRange(0, y_max)
-        axis_y.setLabelFormat("%.0f")
-        axis_y.setTitleText("Montant (DA)")
-        axis_y.setTitleFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-
+        axis_y = QCategoryAxis()
+        self._setup_y_axis(axis_y, max_val, "Montant (DA)")
         self.chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(axis_y)
+
+    def _setup_y_axis(self, axis_y: QCategoryAxis, max_val: float, title: str = "Montant (DA)"):
+        """Configure l'axe Y avec des intervalles clairs formatés en dinars (1 987 654,32 DA)"""
+        axis_y.setLabelsFont(QFont("Segoe UI", 9))
+        axis_y.setGridLineColor(QColor("#f1f5f9"))
+        axis_y.setTitleText(title)
+        axis_y.setTitleFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        axis_y.setLabelsPosition(QCategoryAxis.AxisLabelsPosition.AxisLabelsPositionOnValue)
+
+        y_max = max(max_val * 1.15, 1000.0)
+        raw_step = y_max / 5.0
+        magnitude = 10 ** max(0, len(str(int(raw_step))) - 1)
+        factor = raw_step / magnitude
+        if factor < 1.5:
+            step = 1 * magnitude
+        elif factor < 3.5:
+            step = 2 * magnitude
+        elif factor < 7.5:
+            step = 5 * magnitude
+        else:
+            step = 10 * magnitude
+
+        actual_max = step * 5
+        while actual_max < y_max:
+            actual_max += step
+
+        axis_y.setRange(0, actual_max)
+        axis_y.append(format_money(0, "DA"), 0)
+        curr = step
+        while curr <= actual_max:
+            axis_y.append(format_money(curr, "DA"), curr)
+            curr += step
 
     def _render_net_flow_chart(self, buckets: List[Dict[str, Any]], categories: List[str], max_val: float):
         """Construit le graphique de solde net (Vert si positif, Rouge si négatif)"""
@@ -935,10 +959,8 @@ class ChartsSection(QWidget):
         self.chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
         series.attachAxis(axis_x)
 
-        axis_y = QValueAxis()
-        axis_y.setRange(0, max(max_val * 1.15, 1000.0))
-        axis_y.setTitleText("Solde Net (DA)")
-        axis_y.setLabelFormat("%.0f")
+        axis_y = QCategoryAxis()
+        self._setup_y_axis(axis_y, max_val, "Solde Net (DA)")
         self.chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(axis_y)
 
@@ -950,7 +972,7 @@ class ChartsSection(QWidget):
         if status and 0 <= index < len(self._aggregated_data):
             self._hovered_index = index
             item = self._aggregated_data[index]
-
+            
             # Positionner la carte par rapport aux coordonnées relatives de chart_view
             global_pos = QCursor.pos()
             local_pos = self.chart_view.mapFromGlobal(global_pos)
@@ -1040,10 +1062,10 @@ class ChartsSection(QWidget):
     # =========================================================================
     # 9. API PUBLIQUE POUR LE DASHBOARD PARENT
     # =========================================================================
-    def update_charts(self, consumption_data: List[Dict[str, Any]],
-                      reception_data: List[Dict[str, Any]],
+    def update_charts(self, consumption_data: List[Dict[str, Any]], 
+                      reception_data: List[Dict[str, Any]], 
                       stats_manager=None,
-                      global_start_date=None,
+                      global_start_date=None, 
                       global_end_date=None):
         """
         Point d'entrée principal appelé par OverviewTab / DashboardTab.

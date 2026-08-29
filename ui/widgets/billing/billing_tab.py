@@ -53,7 +53,7 @@ class BillingTab(QWidget):
         else:
             partner_id = data
             ref_transfer_id = None
-
+        
         self.editor_view.transfer_type_mode = 'Return'
         self.editor_view.ref_transfer_id = ref_transfer_id
         self.editor_view.load_context(None, preselected_partner_id=partner_id)

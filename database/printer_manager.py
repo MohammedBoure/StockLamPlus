@@ -3,11 +3,23 @@
 import os
 import json
 import logging
-import io
-import win32print
-import barcode
-from barcode.writer import ImageWriter
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+try:
+    import win32print
+except ImportError:
+    win32print = None
+
+try:
+    import barcode
+    from barcode.writer import ImageWriter
+except ImportError:
+    barcode = None
+    ImageWriter = None
+
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
+except ImportError:
+    Image = ImageDraw = ImageFont = ImageOps = None
+
 import sys
 from branding import get_app_name, get_logo_path
 

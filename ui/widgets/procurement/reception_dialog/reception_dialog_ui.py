@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QDateEdit,
     QTreeWidget, QTreeWidgetItem, QSpinBox, QPushButton,
     QFrame, QHeaderView, QCheckBox, QCompleter, QAbstractItemView,
-    QDoubleSpinBox, QTableWidget, QLineEdit
+    QDoubleSpinBox,QTableWidget
 )
 from PySide6.QtCore import Qt, QDate, QLocale
 from PySide6.QtGui import QFont
@@ -82,8 +82,7 @@ class ReceptionDialogUIMixin:
         self.cb_product.addItem("", None)
         for p in all_products:
             brand = p.get('Manuf_Name') or "---"
-            ref = p.get('Manuf_Cat_No') or "---"
-            self.cb_product.addItem(f"{p['Product_Name']} | Réf: {ref} | {brand}", p)
+            self.cb_product.addItem(f"{p['Product_Name']} ({brand})", p)
 
         self.cb_unit_type = QComboBox()
         self.inp_qty = AutoSelectSpinBox()
@@ -98,7 +97,7 @@ class ReceptionDialogUIMixin:
         self.inp_price.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.inp_price.setLocale(QLocale.c())
         self.inp_price.setGroupSeparatorShown(True)
-
+        
         self.inp_price_ttc = AutoSelectDoubleSpinBox()
         self.inp_price_ttc.setRange(0, 99999999.99)
         self.inp_price_ttc.setDecimals(2)
@@ -118,47 +117,9 @@ class ReceptionDialogUIMixin:
 
         self.chk_tva = QCheckBox("TVA 19%")
         self.chk_tva.setChecked(True)
-        self.chk_tva.setStyleSheet("font-weight: bold; color: #2980b9;")
-        
         self.inp_observation = AutoSelectLineEdit()
-        
-        self.inp_barcode = QLineEdit()
-        self.inp_barcode.setPlaceholderText("Scanner code barre...")
-        
-        self.lbl_item_ttc = QLabel("TTC : 0.00 DA")
+        self.lbl_item_ttc = QLabel("TTC : 0,00 DA")
         self.lbl_conversion_logic = QLabel("")
-        
-        self.inp_sell_price = AutoSelectDoubleSpinBox()
-        self.inp_sell_price.setRange(0, 99999999.99)
-        self.inp_sell_price.setDecimals(2)
-        self.inp_sell_price.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.inp_sell_price.setLocale(QLocale.c())
-        self.inp_sell_price.setGroupSeparatorShown(True)
-        
-        self.inp_sell_price_2 = AutoSelectDoubleSpinBox()
-        self.inp_sell_price_2.setRange(0, 99999999.99)
-        self.inp_sell_price_2.setDecimals(2)
-        self.inp_sell_price_2.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.inp_sell_price_2.setLocale(QLocale.c())
-        self.inp_sell_price_2.setGroupSeparatorShown(True)
-
-        self.inp_sell_price_3 = AutoSelectDoubleSpinBox()
-        self.inp_sell_price_3.setRange(0, 99999999.99)
-        self.inp_sell_price_3.setDecimals(2)
-        self.inp_sell_price_3.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.inp_sell_price_3.setLocale(QLocale.c())
-        self.inp_sell_price_3.setGroupSeparatorShown(True)
-
-        self.inp_sell_price_4 = AutoSelectDoubleSpinBox()
-        self.inp_sell_price_4.setRange(0, 99999999.99)
-        self.inp_sell_price_4.setDecimals(2)
-        self.inp_sell_price_4.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.inp_sell_price_4.setLocale(QLocale.c())
-        self.inp_sell_price_4.setGroupSeparatorShown(True)
-        
-        self.chk_sell_tva = QCheckBox("TVA Vente 19%")
-        self.chk_sell_tva.setChecked(True)
-        self.lbl_sell_ttc = QLabel("TTC Vente : 0.00 DA")
 
         self.btn_add    = QPushButton(qta.icon('fa5s.plus',      color='white'), " Ajouter")
         self.btn_modify = QPushButton(qta.icon('fa5s.edit',      color='white'), " Modifier")
@@ -171,12 +132,12 @@ class ReceptionDialogUIMixin:
 
         # إعداد الجدول
         self.table_items = QTableWidget() 
-        self.table_items.setColumnCount(16)
+        self.table_items.setColumnCount(14)
         
         headers = [
-            "Produit", "Code BR", "Code Ext", "Unité", "Qté", "Lot", "Date Exp",
+            "Produit", "Code", "Unité", "Qté", "Lot", "Date Exp",
             "Stock", "Prix U", "Remise", "Prix HT", "TVA (DA)",
-            "P.U TTC", "P.Vente HT", "P.Vente TTC", "Meta"
+            "P.U TTC", "Total TTC", "Meta"
         ]
         
         self.table_items.setHorizontalHeaderLabels(headers)
@@ -190,12 +151,12 @@ class ReceptionDialogUIMixin:
         h_header.setSectionResizeMode(QHeaderView.ResizeToContents)
         h_header.setSectionResizeMode(0, QHeaderView.Stretch) # تمديد عمود اسم المنتج
         
-        self.table_items.setColumnHidden(15, True) # إخفاء عمود Meta
+        self.table_items.setColumnHidden(13, True) # إخفاء عمود Meta
 
-        self.lbl_total_ht     = QLabel("0.00 DA")
-        self.lbl_total_remise = QLabel("0.00 DA")
-        self.lbl_total_tva    = QLabel("0.00 DA")
-        self.lbl_total_ttc    = QLabel("0.00 DA")
+        self.lbl_total_ht     = QLabel("0,00 DA")
+        self.lbl_total_remise = QLabel("0,00 DA")
+        self.lbl_total_tva    = QLabel("0,00 DA")
+        self.lbl_total_ttc    = QLabel("0,00 DA")
         self.lbl_conversion_logic.setStyleSheet(
             "color: #7f8c8d; font-style: italic; font-size: 12px;"
         )
@@ -237,8 +198,6 @@ class ReceptionDialogUIMixin:
         entry_layout.setSpacing(5)
 
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("<b>Code:</b>"))
-        row1.addWidget(self.inp_barcode, 2)
         row1.addWidget(QLabel("<b>Produit:</b>"))
         row1.addWidget(self.cb_product, 4)
         row1.addWidget(QLabel("<b>Unité:</b>"))
@@ -266,20 +225,6 @@ class ReceptionDialogUIMixin:
         row2.addWidget(QLabel("<b>Réclamation:</b>"))
         row2.addWidget(self.inp_observation, 3)
         entry_layout.addLayout(row2)
-
-        row3 = QHBoxLayout()
-        row3.addWidget(QLabel("<b>P.Vente 1:</b>"))
-        row3.addWidget(self.inp_sell_price, 1)
-        row3.addWidget(QLabel("<b>P.Vente 2:</b>"))
-        row3.addWidget(self.inp_sell_price_2, 1)
-        row3.addWidget(QLabel("<b>P.Vente 3:</b>"))
-        row3.addWidget(self.inp_sell_price_3, 1)
-        row3.addWidget(QLabel("<b>P.Vente 4:</b>"))
-        row3.addWidget(self.inp_sell_price_4, 1)
-        row3.addWidget(self.chk_sell_tva)
-        row3.addWidget(self.lbl_sell_ttc)
-        row3.addStretch(1)
-        entry_layout.addLayout(row3)
 
         entry_layout.addWidget(self.lbl_conversion_logic)
         main_layout.addLayout(entry_layout)

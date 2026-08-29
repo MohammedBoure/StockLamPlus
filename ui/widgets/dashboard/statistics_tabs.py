@@ -2,8 +2,8 @@
 
 import logging
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
+    QWidget, QVBoxLayout, QHBoxLayout, QFrame, 
+    QLabel, QTableWidget, QTableWidgetItem, QHeaderView, 
     QSplitter, QLineEdit, QAbstractItemView
 )
 from PySide6.QtCore import Qt, QMargins
@@ -55,15 +55,15 @@ class StockValuationTab(QWidget):
 
         # Header with Search
         top_layout = QHBoxLayout()
-        self.lbl_summary = QLabel("Valeur Totale: 0.00 DA")
+        self.lbl_summary = QLabel("Valeur Totale: 0,00 DA")
         self.lbl_summary.setStyleSheet("font-size: 16px; font-weight: bold; color: #27ae60;")
-
+        
         self.txt_search = QLineEdit()
         self.txt_search.setPlaceholderText("🔍 Rechercher un produit / code...")
         self.txt_search.setFixedWidth(300)
         self.txt_search.setStyleSheet("padding: 5px; border-radius: 5px; border: 1px solid #ccc;")
         self.txt_search.textChanged.connect(lambda text: filter_table_rows(self.table, text))
-
+        
         top_layout.addWidget(self.lbl_summary)
         top_layout.addStretch()
         top_layout.addWidget(self.txt_search)
@@ -74,14 +74,14 @@ class StockValuationTab(QWidget):
         cols = ["Produit", "Stock (Boîtes)", "Unités (Tests)", "Valeur HT (DA)"]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
-
+        
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.setAlternatingRowColors(True)
         self.table.setSortingEnabled(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setStyleSheet("border: 1px solid #dcdde1; gridline-color: #f0f0f0;")
-
+        
         layout.addWidget(self.table)
 
     def refresh(self, stats_manager):
@@ -89,19 +89,19 @@ class StockValuationTab(QWidget):
             self.table.setSortingEnabled(False)
             data = stats_manager.get_stock_valuation_detailed()
             self.table.setRowCount(0)
-
+            
             total_value = 0
             for row, item in enumerate(data):
                 self.table.insertRow(row)
-
+                
                 # Product Name
                 self.table.setItem(row, 0, QTableWidgetItem(str(item['Product_Name'])))
-
+                
                 # Stock (Boxes)
                 box_unit = item['Stock_Unit'] or "U"
                 boxes = item['total_boxes']
                 self.table.setItem(row, 1, QTableWidgetItem(format_quantity(boxes, box_unit)))
-
+                
                 # Usage Units (Tests)
                 usage_unit = item['Usage_Unit'] or "Tests"
                 tests = item['total_tests']
@@ -109,20 +109,20 @@ class StockValuationTab(QWidget):
                 item_tests.setForeground(QColor("#2980b9"))
                 item_tests.setFont(QFont("Segoe UI", 9, QFont.Bold))
                 self.table.setItem(row, 2, item_tests)
-
+                
                 # Value
                 val = float(item['total_value_ht'])
                 total_value += val
-                item_val = NumericTableWidgetItem(format_money(val), val)
+                item_val = NumericTableWidgetItem(format_money(val, 'DA'), val)
                 item_val.setForeground(QColor("#27ae60"))
                 self.table.setItem(row, 3, item_val)
 
             self.lbl_summary.setText(f"💰 Valeur Totale : {format_money(total_value, 'DA')}")
             self.table.setSortingEnabled(True)
-
+            
             if self.txt_search.text():
                 filter_table_rows(self.table, self.txt_search.text())
-
+                
         except Exception as e:
             logging.error(f"Valuation Error: {e}")
 
@@ -134,7 +134,7 @@ class FullConsumptionTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
-
+        
         # Search Bar
         search_layout = QHBoxLayout()
         search_layout.addStretch()
@@ -156,7 +156,7 @@ class FullConsumptionTab(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("border: 1px solid #dcdde1;")
-
+        
         layout.addWidget(self.table)
 
     def refresh(self, stats_manager, d_from, d_to):
@@ -164,21 +164,21 @@ class FullConsumptionTab(QWidget):
             self.table.setSortingEnabled(False)
             data = stats_manager.get_detailed_consumption_report(d_from, d_to)
             self.table.setRowCount(0)
-
+            
             for row, item in enumerate(data):
                 self.table.insertRow(row)
                 self.table.setItem(row, 0, QTableWidgetItem(str(item['Product_Name'])))
                 self.table.setItem(row, 1, QTableWidgetItem(str(item['Usage_Unit'])))
-
+                
                 qty = item['total_qty_consumed']
                 self.table.setItem(row, 2, NumericTableWidgetItem(format_quantity(qty), qty))
-
+                
                 cost = float(item['total_cost_ttc'])
-                cost_item = NumericTableWidgetItem(format_money(cost), cost)
+                cost_item = NumericTableWidgetItem(format_money(cost, 'DA'), cost)
                 cost_item.setForeground(QColor("#007572"))
                 cost_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
                 self.table.setItem(row, 3, cost_item)
-
+                
             self.table.setSortingEnabled(True)
             if self.txt_search.text():
                 filter_table_rows(self.table, self.txt_search.text())
@@ -194,17 +194,17 @@ class DeletedProductsAuditTab(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
-
+        
         # --- Section 1: Stock Fantôme (Zombie Stock) ---
         lbl_zombie = QLabel("⚠️ STOCK FANTÔME (Produits supprimés avec stock positif)")
         lbl_zombie.setStyleSheet("color: #c0392b; font-weight: bold; font-size: 14px;")
         layout.addWidget(lbl_zombie)
-
+        
         self.table_zombie = QTableWidget()
         self.table_zombie.setColumnCount(5)
         self.table_zombie.setHorizontalHeaderLabels(["Produit", "Lot", "Qté Restante", "Emplacement", "Action Requise"])
         self.table_zombie.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_zombie.setFixedHeight(180)
+        self.table_zombie.setFixedHeight(180) 
         self.table_zombie.setStyleSheet("border: 2px solid #e74c3c;")
         layout.addWidget(self.table_zombie)
 
@@ -212,12 +212,12 @@ class DeletedProductsAuditTab(QWidget):
         header_hist = QHBoxLayout()
         lbl_hist = QLabel("📜 Historique de consommation des produits supprimés")
         lbl_hist.setStyleSheet("color: #7f8c8d; font-weight: bold; font-size: 14px;")
-
+        
         self.txt_search_audit = QLineEdit()
         self.txt_search_audit.setPlaceholderText("🔍 Filtrer l'historique...")
         self.txt_search_audit.setFixedWidth(250)
         self.txt_search_audit.textChanged.connect(lambda text: filter_table_rows(self.table_hist, text))
-
+        
         header_hist.addWidget(lbl_hist)
         header_hist.addStretch()
         header_hist.addWidget(self.txt_search_audit)
@@ -241,7 +241,7 @@ class DeletedProductsAuditTab(QWidget):
                 self.table_zombie.setItem(row, 1, QTableWidgetItem(str(z['Lot_Number'])))
                 self.table_zombie.setItem(row, 2, QTableWidgetItem(format_quantity(z['Quantity_Current'])))
                 self.table_zombie.setItem(row, 3, QTableWidgetItem(str(z['Location_Name'])))
-
+                
                 item_action = QTableWidgetItem("VIDER LE STOCK (Waste)")
                 item_action.setForeground(QColor("red"))
                 item_action.setFont(QFont("Segoe UI", 9, QFont.Bold))
@@ -253,18 +253,18 @@ class DeletedProductsAuditTab(QWidget):
             for row, h in enumerate(history):
                 self.table_hist.insertRow(row)
                 self.table_hist.setItem(row, 0, QTableWidgetItem(str(h['Product_Name'])))
-
+                
                 del_date = str(h['Deleted_At']) if h['Deleted_At'] else "N/A"
                 self.table_hist.setItem(row, 1, QTableWidgetItem(del_date))
-
+                
                 self.table_hist.setItem(row, 2, QTableWidgetItem(format_quantity(h['qty_consumed'])))
-
+                
                 val = float(h['value_consumed'])
-                self.table_hist.setItem(row, 3, QTableWidgetItem(format_money(val)))
-
+                self.table_hist.setItem(row, 3, QTableWidgetItem(format_money(val, 'DA')))
+                
             if self.txt_search_audit.text():
                 filter_table_rows(self.table_hist, self.txt_search_audit.text())
-
+                
         except Exception as e:
             logging.error(f"Audit Tab Error: {e}")
 
@@ -301,7 +301,7 @@ class WasteAnalysisTab(QWidget):
         top_layout.setSpacing(15)
 
         # Mini KPI 1: Perte Totale
-        self.kpi_total_loss = self._create_mini_kpi("PERTE TOTALE (TTC)", "0.00 DA", "🗑️", "#c0392b", "#fef2f2", "#fecaca")
+        self.kpi_total_loss = self._create_mini_kpi("PERTE TOTALE (TTC)", "0,00 DA", "🗑️", "#c0392b", "#fef2f2", "#fecaca")
         # Mini KPI 2: Produits Distincts
         self.kpi_products_count = self._create_mini_kpi("PRODUITS AU REBUT", "0 Produit(s)", "📦", "#2c3e50", "#f8fafc", "#e2e8f0")
         # Mini KPI 3: Événements
@@ -387,7 +387,7 @@ class WasteAnalysisTab(QWidget):
         right_header = QHBoxLayout()
         lbl_right_title = QLabel("📋 Détail des Produits Mis au Rebut (Unicité par Produit)")
         lbl_right_title.setStyleSheet("font-size: 13px; font-weight: 800; color: #2c3e50;")
-
+        
         self.lbl_products_summary = QLabel("0 produit(s)")
         self.lbl_products_summary.setStyleSheet("font-size: 11px; font-weight: 600; color: #64748b;")
 
@@ -476,7 +476,7 @@ class WasteAnalysisTab(QWidget):
             # Mise à jour des mini-KPIs
             lbl_loss = self.kpi_total_loss.findChild(QLabel, "kpi_val")
             if lbl_loss:
-                lbl_loss.setText(f"{format_money(total_loss, 'DA').replace(',', ' ')}")
+                lbl_loss.setText(format_money(total_loss, 'DA'))
 
             lbl_prods = self.kpi_products_count.findChild(QLabel, "kpi_val")
             if lbl_prods:
@@ -505,7 +505,7 @@ class WasteAnalysisTab(QWidget):
                 it_freq.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table_reasons.setItem(row, 1, it_freq)
 
-                it_val = NumericTableWidgetItem(format_money(loss_val, "DA").replace(',', ' '), loss_val)
+                it_val = NumericTableWidgetItem(format_money(loss_val, "DA"), loss_val)
                 it_val.setForeground(QColor("#c0392b"))
                 it_val.setFont(QFont("Segoe UI", 9, QFont.Bold))
                 it_val.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -540,7 +540,7 @@ class WasteAnalysisTab(QWidget):
                 fam_name = str(item.get('Family_Name') or "Non définie")
                 stock_unit = str(item.get('Stock_Unit') or "U")
                 usage_unit = str(item.get('Usage_Unit') or "Tests")
-
+                
                 qty_stock = float(item.get('total_qty_stock', 0) or 0)
                 qty_usage = float(item.get('total_qty_usage', 0) or 0)
                 frequency = int(item.get('frequency', 0) or 0)
@@ -579,7 +579,7 @@ class WasteAnalysisTab(QWidget):
                 self.table_products.setItem(row, 4, it_reasons)
 
                 # Colonne 5: Perte Totale TTC
-                it_loss = NumericTableWidgetItem(format_money(loss_ttc, "DA").replace(',', ' '), loss_ttc)
+                it_loss = NumericTableWidgetItem(format_money(loss_ttc, "DA"), loss_ttc)
                 it_loss.setForeground(QColor("#c0392b"))
                 it_loss.setFont(QFont("Segoe UI", 9, QFont.Bold))
                 it_loss.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

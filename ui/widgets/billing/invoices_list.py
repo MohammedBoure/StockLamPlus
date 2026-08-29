@@ -6,13 +6,15 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
     QHeaderView, QPushButton, QLabel, QLineEdit,
     QComboBox, QDateEdit, QGroupBox, QTableWidgetItem,
-    QAbstractItemView, QMessageBox, QFileDialog, QMenu
+    QAbstractItemView, QMessageBox, QFileDialog, QMenu,
+    QFrame
 )
 from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtGui import QFont, QColor
 import qtawesome as qta
 import json
 from branding import get_banner_path
-from ui.formatting import format_quantity
+from ui.formatting import format_quantity, format_money
 
 # ReportLab Imports
 try:
@@ -34,6 +36,19 @@ from ui.widgets.settings.pdf.pdf_stamp import (
 )
 from ui.widgets.settings.local_settings import get_local_settings_store
 
+class NumericTableWidgetItem(QTableWidgetItem):
+    def __lt__(self, other):
+        if other is None:
+            return False
+        v1 = self.data(Qt.UserRole)
+        v2 = other.data(Qt.UserRole)
+        if v1 is not None and v2 is not None:
+            try:
+                return float(v1) < float(v2)
+            except (ValueError, TypeError):
+                pass
+        return super().__lt__(other)
+
 class InvoicesListWidget(QWidget):
     """
     Interface for the list of invoices/delivery notes.
@@ -44,7 +59,7 @@ class InvoicesListWidget(QWidget):
     request_edit = Signal(int)
     request_pdf = Signal(int)
     request_delete = Signal(int)
-
+    
     request_view_partner = Signal(int)
     def __init__(self, manager):
         super().__init__()
@@ -53,11 +68,14 @@ class InvoicesListWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
 
         # --- 1. Filter Bar ---
-        filter_group = QGroupBox("Filtres & Recherche")
+        filter_group = QFrame()
+        filter_group.setStyleSheet("QFrame { background-color: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; }")
         filter_layout = QHBoxLayout(filter_group)
+        filter_layout.setContentsMargins(10, 5, 10, 5)
 
         self.date_from = QDateEdit(QDate.currentDate().addDays(-30))
         self.date_from.setCalendarPopup(True)
@@ -127,11 +145,23 @@ class InvoicesListWidget(QWidget):
 
         # --- 3. Table ---
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["ID Trans.", "Type", "Date", "Client / Partenaire", "Montant (DZD)"])
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        columns = ["ID Trans.", "Type", "Date & Heure", "Client / Sous-Traitant", "Montant (DA)"]
+        self.table.setColumnCount(len(columns))
+        self.table.setHorizontalHeaderLabels(columns)
+        
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSortingEnabled(True)
+        header.setSectionsClickable(True)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.table.cellDoubleClicked.connect(lambda r, c: self.on_edit_clicked())
 
@@ -186,7 +216,7 @@ class InvoicesListWidget(QWidget):
         item = self.table.itemAt(pos)
         if not item: return
         row = item.row()
-
+        
         # جلب البيانات المخزنة في السطر الحالي
         tid = self.table.item(row, 0).data(Qt.UserRole)
         partner_id = self.table.item(row, 0).data(Qt.UserRole + 1)
@@ -194,15 +224,15 @@ class InvoicesListWidget(QWidget):
         ref_transfer_id = self.table.item(row, 0).data(Qt.UserRole + 2)
 
         menu = QMenu(self)
-
+        
         # 1. إذا كان السطر المحدد عبارة عن وصل تسليم BL
         if transfer_type_text == "BL (Sortie)":
             action_return = menu.addAction("Créer un Bon de Retour pour ce BL")
             action_return.setIcon(qta.icon("fa5s.file-import", color="#8e44ad"))
             action_return.triggered.connect(lambda: self.request_new_return.emit({'partner_id': partner_id, 'ref_transfer_id': tid}))
-
+            
             menu.addSeparator() # خط فاصل للتنظيم
-
+            
             action_partner = menu.addAction("Consulter le Sous-traitant (Profil)")
             action_partner.setIcon(qta.icon("fa5s.user-tie", color="#2980b9"))
             action_partner.triggered.connect(lambda: self.request_view_partner.emit(partner_id))
@@ -214,12 +244,12 @@ class InvoicesListWidget(QWidget):
                 action_orig = menu.addAction("Consulter le BL d'origine")
                 action_orig.setIcon(qta.icon("fa5s.file-invoice", color="#27ae60"))
                 action_orig.triggered.connect(lambda: self.request_edit.emit(ref_transfer_id))
-
+            
             # خيار الانتقال مباشرة إلى ملف المقاول / الشريك (يظهر دائماً)
             action_partner = menu.addAction("Consulter le Sous-traitant (Profil)")
             action_partner.setIcon(qta.icon("fa5s.user-tie", color="#2980b9"))
             action_partner.triggered.connect(lambda: self.request_view_partner.emit(partner_id))
-
+        
         # إظهار القائمة في موقع مؤشر الفأرة
         if not menu.isEmpty():
             menu.exec(self.table.viewport().mapToGlobal(pos))
@@ -279,15 +309,16 @@ class InvoicesListWidget(QWidget):
         end = self.date_to.date().toString("yyyy-MM-dd") + " 23:59:59"
         p_id = self.combo_filter_partner.currentData()
 
+        self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         if hasattr(self.manager, 'external_transfers'):
             transfers = self.manager.external_transfers.get_transfers_filtered(start, end, p_id, None)
             for row, t in enumerate(transfers):
                 self.table.insertRow(row)
 
-                # التعديل هنا: استخدام التنسيق الجديد للعرض
                 formatted_ref = t.get('Display_Ref') or self.format_id(t['Transfer_ID'], str(t.get('Transaction_Date', '')))
                 id_item = QTableWidgetItem(formatted_ref)
+                id_item.setTextAlignment(Qt.AlignCenter)
                 id_item.setData(Qt.UserRole, t['Transfer_ID']) # حفظ الـ ID الحقيقي في الـ Data للعمليات البرمجية
                 id_item.setData(Qt.UserRole + 1, t.get('Partner_ID'))
                 id_item.setData(Qt.UserRole + 2, t.get('Ref_Transfer_ID'))
@@ -295,28 +326,44 @@ class InvoicesListWidget(QWidget):
                 raw_date = t.get('Transaction_Date')
                 if hasattr(raw_date, 'strftime'):
                     date_text = raw_date.strftime("%Y-%m-%d %H:%M")
+                elif isinstance(raw_date, str) and raw_date:
+                    date_text = raw_date[:16]
                 else:
                     date_text = str(raw_date or "")
 
+                date_item = QTableWidgetItem(date_text)
+                date_item.setTextAlignment(Qt.AlignCenter)
+
                 partner_text = t.get('Partner_Name') or t.get('City') or "-"
+                partner_item = QTableWidgetItem(str(partner_text))
+
                 amount = float(t.get('Total_Amount') or 0)
-                amount_item = QTableWidgetItem(f"{amount:,.2f}")
+                amount_item = NumericTableWidgetItem(format_money(amount, 'DA'))
+                amount_item.setData(Qt.UserRole, amount)
                 amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                font_bold = QFont()
+                font_bold.setBold(True)
+                amount_item.setFont(font_bold)
 
                 t_type = t.get('Transfer_Type', 'Outbound') or 'Outbound'
                 type_str = "Retour" if t_type == 'Return' else "BL (Sortie)"
                 type_item = QTableWidgetItem(type_str)
+                type_item.setTextAlignment(Qt.AlignCenter)
+                type_item.setFont(font_bold)
                 if t_type == 'Return':
-                    type_item.setForeground(Qt.magenta)
+                    type_item.setForeground(QColor("#8e44ad"))
                 else:
-                    type_item.setForeground(Qt.darkGreen)
+                    type_item.setForeground(QColor("#27ae60"))
 
                 self.table.setItem(row, 0, id_item)
                 self.table.setItem(row, 1, type_item)
-                self.table.setItem(row, 2, QTableWidgetItem(date_text))
-                self.table.setItem(row, 3, QTableWidgetItem(str(partner_text)))
+                self.table.setItem(row, 2, date_item)
+                self.table.setItem(row, 3, partner_item)
                 self.table.setItem(row, 4, amount_item)
 
+        self.table.setSortingEnabled(True)
+        self.table.resizeColumnsToContents()
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.on_selection_changed()
         self.filter_table(self.search_input.text())
 
@@ -442,7 +489,7 @@ class InvoicesListWidget(QWidget):
         transfer_type = header_data.get('Transfer_Type', 'Outbound')
         is_return = (transfer_type == 'Return')
         document_title = settings.get('doc_title_rt', 'Retourné à Sous-Traitant') if is_return else settings.get('doc_title_bl', 'BON DE LIVRAISON')
-
+        
         # استخراج المرجع المنسق
         raw_date = str(header_data.get('Transaction_Date', ''))
         try:
@@ -502,10 +549,10 @@ class InvoicesListWidget(QWidget):
             if clean_str(lab_addr): lab_info_lines.append(f"<font size=9>{safe_markup(lab_addr)}</font>")
             if clean_str(lab_nif): lab_info_lines.append(f"<font size=9>NIF : {safe_markup(lab_nif)}</font>")
             if clean_str(lab_rc): lab_info_lines.append(f"<font size=9>RC : {safe_markup(lab_rc)}</font>")
-
+            
             bank_name = settings.get('bank_name', '')
             bank_acc = settings.get('bank_acc', '')
-
+            
             if clean_str(bank_name): lab_info_lines.append(f"<font size=9>Banque : {safe_markup(bank_name)}</font>")
             if clean_str(bank_acc): lab_info_lines.append(f"<font size=9>RIB : {safe_markup(bank_acc)}</font>")
 
@@ -514,7 +561,7 @@ class InvoicesListWidget(QWidget):
                 bon_date = raw_date.strftime("%d/%m/%Y %H:%M")
             else:
                 bon_date = str(raw_date or "")
-
+                
             creation_date_text = f"Date de création : {current_time}"
             if bon_date:
                 creation_date_text = f"Date du Bon : {bon_date}    |    {creation_date_text}"
@@ -587,7 +634,7 @@ class InvoicesListWidget(QWidget):
                 else:
                     canvas.setStrokeColor(colors.red)
                     canvas.rect(img_x, img_y, img_w, img_h, stroke=1)
-
+                    
                 left_p.drawOn(
                     canvas,
                     header_info_x_cm * cm,
@@ -603,7 +650,7 @@ class InvoicesListWidget(QWidget):
                 canvas.setStrokeColor(colors.lightgrey)
                 canvas.setLineWidth(0.5)
                 canvas.rect(dest_x, dest_y_abs - box_h, dest_w, box_h, fill=1, stroke=1)
-
+                
                 right_p.drawOn(canvas, dest_x + 0.25*cm, dest_y_abs - right_h - 0.5*cm)
                 date_p.drawOn(
                     canvas,
@@ -618,30 +665,31 @@ class InvoicesListWidget(QWidget):
             header_col3 = settings.get('col3_name', 'P.U')
             header_col4 = settings.get('col4_name', 'Total / Obs')
             table_data = [[header_col1, header_col2, header_col3, header_col4]]
-
+            
             grand_total = 0.0
             for item in details_data:
-                is_billable = item.get('Is_Billable', False)
+                is_billable = bool(item.get('Is_Billable', False))
                 qty = item.get('Qty_Transferred', 0)
                 qty_numeric = float(qty or 0)
                 price = float(item.get('Unit_Price', 0))
                 line_val = (qty_numeric * price) if is_billable else 0.0
                 grand_total += line_val
 
-                obs_text = f"{line_val:,.2f}" if is_billable else "<font color='red'>Gratuit</font>"
+                pu_text = format_money(price) if is_billable else "/"
+                obs_text = format_money(line_val) if is_billable else "<font color='red'>Gratuit</font>"
                 lot_info = item.get('Lot_Number', '-')
                 exp_info = str(item.get('Expiry_Date', '-'))[:10]
                 p_info = f"<b>{item.get('Product_Name', '-')}</b><br/><font size=8 color='#555555'>Lot: {lot_info} | Exp: {exp_info}</font>"
 
                 table_data.append([
-                    Paragraph(p_info, styles["Normal"]),
-                    format_quantity(qty),
-                    f"{price:,.2f}",
+                    Paragraph(p_info, styles["Normal"]), 
+                    format_quantity(qty), 
+                    pu_text, 
                     Paragraph(obs_text, styles["Normal"])
                 ])
 
             total_label = settings.get('total_label_rt', 'VALEUR TOTALE DU RETOUR') if is_return else settings.get('total_label_bl', 'MONTANT TOTAL À PAYER')
-            table_data.append([Paragraph(f"<b>{total_label}</b>", styles["Normal"]), "", "", f"{grand_total:,.2f} DA"])
+            table_data.append([Paragraph(f"<b>{total_label}</b>", styles["Normal"]), "", "", format_money(grand_total, 'DA')])
 
             items_table = Table(table_data, colWidths=[9.5*cm, 2.0*cm, 2.5*cm, 4.0*cm])
             items_table.hAlign = 'LEFT'
@@ -682,7 +730,7 @@ class InvoicesListWidget(QWidget):
             )
             stamp_provider = getattr(self.manager, "company_settings", None) or local_store
             active_stamp = get_active_stamp(stamp_provider)
-
+            
             footer = SignatureFooter(
                 f_left,
                 f_right,

@@ -40,36 +40,6 @@ QWidget#sidebar_header {
     border-bottom: 2px solid #f0f0f0; /* فاصل خفيف جداً */
 }
 
-/* أزرار التنقل */
-QPushButton.nav_button {
-    background-color: transparent;
-    color: #607d8b; /* لون رمادي مزرق هادئ */
-    border: none;
-    padding: 14px 24px;
-    text-align: left;
-    font-size: 15px;
-    font-weight: 600;
-    margin: 4px 12px;
-    border-radius: 8px; /* حواف ناعمة */
-}
-
-QPushButton.nav_button:hover {
-    background-color: transparent;
-    color: #007572;
-}
-
-QPushButton.nav_button:pressed {
-    background-color: transparent;
-    color: #004d40;
-}
-
-QPushButton.nav_button:checked {
-    background-color: transparent;
-    color: #007572;
-    font-weight: 800;
-    qproperty-iconSize: 20px 20px;
-}
-
 /* ============================================================
    3. TABLES (الجداول - النسخة المصححة والمحسنة)
    ============================================================ */
@@ -379,29 +349,6 @@ QCalendarWidget QTableView {
     alternate-background-color: #ffffff;
 }
 
-.nav_button {
-    text-align: left;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
-    background-color: transparent;
-    color: #607d8b;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.nav_button:hover {
-    background-color: transparent;
-    color: #007572;
-}
-
-/* عند اختيار الزر */
-.nav_button:checked {
-    background-color: transparent;
-    color: #007572;
-    font-weight: 800;
-}
-
 
 /* --- تخصيص زر القائمة المنسدلة --- */
 QComboBox::drop-down {
@@ -623,18 +570,22 @@ QPushButton[class="logout_button"] {
     color: #e74c3c;
     border: none;
     font-weight: 600;
+    background-color: transparent;
 }
+
 QFrame[state="expanded"] QPushButton[class="logout_button"] {
     text-align: left;
     padding: 12px 20px;
     margin-top: 20px;
 }
+
 QFrame[state="compact"] QPushButton[class="logout_button"] {
     text-align: center;
     padding: 0px;
     margin: 10px;
     height: 40px;
 }
+
 QPushButton[class="logout_button"]:hover {
     background-color: #fdf2f2;
 }
@@ -642,6 +593,7 @@ QPushButton[class="logout_button"]:hover {
 QPushButton[class="hide_button"] {
     background-color: #f8f9fa;
     border-top: 1px solid #ebf0f5;
+    border: none;
     border-radius: 0px;
     padding: 12px;
 }

@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
 
 from ..bulk_barcode_selection_dialog import BulkBarcodeSelectionDialog
-from ui.formatting import format_quantity, quantity_to_int
+from ui.formatting import format_money, format_quantity, quantity_to_int
 
 
 class ReceptionDialogLogicMixin:
@@ -28,18 +28,14 @@ class ReceptionDialogLogicMixin:
     # ------------------------------------------------------------------ #
     def setup_connections(self):
         self.cb_product.currentIndexChanged.connect(self.on_product_selected)
-        if hasattr(self, 'inp_barcode'):
-            self.inp_barcode.returnPressed.connect(self.on_barcode_scanned)
 
-        for w in [self.inp_qty, self.inp_remise,
-                  self.inp_sell_price, self.inp_sell_price_2, 
-                  self.inp_sell_price_3, self.inp_sell_price_4]:
+        for w in [self.inp_qty, self.inp_remise]:
             w.valueChanged.connect(self.calculate_live_item_ttc)
         self.cb_remise_type.currentIndexChanged.connect(self.calculate_live_item_ttc)
+        
         self.inp_price.valueChanged.connect(self.on_ht_changed)
         self.inp_price_ttc.valueChanged.connect(self.on_ttc_changed)
         self.chk_tva.stateChanged.connect(self.on_tva_toggled)
-        self.chk_sell_tva.stateChanged.connect(self.calculate_live_item_ttc)
 
         self.btn_validate_ref.clicked.connect(self.validate_header_and_create)
         self.btn_unlock_header.clicked.connect(self.enable_header_editing)
@@ -55,41 +51,6 @@ class ReceptionDialogLogicMixin:
     # ------------------------------------------------------------------ #
     #  اختيار المنتج & الحساب الفوري                                     #
     # ------------------------------------------------------------------ #
-    def _fetch_po_details(self):
-        if not hasattr(self, 'po_details_map'):
-            self.po_details_map = {}
-        po_id = self.po_data.get('PO_ID')
-        if po_id and hasattr(self.manager, 'po_details'):
-            details = self.manager.po_details.get_details_by_po_id(po_id)
-            for d in details:
-                self.po_details_map[d['Product_ID']] = d
-
-    def on_barcode_scanned(self):
-        """يبحث عن المنتج باستخدام الكود بار ويختاره، وإذا لم يجده يتركه ليتم إضافته للمنتج لاحقاً."""
-        if hasattr(self, 'inp_barcode'):
-            scanned_code = self.inp_barcode.text().strip()
-            if not scanned_code:
-                return
-            
-            # Search in combo box products (which have Barcode in their data)
-            for i in range(self.cb_product.count()):
-                p_data = self.cb_product.itemData(i)
-                if p_data and p_data.get('Barcode'):
-                    barcodes = [b.strip() for b in p_data['Barcode'].split(',')]
-                    if scanned_code in barcodes:
-                        self.cb_product.setCurrentIndex(i)
-                        self.inp_qty.setFocus()
-                        self.inp_qty.selectAll()
-                        return
-            
-            # If not found, show a message (it will be linked when they add item)
-            QMessageBox.information(
-                self, "Nouveau Code",
-                f"Ce code barre ({scanned_code}) n'est associé à aucun produit.\n"
-                "Sélectionnez le produit manuellement, et lors de l'ajout, ce code sera lié au produit."
-            )
-            self.cb_product.setFocus()
-
     def on_product_selected(self):
         p = self.cb_product.currentData()
         self.cb_unit_type.clear()
@@ -99,35 +60,12 @@ class ReceptionDialogLogicMixin:
         if p.get('Ordering_Unit') and p['Ordering_Unit'] != p.get('Stock_Unit'):
             self.cb_unit_type.addItem(p['Ordering_Unit'], float(p.get('Stock_Qty_Per_Order_Unit', 1.0)))
 
-        if not hasattr(self, 'po_details_map'):
-            self._fetch_po_details()
-            
-        p_id = p.get('Product_ID')
-        po_detail = self.po_details_map.get(p_id)
-        if po_detail and self.current_editing_row == -1:
-            self.inp_price.setValue(float(po_detail.get('Unit_Price_HT', 0)))
-            discount_pct = float(po_detail.get('Discount_Percent', 0))
-            if discount_pct > 0:
-                self.cb_remise_type.setCurrentText("%")
-                self.inp_remise.setValue(discount_pct)
-            else:
-                self.cb_remise_type.setCurrentText("DZD")
-                self.inp_remise.setValue(0.0)
-            tax_pct = float(po_detail.get('Tax_Rate_Percent', 0))
-            self.chk_tva.setChecked(tax_pct > 0)
-            
-        if p and self.current_editing_row == -1:
-            self.inp_sell_price.setValue(float(p.get('Default_Selling_Price_HT', 0)))
-            self.inp_sell_price_2.setValue(float(p.get('Selling_Price_HT_2', 0)))
-            self.inp_sell_price_3.setValue(float(p.get('Selling_Price_HT_3', 0)))
-            self.inp_sell_price_4.setValue(float(p.get('Selling_Price_HT_4', 0)))
-            self.chk_sell_tva.setChecked(float(p.get('Selling_TVA_Percent', 0)) > 0)
-
     def on_ht_changed(self):
         try:
             self.inp_price_ttc.blockSignals(True)
             tva_rate = 0.19 if hasattr(self, 'chk_tva') and self.chk_tva.isChecked() else 0.0
-            self.inp_price_ttc.setValue(self.inp_price.value() * (1 + tva_rate))
+            ttc = self.inp_price.value() * (1 + tva_rate)
+            self.inp_price_ttc.setValue(ttc)
         finally:
             self.inp_price_ttc.blockSignals(False)
         self.calculate_live_item_ttc()
@@ -136,12 +74,12 @@ class ReceptionDialogLogicMixin:
         try:
             self.inp_price.blockSignals(True)
             tva_rate = 0.19 if hasattr(self, 'chk_tva') and self.chk_tva.isChecked() else 0.0
-            divisor = 1 + tva_rate
-            self.inp_price.setValue(self.inp_price_ttc.value() / divisor if divisor else self.inp_price_ttc.value())
+            ht = self.inp_price_ttc.value() / (1 + tva_rate)
+            self.inp_price.setValue(ht)
         finally:
             self.inp_price.blockSignals(False)
         self.calculate_live_item_ttc()
-
+        
     def on_tva_toggled(self):
         self.on_ht_changed()
 
@@ -161,12 +99,7 @@ class ReceptionDialogLogicMixin:
             tax     = net_ht * 0.19 if self.chk_tva.isChecked() else 0
             ttc     = net_ht + tax
 
-            self.lbl_item_ttc.setText(f"TTC : {ttc:,.2f} DA")
-            
-            sell_ht = self.inp_sell_price.value()
-            sell_tax = sell_ht * 0.19 if self.chk_sell_tva.isChecked() else 0
-            sell_ttc = sell_ht + sell_tax
-            self.lbl_sell_ttc.setText(f"TTC Vente : {sell_ttc:,.2f} DA")
+            self.lbl_item_ttc.setText(f"TTC : {format_money(ttc, 'DA')}")
 
             if factor > 1:
                 p_data  = self.cb_product.currentData()
@@ -270,10 +203,8 @@ class ReceptionDialogLogicMixin:
         for w in [
             self.cb_product, self.cb_unit_type, self.inp_qty,
             self.inp_lot, self.inp_expiry, self.cb_location,
-            self.inp_price, self.inp_remise, self.cb_remise_type,
-            self.chk_tva, self.inp_observation, self.inp_sell_price, 
-            self.inp_sell_price_2, self.inp_sell_price_3, self.inp_sell_price_4, 
-            self.chk_sell_tva,
+            self.inp_price, self.inp_price_ttc, self.inp_remise, self.cb_remise_type,
+            self.chk_tva, self.inp_observation,
             self.btn_add, self.btn_modify, self.btn_delete, self.btn_print,
             self.table_items,
         ]:
@@ -311,10 +242,10 @@ class ReceptionDialogLogicMixin:
             self.total_tva_val    += line_tva
             self.total_ttc_val    += line_ttc
 
-        self.lbl_total_ht.setText(f"{self.total_ht_val:,.2f} DA")
-        self.lbl_total_remise.setText(f"{self.total_remise_val:,.2f} DA")
-        self.lbl_total_tva.setText(f"{self.total_tva_val:,.2f} DA")
-        self.lbl_total_ttc.setText(f"{self.total_ttc_val:,.2f} DA")
+        self.lbl_total_ht.setText(format_money(self.total_ht_val, 'DA'))
+        self.lbl_total_remise.setText(format_money(self.total_remise_val, 'DA'))
+        self.lbl_total_tva.setText(format_money(self.total_tva_val, 'DA'))
+        self.lbl_total_ttc.setText(format_money(self.total_ttc_val, 'DA'))
 
     # ------------------------------------------------------------------ #
     #  تحميل البيانات (وضع التعديل)                                      #
@@ -373,10 +304,6 @@ class ReceptionDialogLogicMixin:
             total_ttc = net_ht + tva_amt
             pu_ttc    = (total_ttc / qty) if qty > 0 else 0
 
-            sell_ht   = float(batch.get('Selling_Price_HT', 0))
-            sell_tax  = float(batch.get('Selling_TVA_Percent', 0))
-            sell_ttc  = sell_ht * (1 + (sell_tax / 100))
-
             meta = {
                 'Batch_ID':             batch.get('Batch_ID'),
                 'Product_ID':           batch.get('Product_ID'),
@@ -389,34 +316,26 @@ class ReceptionDialogLogicMixin:
                 'Discount_Val':         disc_amt,
                 'Discount_Percent':     disc_pct,
                 'Tax_Rate_Percent':     tax_pct,
-                'Selling_Price_HT':     float(batch.get('Selling_Price_HT') or 0),
-                'Selling_Price_HT_2':   float(batch.get('Selling_Price_HT_2') or 0),
-                'Selling_Price_HT_3':   float(batch.get('Selling_Price_HT_3') or 0),
-                'Selling_Price_HT_4':   float(batch.get('Selling_Price_HT_4') or 0),
-                'Selling_TVA_Percent':  sell_tax,
                 'Internal_Barcode':     batch.get('Internal_Barcode', '---'),
-                'External_Barcode':     batch.get('External_Barcode', ''),
                 'Line_Note':            batch.get('Reception_Note', ''),
                 'Unit_Label':           batch.get('Stock_Unit', 'U'),
                 'factor':               1.0
             }
 
             display_values = [
-                batch.get('Product_Name') or '---',
-                batch.get('Internal_Barcode') or '---',
-                batch.get('External_Barcode') or '---',
-                batch.get('Stock_Unit') or 'U',
+                batch.get('Product_Name', '---'),
+                batch.get('Internal_Barcode', '---'),
+                batch.get('Stock_Unit', 'U'),
                 format_quantity(qty),
                 meta['Lot_Number'],
                 meta['Expiry_Date'],
                 batch.get('Location_Name', '---'),
-                f"{price:,.2f} DA",
-                f"{disc_amt:,.2f} DA",
-                f"{net_ht:,.2f} DA",
-                f"{tva_amt:,.2f} DA",
-                f"{pu_ttc:,.2f} DA",
-                f"{sell_ht:,.2f} DA",
-                f"{sell_ttc:,.2f} DA"
+                format_money(price, 'DA'),
+                format_money(disc_amt, 'DA'),
+                format_money(net_ht, 'DA'),
+                format_money(tva_amt, 'DA'),
+                format_money(pu_ttc, 'DA'),
+                format_money(total_ttc, 'DA')
             ]
 
             from PySide6.QtWidgets import QTableWidgetItem
@@ -467,40 +386,12 @@ class ReceptionDialogLogicMixin:
             qty          = float(self.inp_qty.value())
             factor       = float(self.cb_unit_type.currentData() or 1.0)
             effective_qty= qty * factor
-            base_ht      = effective_qty * float(self.inp_price.value())
-
-            discount_pct = 0.0
-            if self.cb_remise_type.currentText() == "%":
-                discount_pct = float(self.inp_remise.value())
-            else:
-                if base_ht > 0:
-                    discount_pct = (float(self.inp_remise.value()) / base_ht) * 100
-
-            scanned_code = self.inp_barcode.text().strip() if hasattr(self, 'inp_barcode') else ""
 
             if self.current_editing_row != -1:
                 old_meta       = self.table_items.item(self.current_editing_row, 0).data(Qt.UserRole)
                 barcode_to_save= old_meta.get('Internal_Barcode')
             else:
                 barcode_to_save= self.generate_internal_barcode()
-
-            # Handle appending new product barcode to Products_Master (still good to keep it as fallback)
-            if hasattr(self, 'inp_barcode'):
-                if scanned_code:
-                    existing_barcodes = p_data.get('Barcode', '') or ''
-                    barcodes_list = [b.strip() for b in existing_barcodes.split(',')] if existing_barcodes else []
-                    if scanned_code not in barcodes_list:
-                        barcodes_list.append(scanned_code)
-                        new_barcodes_str = ','.join(barcodes_list)
-                        p_data['Barcode'] = new_barcodes_str
-                        # Update DB
-                        try:
-                            with mgr.db.get_db_connection() as conn:
-                                cursor = conn.cursor()
-                                cursor.execute("UPDATE Products_Master SET Barcode = %s WHERE Product_ID = %s", (new_barcodes_str, p_data['Product_ID']))
-                                conn.commit()
-                        except Exception as e:
-                            logging.error(f"Error updating product barcode: {e}")
 
             current_po_id = self.po_data.get('PO_ID')
 
@@ -513,17 +404,11 @@ class ReceptionDialogLogicMixin:
                 "Quantity_Current":    effective_qty,
                 "Unit_Price_Received": self.inp_price.value(),
                 "Tax_Rate_Percent":    19.0 if self.chk_tva.isChecked() else 0.0,
-                "Discount_Percent":    discount_pct,
-                "Selling_Price_HT":    self.inp_sell_price.value(),
-                "Selling_Price_HT_2":  self.inp_sell_price_2.value(),
-                "Selling_Price_HT_3":  self.inp_sell_price_3.value(),
-                "Selling_Price_HT_4":  self.inp_sell_price_4.value(),
-                "Selling_TVA_Percent": 19.0 if self.chk_sell_tva.isChecked() else 0.0,
+                "Discount_Percent":    self.inp_remise.value() if self.cb_remise_type.currentText() == "%" else 0,
                 "Lot_Number":          self.inp_lot.text() or "N/A",
                 "Expiry_Date":         self.inp_expiry.date().toPyDate(),
                 "Batch_Note":          self.inp_observation.text().strip(),
                 "Internal_Barcode":    barcode_to_save,
-                "External_Barcode":    scanned_code,
                 "Created_By":          u_id
             }
 
@@ -572,13 +457,8 @@ class ReceptionDialogLogicMixin:
             if idx_unit >= 0:
                 self.cb_unit_type.setCurrentIndex(idx_unit)
 
+            self.chk_tva.setChecked(float(meta.get('Tax_Rate_Percent', 0)) > 0)
             self.inp_price.setValue(float(meta.get('Unit_Price_Received', 0.0)))
-            
-            self.inp_sell_price.setValue(float(meta.get('Selling_Price_HT', 0.0)))
-            self.inp_sell_price_2.setValue(float(meta.get('Selling_Price_HT_2', 0.0)))
-            self.inp_sell_price_3.setValue(float(meta.get('Selling_Price_HT_3', 0.0)))
-            self.inp_sell_price_4.setValue(float(meta.get('Selling_Price_HT_4', 0.0)))
-            self.chk_sell_tva.setChecked(float(meta.get('Selling_TVA_Percent', 0)) > 0)
 
             if float(meta.get('Discount_Percent', 0)) > 0:
                 self.cb_remise_type.setCurrentText("%")
@@ -602,12 +482,6 @@ class ReceptionDialogLogicMixin:
                 self.cb_location.setCurrentText(location_name)
 
             self.inp_observation.setText(str(meta.get('Line_Note', '')))
-            self.chk_tva.setChecked(float(meta.get('Tax_Rate_Percent', 0)) > 0)
-
-            if hasattr(self, 'inp_barcode'):
-                val = str(meta.get('External_Barcode', ''))
-                if val == '---' or val == 'None': val = ''
-                self.inp_barcode.setText(val)
 
             self.current_editing_row = row
             self.btn_add.setText("💾 Enregistrer Modif.")
@@ -765,8 +639,6 @@ class ReceptionDialogLogicMixin:
         return next_barcode
 
     def clear_inputs(self):
-        if hasattr(self, 'inp_barcode'):
-            self.inp_barcode.clear()
         self.cb_product.setCurrentIndex(0)
         self.cb_unit_type.clear()
         self.cb_location.setCurrentIndex(0)
@@ -776,11 +648,6 @@ class ReceptionDialogLogicMixin:
         self.inp_price_ttc.setValue(0.0)
         self.inp_remise.setValue(0.0)
         self.inp_observation.clear()
-        self.inp_sell_price.setValue(0.0)
-        self.inp_sell_price_2.setValue(0.0)
-        self.inp_sell_price_3.setValue(0.0)
-        self.inp_sell_price_4.setValue(0.0)
-        self.chk_sell_tva.setChecked(True)
         self.inp_expiry.setDate(QDate.currentDate().addYears(2))
         self.current_editing_row = -1
         self.btn_add.setText(" Ajouter")

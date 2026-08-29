@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QSize, QFile, QTextStream, QPropertyAnimation, QE
 from PySide6.QtGui import QPixmap, QIcon
 import qtawesome as qta
 import json
+from .icons import get_duotone_icon
 
 from .widgets.master_data.suppliers_tab import SuppliersTab
 from .widgets.master_data.products_tab import ProductsTab
@@ -188,7 +189,8 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         self.btn_show_sidebar = QPushButton()
         self.btn_show_sidebar.setObjectName("btn_show_sidebar")
-        self.btn_show_sidebar.setIcon(qta.icon("fa5s.chevron-right", color="#2c3e50"))
+        self.btn_show_sidebar.setIcon(get_duotone_icon("expand", size=48))
+        self.btn_show_sidebar.setIconSize(QSize(20, 20))
         self.btn_show_sidebar.setCursor(Qt.PointingHandCursor)
         self.btn_show_sidebar.clicked.connect(self.toggle_sidebar_visibility)
         layout.addWidget(self.btn_show_sidebar)
@@ -264,7 +266,8 @@ class MainWindow(QMainWindow):
         text_layout.addWidget(lbl_sub)
 
         self.btn_toggle = QPushButton()
-        self.btn_toggle.setIcon(qta.icon("fa5s.bars", color="#546e7a"))
+        self.btn_toggle.setIcon(get_duotone_icon("menu", size=48))
+        self.btn_toggle.setIconSize(QSize(22, 22))
         self.btn_toggle.setFixedSize(35, 35)
         self.btn_toggle.setCursor(Qt.PointingHandCursor)
         self.btn_toggle.setFlat(True)
@@ -284,25 +287,25 @@ class MainWindow(QMainWindow):
         self.nav_group.idClicked.connect(self.switch_page)
 
         buttons_info = [
-            (0, "Tableau de Bord", "fa5s.chart-pie",          "#2563eb"),  # Royal Blue
-            (1, "Données de Base", "fa5s.layer-group",         "#7c3aed"),  # Deep Violet
-            (2, "Achats & Entrées", "fa5s.shopping-cart",      "#059669"),  # Emerald Green
-            (3, "Stock & Magasin",  "fa5s.boxes",              "#d97706"),  # Amber / Warm Orange
-            (6, "Sous-Traitants",   "fa5s.file-invoice-dollar","#0d9488"),  # Teal
-            (8, "Réclamations",    "fa5s.exclamation-circle",  "#dc2626"),  # Crimson Red
-            (9, "Inventaire",       "fa5s.clipboard-list",     "#0284c7"),  # Sky Blue
-            (10, "Point de Vente",  "fa5s.cash-register",      "#e11d48"),  # Rose Red
-            (12, "Historique Ventes", "fa5s.chart-line",       "#0891b2"),  # Cyan
-            (7, "Traçabilité",      "fa5s.history",            "#9333ea"),  # Vibrant Purple
-            (5, "Utilisateurs",    "fa5s.users",              "#4f46e5"),  # Indigo
-            (4, "Paramètres",      "fa5s.sliders-h",          "#64748b"),  # Slate Gray
+            (0, "Tableau de Bord", "dashboard"),
+            (1, "Données de Base", "master_data"),
+            (2, "Achats & Entrées", "procurement"),
+            (3, "Stock & Magasin", "inventory"),
+            (6, "Sous-Traitants", "services"),
+            (8, "Réclamations", "reclamations"),
+            (9, "Inventaire", "inventaire"),
+            (10, "Point de Vente", "pos"),
+            (12, "Historique Ventes", "sales_history"),
+            (7, "Traçabilité", "history"),
+            (5, "Utilisateurs", "users"),
+            (4, "Paramètres", "settings"),
         ]
 
-        for btn_id, text, icon_name, icon_color in buttons_info:
-            icon = qta.icon(icon_name, color=icon_color)
+        for btn_id, text, icon_key in buttons_info:
+            icon = get_duotone_icon(icon_key, size=64)
             btn = QPushButton(text)
             btn.setIcon(icon)
-            btn.setIconSize(QSize(20, 20))
+            btn.setIconSize(QSize(24, 24))
             btn.setCheckable(True)
             btn.setProperty("class", "nav_button")
             btn.setCursor(Qt.PointingHandCursor)
@@ -313,7 +316,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.addStretch()
 
         self.btn_logout = QPushButton("Déconnexion")
-        self.btn_logout.setIcon(qta.icon("fa5s.power-off", color="#e74c3c"))
+        self.btn_logout.setIcon(get_duotone_icon("logout", size=48))
+        self.btn_logout.setIconSize(QSize(22, 22))
         self.btn_logout.setProperty("class", "logout_button")
         self.btn_logout.setCursor(Qt.PointingHandCursor)
         self.btn_logout.clicked.connect(self.logout)
@@ -321,7 +325,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_logout)
 
         self.btn_hide_sidebar = QPushButton()
-        self.btn_hide_sidebar.setIcon(qta.icon("fa5s.chevron-left", color="#b0bec5"))
+        self.btn_hide_sidebar.setIcon(get_duotone_icon("collapse", size=48))
+        self.btn_hide_sidebar.setIconSize(QSize(20, 20))
         self.btn_hide_sidebar.setProperty("class", "hide_button")
         self.btn_hide_sidebar.setCursor(Qt.PointingHandCursor)
         self.btn_hide_sidebar.clicked.connect(self.toggle_sidebar_visibility)

@@ -21,7 +21,7 @@ from .dialogs import PurchaseOrderDialog
 from .reception_tab import ReceptionTab
 from .reception_history_tab import ReceptionHistoryTab
 from .avoir import CreditNoteTab
-from ui.widgets.reclamation.reclamation_tab import ReclamationTab
+from ui.widgets.reclamation import ReclamationTab
 from ui.widgets.procurement.po_list_view import PurchaseOrderListView
 from ui.formatting import format_quantity
 from ui.widgets.settings.pdf.pdf_stamp import fit_stamp_size_cm, get_active_stamp, SignatureFooter
@@ -390,7 +390,7 @@ class PurchaseOrdersTab(QWidget):
             footer_height = float(settings.get('footer_height_cm', 2.5))
             left_x = float(settings.get('footer_left_x_cm', 1.0))
             right_x = float(settings.get('footer_right_x_cm', 12.0))
-
+            
             stamp_provider = getattr(self.manager, "company_settings", None) or local_store
             active_stamp = get_active_stamp(stamp_provider)
             stamp_gap = float(settings.get('footer_stamp_gap_cm', 0.3))

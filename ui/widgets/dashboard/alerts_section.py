@@ -1,7 +1,7 @@
 import logging
 from PySide6.QtWidgets import (QFrame, QVBoxLayout, QTableWidget, QTableWidgetItem, 
-                               QHeaderView, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
-                               QButtonGroup, QComboBox, QDialog, QTextEdit, QDialogButtonBox)
+                               QHeaderView, QHBoxLayout, QLabel, QLineEdit,
+                               QComboBox, QDialog, QTextEdit, QDialogButtonBox)
 from PySide6.QtGui import QColor, QFont, QBrush, QIcon, QCursor
 from PySide6.QtCore import Qt
 
@@ -52,12 +52,12 @@ class AlertDetailDialog(QDialog):
         info_layout.addWidget(lbl_title)
         
         info_layout.addWidget(QLabel(f"<b>Famille :</b> {alert_data.get('Family')} | <b>Marque :</b> {alert_data.get('Brand')}"))
-
+        
         type_lbl = QLabel(f"<b>Type d'Alerte :</b> {alert_data.get('Type')}")
         crit_color = "#c0392b" if alert_data.get('Criticality') == 'High' else "#d35400"
         type_lbl.setStyleSheet(f"color: {crit_color}; font-size: 14px;")
         info_layout.addWidget(type_lbl)
-
+        
         layout.addLayout(info_layout)
 
         # --- قسم الشرح الرياضي ---
@@ -93,16 +93,14 @@ class AlertsSection(QFrame):
             QTableWidget { border: none; gridline-color: #f8f9fa; selection-background-color: #e0f2f1; selection-color: #000; }
             QHeaderView::section { background-color: #f8f9fa; border: none; font-weight: bold; color: #7f8c8d; padding: 10px; }
             QLineEdit, QComboBox { border: 1px solid #dcdde1; border-radius: 6px; padding: 6px; background: #fdfdfd; }
-            QPushButton { padding: 6px 12px; border-radius: 15px; font-weight: bold; border: 1px solid #dcdde1; background: #f8f9fa; color: #7f8c8d; }
-            QPushButton:checked { background: #007572; color: white; border: none; }
-            QPushButton#btn_urgent:checked { background: #c0392b; }
-            QPushButton#btn_anticip:checked { background: #d35400; }
         """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(10)
-        # --- فلاتر البحث المتقدم ---
+
+        # --- Filtres de recherche ---
+
         filters_layout = QHBoxLayout()
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("🔍 Recherche par nom...")
@@ -129,7 +127,7 @@ class AlertsSection(QFrame):
 
         # --- الجدول ---
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
+        self.table.setColumnCount(4) 
         self.table.setHorizontalHeaderLabels(["PRODUIT", "FAMILLE", "MARQUE", "QUANTITÉ"])
         self.table.setAlternatingRowColors(False) 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -151,33 +149,15 @@ class AlertsSection(QFrame):
     # مولد الشرح الرياضي للتلميحات (ToolTips) والنافذة (Dialog)
     # =====================================================================
     def generate_math_explanation(self, alert_data):
-        type_str = alert_data.get('Type', '')
         details = alert_data.get('Details', '')
         total_qty = alert_data.get('TotalQty', 0)
-        days_left = alert_data.get('RawValue', 0)
-
-        explanation = f"--- DONNÉES BRUTES ---\n{details}\n\n"
-        explanation += "--- CALCUL MATHÉMATIQUE ---\n"
-
-        if "Péremption" in type_str:
-            explanation += (
-                f"Quantité Totale (Toutes marques/lots) = {total_qty} unités.\n"
-                f"Jours Restants du lot le plus proche = {days_left} jours.\n\n"
-                f"Équation Système :\n"
-                f"Alerte déclenchée si : [Jours Restants] <= ([Quantité Totale] × [Jours d'alerte par produit])\n\n"
-            )
-            if "Anticipée" in type_str:
-                explanation += "Conclusion Dynamique : \nLe système vous alerte tôt car vous avez une quantité importante en stock, nécessitant plus de temps pour être consommée avant la date d'expiration."
-            else:
-                explanation += "Conclusion Urgente : \nLe produit est très proche de sa date d'expiration absolue. Action immédiate requise."
-                
-        elif "Stock" in type_str:
-            explanation += (
-                f"Quantité Totale = {total_qty} unités.\n\n"
-                f"Équation Système :\n"
-                f"Alerte déclenchée si : [Quantité Totale] <= [Niveau de Stock Minimum Configuré]\n\n"
-                f"Conclusion : \nLa quantité disponible ne couvre plus le seuil de sécurité."
-            )
+        explanation = f'--- DONN\u00c9ES BRUTES ---\n{details}\n\n'
+        explanation += '--- CALCUL MATH\u00c9MATIQUE ---\n'
+        explanation += (
+            f'Quantit\u00e9 Totale = {total_qty} unit\u00e9s.\n\n'
+            'Alerte d\u00e9clench\u00e9e si : [Quantit\u00e9 Totale] <= [Niveau de Stock Minimum Configur\u00e9]\n\n'
+            'Conclusion :\nLa quantit\u00e9 disponible est inf\u00e9rieure ou \u00e9gale au seuil de s\u00e9curit\u00e9.'
+        )
         return explanation
 
     # =====================================================================
@@ -192,7 +172,7 @@ class AlertsSection(QFrame):
         
         self.combo_fam.clear()
         self.combo_brand.clear()
-
+        
         self.combo_fam.addItem("Toutes Familles")
         self.combo_brand.addItem("Toutes Marques")
         
@@ -235,11 +215,11 @@ class AlertsSection(QFrame):
         for a in self.all_data:
             if txt and txt not in a['Product'].lower(): continue
             if fam != "Toutes Familles" and a.get('Family') != fam: continue
-
+            
             # Since brand can be a comma separated list now (grouped by product)
             b_list = [x.strip() for x in a.get('Brand', '').split(',')]
             if brand != "Toutes Marques" and brand not in b_list: continue
-
+            
             filtered.append(a)
         
         filtered.sort(key=lambda x: x.get('RawValue', 9999))
@@ -255,13 +235,13 @@ class AlertsSection(QFrame):
             
             fam_item = QTableWidgetItem(a.get('Family', '-'))
             marq_item = QTableWidgetItem(a.get('Brand', '-'))
-
+            
             # Qty Column
             v_item = QTableWidgetItem()
             v_item.setData(Qt.EditRole, float(total_qty))
             v_item.setTextAlignment(Qt.AlignCenter)
             v_item.setFont(QFont("Segoe UI", 10, QFont.Bold))
-
+            
             math_explanation = self.generate_math_explanation(a)
             
             text_color = QColor("#c2185b")

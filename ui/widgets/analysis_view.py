@@ -21,7 +21,7 @@ class StockValuationTab(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
 
         # ملخص سريع في الأعلى
-        self.lbl_summary = QLabel("Valeur Totale: 0.00 DA")
+        self.lbl_summary = QLabel("Valeur Totale: 0,00 DA")
         self.lbl_summary.setStyleSheet("font-size: 16px; font-weight: bold; color: #27ae60; margin-bottom: 10px;")
         layout.addWidget(self.lbl_summary)
 
@@ -71,7 +71,7 @@ class StockValuationTab(QWidget):
                 # 4. Financial Value
                 val = float(item['total_value_ht'])
                 total_value += val
-                item_val = QTableWidgetItem(format_money(val))
+                item_val = QTableWidgetItem(format_money(val, 'DA'))
                 item_val.setForeground(QColor("#27ae60")) # أخضر
                 self.table.setItem(row, 3, item_val)
 
@@ -139,14 +139,14 @@ class WasteAnalysisTab(QWidget):
                 self.table.setItem(row, 0, QTableWidgetItem(reason))
                 self.table.setItem(row, 1, QTableWidgetItem(str(freq)))
                 
-                val_item = QTableWidgetItem(format_money(loss))
+                val_item = QTableWidgetItem(format_money(loss, 'DA'))
                 val_item.setForeground(QColor("#c0392b")) # أحمر
                 self.table.setItem(row, 2, val_item)
                 
                 # إضافة للرسم البياني
                 if loss > 0:
                     slice_obj = series.append(reason, loss)
-                    slice_obj.setLabel(f"{reason} ({loss:,.0f})")
+                    slice_obj.setLabel(f"{reason} ({format_money(loss, 'DA')})")
             
             # إظهار أكبر قطعة في الكعكة (Explode)
             if series.count() > 0:
@@ -199,7 +199,7 @@ class FullConsumptionTab(QWidget):
                 self.table.setItem(row, 2, QTableWidgetItem(format_quantity(qty)))
                 
                 cost = float(item['total_cost_ttc'])
-                cost_item = QTableWidgetItem(format_money(cost))
+                cost_item = QTableWidgetItem(format_money(cost, 'DA'))
                 cost_item.setForeground(QColor("#007572"))
                 cost_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
                 self.table.setItem(row, 3, cost_item)
@@ -213,7 +213,7 @@ class FullConsumptionTab(QWidget):
 # =============================================================================
 class AnalysisView(QWidget):
     """
-    الواجهة الرئيسية التي تجمع كل التبويبات الإحصائية.
+    الواجهة الرئيسية التي تجمع كل التبويبات الإحصائية والذكاء الاصطناعي.
     تحتوي على شريط تحكم بالتاريخ (مشترك) وزر تحديث.
     """
     def __init__(self, manager):
@@ -280,13 +280,16 @@ class AnalysisView(QWidget):
         """)
         
         # إنشاء التبويبات
+        from ui.widgets.ai_analytics_tab import AiAnalyticsTab
         self.tab_valuation = StockValuationTab()
         self.tab_waste = WasteAnalysisTab()
         self.tab_consumption = FullConsumptionTab()
+        self.tab_ai = AiAnalyticsTab(db_instance=self.stats.db)
         
         self.tabs.addTab(self.tab_valuation, "💰 Valorisation du Stock")
         self.tabs.addTab(self.tab_waste, "🗑️ Analyse des Pertes (Déchets)")
         self.tabs.addTab(self.tab_consumption, "📉 Rapport Consommation")
+        self.tabs.addTab(self.tab_ai, "🧠 Intelligence Artificielle & Prédictions")
         
         main_layout.addWidget(self.tabs)
         
@@ -306,3 +309,8 @@ class AnalysisView(QWidget):
         
         # 3. تحديث تقرير الاستهلاك (يعتمد على التاريخ)
         self.tab_consumption.refresh(self.stats, d_from_str, d_to_str)
+
+        # 4. تحديث تحليلات الذكاء الاصطناعي
+        if hasattr(self, 'tab_ai'):
+            self.tab_ai.set_db(self.stats.db)
+            self.tab_ai.refresh_ai_data()

@@ -1191,11 +1191,15 @@ class InventoryBatchManager:
         conversion_factor: float,
         target_unit: str = "Unité",
         custom_barcode: Optional[str] = None,
+        custom_selling_price_ht: Optional[Decimal] = None,
+        source_unit: Optional[str] = None,
         user_id: Optional[int] = None
     ) -> Tuple[bool, Optional[str], Optional[Dict]]:
         """
         Déconditionne une quantité de lot parent (ex: Carton/Boîte) en sous-unités de détail (ex: Pièce/Flacon),
         l'affecte à un emplacement de destination, recalcule le prix unitaire et journalise le mouvement.
+        Prend en compte les unités et facteurs définis dans les Données de Base (Produits), tout en permettant
+        l'intervention et la personnalisation par l'utilisateur.
         """
         if qty_to_unpack <= 0:
             return False, "La quantité à déconditionner doit être supérieure à 0.", None
@@ -1208,9 +1212,10 @@ class InventoryBatchManager:
                 cursor = conn.cursor(dictionary=True)
 
                 try:
-                    # 1. Verrouiller et récupérer le lot parent
+                    # 1. Verrouiller et récupérer le lot parent avec toutes les unités du produit
                     cursor.execute("""
-                        SELECT b.*, p.Product_Name, p.Stock_Unit, p.Usage_Unit
+                        SELECT b.*, p.Product_Name, p.Stock_Unit, p.Ordering_Unit,
+                               p.Stock_Qty_Per_Order_Unit, p.Usage_Unit, p.Usage_Qty_Per_Stock_Unit
                         FROM Inventory_Batches b
                         JOIN Products_Master p ON b.Product_ID = p.Product_ID
                         WHERE b.Batch_ID = %s FOR UPDATE
@@ -1227,11 +1232,15 @@ class InventoryBatchManager:
                         return False, f"Stock insuffisant (Disponible: {curr_stock}, Demandé: {qty_to_unpack}).", None
 
                     # 2. Calcul des quantités et coûts résultants
-                    target_qty = int(Decimal(str(qty_to_unpack)) * Decimal(str(conversion_factor)))
+                    conv_dec = Decimal(str(conversion_factor))
+                    target_qty = int(Decimal(str(qty_to_unpack)) * conv_dec)
                     unit_price_src = Decimal(str(source.get('Unit_Price_Received', 0.0)))
-                    target_unit_price = (unit_price_src / Decimal(str(conversion_factor))).quantize(Decimal('0.01'))
+                    target_unit_price = (unit_price_src / conv_dec).quantize(Decimal('0.01'))
 
-                    source_unit = source.get('Stock_Unit') or 'Boîte'
+                    resolved_source_unit = (
+                        source_unit.strip() if source_unit and source_unit.strip()
+                        else (source.get('Stock_Unit') or source.get('Ordering_Unit') or 'Boîte')
+                    )
 
                     # 3. Déduire du lot source
                     source_new_qty = Decimal(str(source['Quantity_Current'])) - Decimal(str(qty_to_unpack))
@@ -1243,7 +1252,13 @@ class InventoryBatchManager:
                         WHERE Batch_ID = %s
                     """, (source_new_qty, source_status, batch_id))
 
-                    # 4. Créer le nouveau lot déconditionné
+                    # 4. Calcul du prix de vente HT de l'unité déconditionnée
+                    if custom_selling_price_ht is not None and Decimal(str(custom_selling_price_ht)) > Decimal('0.00'):
+                        target_selling_ht = Decimal(str(custom_selling_price_ht)).quantize(Decimal('0.01'))
+                    else:
+                        selling_ht = Decimal(str(source.get('Selling_Price_HT', 0.0)))
+                        target_selling_ht = (selling_ht / conv_dec).quantize(Decimal('0.01')) if selling_ht > 0 else Decimal('0.00')
+
                     insert_query = """
                         INSERT INTO Inventory_Batches
                         (Product_ID, Location_ID, Lot_Number, Expiry_Date,
@@ -1253,10 +1268,7 @@ class InventoryBatchManager:
                          Selling_TVA_Percent, Reception_Note, Supplier_ID, External_Barcode, Internal_Barcode, PO_ID, BR_ID)
                         VALUES (%s, %s, %s, %s, %s, %s, 'Available', NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'TMP', %s, %s)
                     """
-                    decond_note = f"Déconditionné depuis Lot #{source['Lot_Number']} (1 {source_unit} = {conversion_factor} {target_unit})"
-
-                    selling_ht = Decimal(str(source.get('Selling_Price_HT', 0.0)))
-                    target_selling_ht = (selling_ht / Decimal(str(conversion_factor))).quantize(Decimal('0.01')) if selling_ht > 0 else Decimal('0.00')
+                    decond_note = f"Déconditionné depuis Lot #{source['Lot_Number']} (1 {resolved_source_unit} = {conversion_factor} {target_unit})"
 
                     cursor.execute(insert_query, (
                         source['Product_ID'],
@@ -1291,7 +1303,7 @@ class InventoryBatchManager:
                         product_id=source['Product_ID'],
                         movement_type='Transfer',
                         qty_change=Decimal(str(-abs(qty_to_unpack))),
-                        unit_used=source_unit,
+                        unit_used=resolved_source_unit,
                         batch_id=batch_id,
                         user_id=user_id,
                         notes=f"Déconditionnement -> Loc #{new_location_id} (+{target_qty} {target_unit})",
@@ -1306,7 +1318,7 @@ class InventoryBatchManager:
                         unit_used=target_unit,
                         batch_id=new_batch_id,
                         user_id=user_id,
-                        notes=f"Réception déconditionnement <- Lot #{source['Lot_Number']} (-{qty_to_unpack} {source_unit})",
+                        notes=f"Réception déconditionnement <- Lot #{source['Lot_Number']} (-{qty_to_unpack} {resolved_source_unit})",
                         external_cursor=cursor
                     )
 
@@ -1318,7 +1330,9 @@ class InventoryBatchManager:
                         'product_name': source['Product_Name'],
                         'lot_number': source['Lot_Number'],
                         'expiry_date': source['Expiry_Date'],
-                        'unit': target_unit
+                        'unit': target_unit,
+                        'unit_price_received': target_unit_price,
+                        'selling_price_ht': target_selling_ht
                     }
 
                 except Exception as inner_e:

@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QFormLayout, QLineEdit, QTextEdit, QComboBox, 
     QSpinBox, QHBoxLayout, QPushButton, QLabel, 
     QWidget, QMessageBox, QFrame, QTableWidget, QTableWidgetItem, 
-    QHeaderView, QGroupBox, QAbstractItemView, QCheckBox
+    QHeaderView, QGroupBox, QAbstractItemView, QCheckBox, QDoubleSpinBox
 )
 from PySide6.QtCore import QDate, Qt, QTimer, QSize
 from PySide6.QtGui import QColor, QFont
@@ -557,32 +557,80 @@ class InventoryDispatchDialog(BaseDialog):
 class UnpackTransferDialog(BaseDialog):
     """
     Dialogue de déconditionnement d'un lot en sous-unités de détail avec transfert vers un emplacement magasin/rayon.
+    Exploite les unités et quantités pré-configurées dans les Données de Base (Produits) tout en laissant à l'utilisateur
+    la liberté d'intervenir et de modifier manuellement le ratio de conversion ou les unités.
     """
-    def __init__(self, batch_data, location_manager, parent=None):
+    def __init__(self, batch_data, location_manager, product_manager=None, parent=None):
         prod_name = batch_data.get('Product_Name', 'Produit')
         super().__init__(f"Déconditionnement & Transfert - {prod_name}", parent)
         self.batch = batch_data
         self.location_manager = location_manager
-        self.resize(600, 580)
+        self.product_manager = product_manager
+
+        # Charger la hiérarchie des unités et facteurs depuis Données de Base
+        self.prod_units = self._load_product_units()
+
+        self.resize(650, 720)
         self.init_ui()
+
+    def _load_product_units(self):
+        prod_id = self.batch.get('Product_ID')
+        p = None
+        if self.product_manager and prod_id:
+            try:
+                p = self.product_manager.get_product_by_id(prod_id)
+            except Exception:
+                pass
+
+        if not p:
+            p = self.batch
+
+        ordering_unit = str(p.get('Ordering_Unit') or 'Carton').strip()
+        stock_unit = str(p.get('Stock_Unit') or 'Boîte').strip()
+
+        try:
+            stock_qty_per_order = float(p.get('Stock_Qty_Per_Order_Unit') or 1.0)
+            if stock_qty_per_order <= 0:
+                stock_qty_per_order = 1.0
+        except Exception:
+            stock_qty_per_order = 1.0
+
+        usage_unit = str(p.get('Usage_Unit') or 'Pièce').strip()
+        if not usage_unit or usage_unit.lower() in ('none', 'null'):
+            usage_unit = 'Pièce'
+
+        try:
+            usage_qty_per_stock = float(p.get('Usage_Qty_Per_Stock_Unit') or 1.0)
+            if usage_qty_per_stock <= 0:
+                usage_qty_per_stock = 1.0
+        except Exception:
+            usage_qty_per_stock = 1.0
+
+        return {
+            'Ordering_Unit': ordering_unit,
+            'Stock_Unit': stock_unit,
+            'Stock_Qty_Per_Order_Unit': stock_qty_per_order,
+            'Usage_Unit': usage_unit,
+            'Usage_Qty_Per_Stock_Unit': usage_qty_per_stock
+        }
 
     def init_ui(self):
         main_layout = QVBoxLayout(self.form_widget)
-        main_layout.setSpacing(14)
+        main_layout.setSpacing(12)
 
         # 1. Carte d'information du lot source
         info_group = QGroupBox("📦 Informations du Lot Source (Parent)")
-        info_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 8px; padding-top: 12px; }")
+        info_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 6px; padding-top: 10px; }")
         info_layout = QFormLayout(info_group)
-        info_layout.setSpacing(8)
+        info_layout.setSpacing(6)
 
         self.lbl_prod = QLabel(f"<b>{self.batch.get('Product_Name', '---')}</b>")
         self.lbl_lot = QLabel(f"{self.batch.get('Lot_Number', '---')} (Exp: {str(self.batch.get('Expiry_Date', '---'))[:10]})")
         self.lbl_curr_loc = QLabel(f"📍 {self.batch.get('Location_Name', 'Inconnu')}")
 
-        src_unit = self.batch.get('Stock_Unit') or 'Boîte/Carton'
+        self.current_source_unit = self.batch.get('Stock_Unit') or self.prod_units['Stock_Unit'] or 'Boîte'
         curr_stock = quantity_to_int(self.batch.get('Quantity_Current', 0))
-        self.lbl_stock_avail = QLabel(f"<b style='color: #27ae60; font-size: 14px;'>{format_quantity(curr_stock)} {src_unit}</b>")
+        self.lbl_stock_avail = QLabel(f"<b style='color: #27ae60; font-size: 14px;'>{format_quantity(curr_stock)} {self.current_source_unit}</b>")
 
         info_layout.addRow("Produit :", self.lbl_prod)
         info_layout.addRow("N° de Lot :", self.lbl_lot)
@@ -590,102 +638,186 @@ class UnpackTransferDialog(BaseDialog):
         info_layout.addRow("Stock Disponible :", self.lbl_stock_avail)
         main_layout.addWidget(info_group)
 
-        # 2. Paramètres de déconditionnement
-        decond_group = QGroupBox("⚙️ Paramètres de Déconditionnement")
-        decond_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007572; border: 1px solid #007572; border-radius: 6px; margin-top: 8px; padding-top: 12px; }")
+        # 2. Référentiel Données de Base (Produits)
+        master_group = QGroupBox("📋 Configuration Définie dans Produits (Données de Base)")
+        master_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2980b9; border: 1px solid #7fb3d5; border-radius: 6px; background-color: #f4f9fd; margin-top: 4px; padding-top: 8px; }")
+        master_layout = QVBoxLayout(master_group)
+        master_layout.setSpacing(4)
+
+        ou = self.prod_units['Ordering_Unit']
+        su = self.prod_units['Stock_Unit']
+        sq = self.prod_units['Stock_Qty_Per_Order_Unit']
+        uu = self.prod_units['Usage_Unit']
+        uq = self.prod_units['Usage_Qty_Per_Stock_Unit']
+
+        lbl_hierarchy = QLabel(
+            f"• <b>Unité Commande :</b> {ou}<br>"
+            f"• <b>Unité Stockage :</b> {su} <i>(1 {ou} = {sq:g} {su})</i><br>"
+            f"• <b>Unité Détail / Usage :</b> {uu} <i>(1 {su} = {uq:g} {uu})</i>"
+        )
+        lbl_hierarchy.setStyleSheet("font-size: 12px; color: #2471a3; line-height: 140%;")
+        master_layout.addWidget(lbl_hierarchy)
+        main_layout.addWidget(master_group)
+
+        # 3. Paramètres de déconditionnement & Intervention Utilisateur
+        decond_group = QGroupBox("⚙️ Ordre de Déconditionnement (Intervention & Conversion)")
+        decond_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007572; border: 1px solid #007572; border-radius: 6px; margin-top: 4px; padding-top: 10px; }")
         decond_layout = QFormLayout(decond_group)
-        decond_layout.setSpacing(10)
+        decond_layout.setSpacing(8)
+
+        # Sélecteur de modèle basé sur Master Data
+        self.combo_preset = QComboBox()
+        self.combo_preset.setMinimumHeight(32)
+
+        # Option 1: vers Usage_Unit
+        self.combo_preset.addItem(
+            f"🧪 Vers Unité Détail ({uu}) — Défini : 1 {su} = {uq:g} {uu}",
+            {"target_unit": uu, "factor": uq, "source_unit": su}
+        )
+
+        # Option 2: vers Stock_Unit depuis Ordering_Unit (si distinct)
+        if sq > 1 and su.lower() != ou.lower():
+            self.combo_preset.addItem(
+                f"📦 Vers Unité Stockage ({su}) — Défini : 1 {ou} = {sq:g} {su}",
+                {"target_unit": su, "factor": sq, "source_unit": ou}
+            )
+
+        # Option 3: Commande directe vers Usage_Unit
+        if sq > 1 and uq > 1:
+            direct_ratio = sq * uq
+            self.combo_preset.addItem(
+                f"⚡ Direct Commande ➔ Détail ({uu}) — Défini : 1 {ou} = {direct_ratio:g} {uu}",
+                {"target_unit": uu, "factor": direct_ratio, "source_unit": ou}
+            )
+
+        # Option 4: Personnalisé
+        self.combo_preset.addItem("✏️ Saisie Personnalisée (Libre)", None)
 
         # Quantité à déconditionner
         self.spin_qty = QSpinBox()
         max_q = max(1, curr_stock)
         self.spin_qty.setRange(1, max_q)
         self.spin_qty.setValue(1)
-        self.spin_qty.setSuffix(f" {src_unit}")
-        self.spin_qty.setMinimumHeight(34)
+        self.spin_qty.setSuffix(f" {self.current_source_unit}")
+        self.spin_qty.setMinimumHeight(32)
         self.spin_qty.setStyleSheet("font-weight: bold; font-size: 13px;")
         self.spin_qty.valueChanged.connect(self._recalculate_preview)
 
-        # Facteur de conversion
-        self.spin_factor = QSpinBox()
-        self.spin_factor.setRange(1, 100000)
-        default_factor = 10
-        try:
-            val_factor = float(self.batch.get('Usage_Qty_Per_Stock_Unit') or 0)
-            if val_factor > 0:
-                default_factor = int(val_factor)
-        except Exception:
-            pass
-        self.spin_factor.setValue(default_factor)
-        self.spin_factor.setMinimumHeight(34)
+        # Facteur de conversion (Modifiable par l'utilisateur)
+        self.spin_factor = QDoubleSpinBox()
+        self.spin_factor.setRange(0.01, 1000000.0)
+        self.spin_factor.setDecimals(2)
+        self.spin_factor.setValue(uq)
+        self.spin_factor.setMinimumHeight(32)
+        self.spin_factor.setToolTip("Facteur pré-rempli depuis les données du produit, modifiable manuellement.")
         self.spin_factor.valueChanged.connect(self._recalculate_preview)
 
-        # Unité de détail résultante
-        default_sub_unit = str(self.batch.get('Usage_Unit') or '').strip()
-        if not default_sub_unit or default_sub_unit.lower() in ('none', 'null', 'test'):
-            default_sub_unit = "Pièce"
-
-        self.inp_target_unit = QLineEdit(default_sub_unit)
-        self.inp_target_unit.setPlaceholderText("Ex: Pièce, Flacon, Sachet, Unité...")
-        self.inp_target_unit.setMinimumHeight(34)
+        # Nom de l'unité détail résultante (Modifiable par l'utilisateur)
+        self.inp_target_unit = QLineEdit(uu)
+        self.inp_target_unit.setPlaceholderText("Ex: Pièce, Flacon, Sachet, Test, Unité...")
+        self.inp_target_unit.setMinimumHeight(32)
         self.inp_target_unit.textChanged.connect(self._recalculate_preview)
 
-        decond_layout.addRow(f"Quantité à Sortir ({src_unit}) * :", self.spin_qty)
-        decond_layout.addRow("Facteur de Conversion (x Sous-unités) * :", self.spin_factor)
-        decond_layout.addRow("Nom de l'Unité Détail * :", self.inp_target_unit)
+        # Prix de vente unitaire HT (recalculé mais modifiable par l'utilisateur pour le magasin/vente)
+        src_selling = float(self.batch.get('Selling_Price_HT', 0.0))
+        init_selling_unit = src_selling / uq if uq > 0 else 0.0
+
+        self.spin_selling_price = QDoubleSpinBox()
+        self.spin_selling_price.setRange(0.0, 9999999.99)
+        self.spin_selling_price.setDecimals(2)
+        self.spin_selling_price.setSuffix(" DA HT")
+        self.spin_selling_price.setValue(init_selling_unit)
+        self.spin_selling_price.setMinimumHeight(32)
+        self.spin_selling_price.setToolTip("Prix de vente unitaire HT pour la vente au détail en magasin.")
+        self.spin_selling_price.valueChanged.connect(self._recalculate_preview)
+
+        self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
+
+        decond_layout.addRow("Modèle Préconfiguré :", self.combo_preset)
+        decond_layout.addRow(f"Quantité à Sortir ({self.current_source_unit}) * :", self.spin_qty)
+        decond_layout.addRow("Facteur de Conversion (Modifiable) * :", self.spin_factor)
+        decond_layout.addRow("Nom Unité Détail (Modifiable) * :", self.inp_target_unit)
+        decond_layout.addRow("Prix de Vente Unitaire Détail :", self.spin_selling_price)
         main_layout.addWidget(decond_group)
 
-        # 3. Carte d'aperçu dynamique du résultat
+        # 4. Carte d'aperçu dynamique du résultat
         self.preview_card = QFrame()
-        self.preview_card.setStyleSheet("background-color: #e8f8f5; border: 1px solid #a3e4d7; border-radius: 6px; padding: 10px;")
+        self.preview_card.setStyleSheet("background-color: #e8f8f5; border: 1px solid #a3e4d7; border-radius: 6px; padding: 8px;")
         prev_layout = QVBoxLayout(self.preview_card)
-        prev_layout.setSpacing(4)
+        prev_layout.setSpacing(3)
 
         self.lbl_result_qty = QLabel()
-        self.lbl_result_qty.setStyleSheet("font-size: 14px; font-weight: bold; color: #117a65;")
-        self.lbl_result_price = QLabel()
-        self.lbl_result_price.setStyleSheet("font-size: 12px; color: #16a085;")
+        self.lbl_result_qty.setStyleSheet("font-size: 13px; font-weight: bold; color: #117a65;")
+        self.lbl_result_cost = QLabel()
+        self.lbl_result_cost.setStyleSheet("font-size: 12px; color: #16a085;")
+        self.lbl_result_remain = QLabel()
+        self.lbl_result_remain.setStyleSheet("font-size: 12px; color: #7f8c8d;")
 
         prev_layout.addWidget(self.lbl_result_qty)
-        prev_layout.addWidget(self.lbl_result_price)
+        prev_layout.addWidget(self.lbl_result_cost)
+        prev_layout.addWidget(self.lbl_result_remain)
         main_layout.addWidget(self.preview_card)
 
-        # 4. Destination & Options
-        dest_group = QGroupBox("📍 Destination & Code-Barres")
-        dest_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 8px; padding-top: 12px; }")
+        # 5. Destination & Options
+        dest_group = QGroupBox("📍 Emplacement Magasin & Code-Barres")
+        dest_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 4px; padding-top: 8px; }")
         dest_layout = QFormLayout(dest_group)
-        dest_layout.setSpacing(10)
+        dest_layout.setSpacing(8)
 
         self.dest_combo = LocationTreeComboBox(self.location_manager)
-        self.dest_combo.setMinimumHeight(34)
+        self.dest_combo.setMinimumHeight(32)
 
         self.inp_barcode = QLineEdit()
         self.inp_barcode.setPlaceholderText("Laisser vide pour génération automatique (EAN-13)")
-        self.inp_barcode.setMinimumHeight(34)
+        self.inp_barcode.setMinimumHeight(32)
 
         self.cb_print = QCheckBox("🖨️ Imprimer l'étiquette code-barres après le transfert")
         self.cb_print.setChecked(True)
 
-        dest_layout.addRow("Emplacement Destination (Magasin/Rayon) * :", self.dest_combo)
+        dest_layout.addRow("Emplacement Destination (Rayon / Magasin) * :", self.dest_combo)
         dest_layout.addRow("Code-Barres Spécifique (Optionnel) :", self.inp_barcode)
         dest_layout.addRow("", self.cb_print)
         main_layout.addWidget(dest_group)
 
         self._recalculate_preview()
 
+    def _on_preset_changed(self, index):
+        data = self.combo_preset.currentData()
+        if data:
+            target_unit = data.get('target_unit', 'Pièce')
+            factor = float(data.get('factor', 1.0))
+            source_unit = data.get('source_unit', self.current_source_unit)
+
+            self.inp_target_unit.setText(target_unit)
+            self.spin_factor.setValue(factor)
+            self.spin_qty.setSuffix(f" {source_unit}")
+
+            # Recalculer le prix de vente unitaire conseillé
+            src_selling = float(self.batch.get('Selling_Price_HT', 0.0))
+            if src_selling > 0 and factor > 0:
+                self.spin_selling_price.setValue(round(src_selling / factor, 2))
+
+            self._recalculate_preview()
+
     def _recalculate_preview(self):
         qty_src = self.spin_qty.value()
         factor = self.spin_factor.value()
         unit_tgt = self.inp_target_unit.text().strip() or "Unité"
-        src_unit = self.batch.get('Stock_Unit') or 'Boîte'
+        src_unit = self.current_source_unit
 
-        target_total_qty = qty_src * factor
+        target_total_qty = int(qty_src * factor)
 
         unit_price_src = float(self.batch.get('Unit_Price_Received', 0.0))
-        target_unit_price = unit_price_src / factor if factor > 0 else 0.0
+        target_unit_cost = unit_price_src / factor if factor > 0 else 0.0
 
-        self.lbl_result_qty.setText(f"🎯 Nouveau Stock Généré : {target_total_qty} {unit_tgt} (depuis {qty_src} {src_unit})")
-        self.lbl_result_price.setText(f"💰 Coût Unitaire Déconditionné : {format_money(target_unit_price, 'DA')} (Prix initial: {format_money(unit_price_src, 'DA')})")
+        curr_stock = quantity_to_int(self.batch.get('Quantity_Current', 0))
+        remaining = max(0, curr_stock - qty_src)
+
+        selling_u = self.spin_selling_price.value()
+
+        self.lbl_result_qty.setText(f"🎯 Nouveau Stock Détail : {target_total_qty} {unit_tgt} (depuis {qty_src} {src_unit})")
+        self.lbl_result_cost.setText(f"💰 Coût Achat Déconditionné : {format_money(target_unit_cost, 'DA')} / {unit_tgt} | Prix Vente : {format_money(selling_u, 'DA')}")
+        self.lbl_result_remain.setText(f"📦 Stock Restant dans le Lot Parent : {remaining} {src_unit}")
 
     def accept(self):
         dest_id = self.dest_combo.get_current_location_id()
@@ -698,13 +830,19 @@ class UnpackTransferDialog(BaseDialog):
             QMessageBox.warning(self, "Validation", "Veuillez renseigner le nom de l'unité de détail.")
             return
 
+        if self.spin_factor.value() <= 0:
+            QMessageBox.warning(self, "Validation", "Le facteur de conversion doit être supérieur à zéro.")
+            return
+
         super().accept()
 
     def get_data(self):
         return {
             'qty_to_unpack': self.spin_qty.value(),
             'conversion_factor': float(self.spin_factor.value()),
+            'source_unit': self.current_source_unit,
             'target_unit': self.inp_target_unit.text().strip() or "Unité",
+            'selling_price_ht': self.spin_selling_price.value(),
             'dest_id': self.dest_combo.get_current_location_id(),
             'custom_barcode': self.inp_barcode.text().strip() or None,
             'print_label': self.cb_print.isChecked()

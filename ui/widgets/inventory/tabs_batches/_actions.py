@@ -5,6 +5,7 @@
 
 import logging
 from datetime import datetime, date
+from decimal import Decimal
 
 from PySide6.QtWidgets import QMessageBox, QInputDialog
 from PySide6.QtCore import Qt
@@ -258,12 +259,14 @@ def unpack_and_transfer_batch(self, batch_data):
         QMessageBox.warning(self, "Stock Épuisé", "Ce lot est épuisé et ne peut pas être déconditionné.")
         return
 
-    dialog = UnpackTransferDialog(batch_data, self.manager.locations, self)
+    prod_mgr = getattr(self.manager, 'products', None)
+    dialog = UnpackTransferDialog(batch_data, self.manager.locations, product_manager=prod_mgr, parent=self)
     if not dialog.exec():
         return
 
     data = dialog.get_data()
     try:
+        selling_p = Decimal(str(data['selling_price_ht'])) if data.get('selling_price_ht') is not None else None
         success, err_msg, res_data = self.manager.batches.unpack_and_transfer_batch(
             batch_id=batch_data['Batch_ID'],
             new_location_id=data['dest_id'],
@@ -271,6 +274,8 @@ def unpack_and_transfer_batch(self, batch_data):
             conversion_factor=data['conversion_factor'],
             target_unit=data['target_unit'],
             custom_barcode=data.get('custom_barcode'),
+            custom_selling_price_ht=selling_p,
+            source_unit=data.get('source_unit'),
             user_id=get_current_user_id(self)
         )
 
@@ -290,10 +295,12 @@ def unpack_and_transfer_batch(self, batch_data):
             self.load_data()
             self.data_changed.emit()
 
+            selling_str = format_money(float(res_data.get('selling_price_ht', 0)), 'DA')
             info_msg = (
                 f"✅ <b>Déconditionnement réussi !</b><br><br>"
                 f"• Nouveau stock créé : <b>{res_data['qty']} {res_data['unit']}</b><br>"
-                f"• Code-barres assigné : <code>{res_data['barcode']}</code>"
+                f"• Code-barres assigné : <code>{res_data['barcode']}</code><br>"
+                f"• Prix de vente unitaire HT : <b>{selling_str}</b>"
             )
             QMessageBox.information(self, "Succès", info_msg)
         else:

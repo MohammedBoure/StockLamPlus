@@ -2,7 +2,7 @@
 
 import datetime
 from PySide6.QtWidgets import (
-    QVBoxLayout, QFormLayout, QLineEdit, QTextEdit, QComboBox, 
+    QDialog, QVBoxLayout, QFormLayout, QLineEdit, QTextEdit, QComboBox, 
     QSpinBox, QHBoxLayout, QPushButton, QLabel, 
     QWidget, QMessageBox, QFrame, QTableWidget, QTableWidgetItem, 
     QHeaderView, QGroupBox, QAbstractItemView, QCheckBox, QDoubleSpinBox,
@@ -1076,7 +1076,7 @@ class UnpackTransferDialog(BaseDialog):
 # 9. Price History Dialog
 # ==============================================================================
 
-class PriceHistoryDialog(BaseDialog):
+class PriceHistoryDialog(QDialog):
     """نافذة سجل تتبع تعديلات أسعار البيع للوط أو المنتج"""
 
     def __init__(self, manager, parent=None, batch_id=None, product_id=None, product_name=""):
@@ -1087,6 +1087,7 @@ class PriceHistoryDialog(BaseDialog):
         self.product_name = product_name or "Produit"
 
         self.setWindowTitle(f"Historique des Prix - {self.product_name}")
+        self.setModal(True)
         self.resize(880, 500)
         self.setStyleSheet("background-color: #ffffff;")
 
@@ -1219,7 +1220,7 @@ class PriceHistoryDialog(BaseDialog):
 # 10. Modify Sales Prices Dialog
 # ==============================================================================
 
-class ModifySalesPricesDialog(BaseDialog):
+class ModifySalesPricesDialog(QDialog):
     """حوار تعديل أسعار البيع (Prix Vente 1, 2, 3, 4 et TVA) مع احتساب الهامش والتدقيق"""
 
     def __init__(self, batch_data, manager, parent=None):
@@ -1230,6 +1231,7 @@ class ModifySalesPricesDialog(BaseDialog):
 
         prod_name = batch_data.get('Product_Name', 'Produit')
         self.setWindowTitle(f"Ajustement des Prix de Vente - {prod_name}")
+        self.setModal(True)
         self.resize(650, 520)
         self.setStyleSheet("background-color: #ffffff;")
 

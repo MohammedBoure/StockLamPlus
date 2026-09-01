@@ -9,7 +9,7 @@ Composants PySide6 pour le point de vente (POS), l'encaissement et l'historique 
 - `sales_history_tab.py` : Historique des tickets de caisse, remboursements et clôtures de session.
 - `pos_payment_dialog.py` : Dialogue de règlement multi-moyens (espèces, carte, etc.).
 - `dialogs.py` : Dialogues du point de vente (`ClientDialog`, `OpenSessionDialog`, `CloseSessionDialog`, `QuickCashPaymentDialog`).
-- `touch_keypad.py` : Clavier tactile virtuel flottant agissant comme un clavier physique (envoi direct de frappes à l'élément actif sans perte de focus), avec poignée de déplacement dédiée et raccourcis de ciblage rapide.
+- `touch_keypad.py` : Clavier tactile virtuel bi-mode compact et flottant (pavé numérique `123` et clavier complet de lettres `ABC` avec disposition AZERTY/QWERTY et Maj), agissant exactement comme un clavier physique (envoi direct de frappes à l'élément actif sans perte de focus), avec poignée de déplacement dédiée, filtrage intelligent des cibles et raccourcis rapides.
 
 
 

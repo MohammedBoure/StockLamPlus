@@ -1289,12 +1289,14 @@ class InventoryBatchManager:
                 cursor = conn.cursor(dictionary=True)
 
                 try:
-                    # 1. Verrouiller et récupérer le lot parent avec toutes les unités du produit
+                    # 1. Verrouiller et récupérer le lot parent avec toutes les unités du produit et son emplacement
                     cursor.execute("""
-                        SELECT b.*, p.Product_Name, p.Stock_Unit, p.Ordering_Unit,
-                               p.Stock_Qty_Per_Order_Unit, p.Usage_Unit, p.Usage_Qty_Per_Stock_Unit
+                        SELECT b.*, p.Product_Name, p.Barcode AS Product_Barcode, p.Stock_Unit, p.Ordering_Unit,
+                               p.Stock_Qty_Per_Order_Unit, p.Usage_Unit, p.Usage_Qty_Per_Stock_Unit,
+                               COALESCE(loc_src.Location_Name, CONCAT('Emplacement #', b.Location_ID)) AS Source_Location_Name
                         FROM Inventory_Batches b
                         JOIN Products_Master p ON b.Product_ID = p.Product_ID
+                        LEFT JOIN Locations loc_src ON b.Location_ID = loc_src.Location_ID
                         WHERE b.Batch_ID = %s FOR UPDATE
                     """, (batch_id,))
 
@@ -1302,6 +1304,13 @@ class InventoryBatchManager:
                     if not source:
                         conn.rollback()
                         return False, "Lot source introuvable.", None
+
+                    cursor.execute("SELECT Location_Name FROM Locations WHERE Location_ID = %s", (new_location_id,))
+                    loc_target_row = cursor.fetchone()
+                    target_location_name = (
+                        loc_target_row.get('Location_Name') if loc_target_row and loc_target_row.get('Location_Name')
+                        else f"Emplacement #{new_location_id}"
+                    )
 
                     curr_stock = float(source.get('Quantity_Current', 0))
                     if curr_stock < qty_to_unpack:
@@ -1336,6 +1345,7 @@ class InventoryBatchManager:
                         selling_ht = Decimal(str(source.get('Selling_Price_HT', 0.0)))
                         target_selling_ht = (selling_ht / conv_dec).quantize(Decimal('0.01')) if selling_ht > 0 else Decimal('0.00')
 
+                    # Insertion du nouveau lot détail : Reception_Note et BR_ID sont explicitement NULL pour NE PAS créer de fausse réclamation
                     insert_query = """
                         INSERT INTO Inventory_Batches
                         (Product_ID, Location_ID, Lot_Number, Expiry_Date,
@@ -1343,9 +1353,8 @@ class InventoryBatchManager:
                          Unit_Price_Received, Tax_Rate_Percent, Discount_Percent,
                          Selling_Price_HT, Selling_Price_HT_2, Selling_Price_HT_3, Selling_Price_HT_4,
                          Selling_TVA_Percent, Reception_Note, Supplier_ID, External_Barcode, Internal_Barcode, PO_ID, BR_ID)
-                        VALUES (%s, %s, %s, %s, %s, %s, 'Available', NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'TMP', %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'Available', NOW(), %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, 'TMP', NULL, NULL)
                     """
-                    decond_note = f"Déconditionné depuis Lot #{source['Lot_Number']} (1 {resolved_source_unit} = {conversion_factor} {target_unit})"
 
                     cursor.execute(insert_query, (
                         source['Product_ID'],
@@ -1362,11 +1371,8 @@ class InventoryBatchManager:
                         Decimal('0.00'),
                         Decimal('0.00'),
                         source.get('Selling_TVA_Percent', 0.0),
-                        decond_note,
                         source.get('Supplier_ID'),
                         source.get('External_Barcode', ''),
-                        source.get('PO_ID'),
-                        source.get('BR_ID')
                     ))
                     new_batch_id = cursor.lastrowid
 
@@ -1382,8 +1388,22 @@ class InventoryBatchManager:
 
                     cursor.execute("UPDATE Inventory_Batches SET Internal_Barcode = %s WHERE Batch_ID = %s", (final_barcode, new_batch_id))
 
-                    # 6. Journaliser le mouvement double
+                    # 6. Journaliser le mouvement double avec détails complets sur le produit et code-barres source
+                    source_barcode = (
+                        source.get('Internal_Barcode') or
+                        source.get('External_Barcode') or
+                        source.get('Product_Barcode') or
+                        'Non spécifié'
+                    )
+                    source_loc_name = source.get('Source_Location_Name') or 'Non spécifié'
+
                     # A. Sortie du lot parent
+                    note_source = (
+                        f"Déconditionnement : Sortie de {qty_to_unpack} {resolved_source_unit} "
+                        f"du produit '{source['Product_Name']}' (Lot #{source['Lot_Number']}, Code-barres: {source_barcode}) "
+                        f"vers {target_location_name} (Nouveau code-barres: {final_barcode}). "
+                        f"Ratio: 1 {resolved_source_unit} = {conversion_factor} {target_unit} (+{target_qty} {target_unit})."
+                    )
                     self.stock_movement_log.create_movement_log(
                         product_id=source['Product_ID'],
                         movement_type='Transfer',
@@ -1391,11 +1411,18 @@ class InventoryBatchManager:
                         unit_used=resolved_source_unit,
                         batch_id=batch_id,
                         user_id=user_id,
-                        notes=f"Déconditionnement -> Loc #{new_location_id} (+{target_qty} {target_unit})",
+                        notes=note_source,
                         external_cursor=cursor
                     )
 
                     # B. Entrée du lot détail
+                    note_target = (
+                        f"Déconditionnement : Entrée de +{target_qty} {target_unit} (Nouveau code-barres: {final_barcode}) "
+                        f"issu du produit '{source['Product_Name']}' (Lot #{source['Lot_Number']}, "
+                        f"Code-barres source: {source_barcode}, Emplacement source: {source_loc_name}). "
+                        f"Déduit du parent: -{qty_to_unpack} {resolved_source_unit} vers {target_location_name}. "
+                        f"Ratio: 1 {resolved_source_unit} = {conversion_factor} {target_unit}."
+                    )
                     self.stock_movement_log.create_movement_log(
                         product_id=source['Product_ID'],
                         movement_type='Transfer',
@@ -1403,7 +1430,7 @@ class InventoryBatchManager:
                         unit_used=target_unit,
                         batch_id=new_batch_id,
                         user_id=user_id,
-                        notes=f"Réception déconditionnement <- Lot #{source['Lot_Number']} (-{qty_to_unpack} {resolved_source_unit})",
+                        notes=note_target,
                         external_cursor=cursor
                     )
 

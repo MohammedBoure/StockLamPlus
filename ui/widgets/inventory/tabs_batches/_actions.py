@@ -260,7 +260,14 @@ def unpack_and_transfer_batch(self, batch_data):
         return
 
     prod_mgr = getattr(self.manager, 'products', None)
-    dialog = UnpackTransferDialog(batch_data, self.manager.locations, product_manager=prod_mgr, parent=self)
+    batch_mgr = getattr(self.manager, 'batches', None)
+    dialog = UnpackTransferDialog(
+        batch_data,
+        self.manager.locations,
+        product_manager=prod_mgr,
+        batch_manager=batch_mgr,
+        parent=self
+    )
     if not dialog.exec():
         return
 
@@ -282,12 +289,13 @@ def unpack_and_transfer_batch(self, batch_data):
         if success:
             if data.get('print_label') and res_data and hasattr(self.manager, 'printer') and self.manager.printer:
                 try:
+                    copies = int(data.get('print_copies', 1))
                     self.manager.printer.print_label(
                         res_data['product_name'],
                         res_data['barcode'],
                         res_data['lot_number'],
                         str(res_data['expiry_date'])[:10] if res_data.get('expiry_date') else '---',
-                        res_data['qty']
+                        copies
                     )
                 except Exception as pe:
                     logging.warning(f"Erreur impression étiquette après déconditionnement : {pe}")

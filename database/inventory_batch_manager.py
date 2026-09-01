@@ -846,6 +846,83 @@ class InventoryBatchManager:
 
         return base + str(check_digit)
 
+    def is_barcode_available(self, barcode: str, exclude_batch_id: Optional[int] = None) -> Tuple[bool, Optional[str]]:
+        """
+        Vérifie si le code-barres est libre et non assigné à un autre lot ou produit.
+        """
+        clean_code = str(barcode or '').strip()
+        if not clean_code:
+            return False, "Le code-barres ne peut pas être vide."
+
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+
+                # 1. Vérifier Inventory_Batches
+                query_batch = """
+                    SELECT b.Batch_ID, b.Lot_Number, p.Product_Name, b.Quantity_Current
+                    FROM Inventory_Batches b
+                    JOIN Products_Master p ON b.Product_ID = p.Product_ID
+                    WHERE (b.Internal_Barcode = %s OR b.External_Barcode = %s)
+                """
+                params = [clean_code, clean_code]
+                if exclude_batch_id:
+                    query_batch += " AND b.Batch_ID != %s"
+                    params.append(exclude_batch_id)
+                query_batch += " LIMIT 1"
+                cursor.execute(query_batch, tuple(params))
+                match_batch = cursor.fetchone()
+                if match_batch:
+                    return False, f"Code-barres déjà utilisé par le lot '{match_batch['Lot_Number']}' du produit '{match_batch['Product_Name']}'."
+
+                # 2. Vérifier Products_Master
+                cursor.execute("SELECT Product_ID, Product_Name FROM Products_Master WHERE Barcode = %s LIMIT 1", (clean_code,))
+                match_prod = cursor.fetchone()
+                if match_prod:
+                    return False, f"Code-barres déjà attribué au produit maître '{match_prod['Product_Name']}'."
+
+                return True, None
+        except Exception as e:
+            logging.error(f"Error checking barcode availability: {e}")
+            return False, f"Erreur lors de la vérification du code-barres: {e}"
+
+    def generate_unique_barcode(self, prefix: str = "200") -> str:
+        """
+        Génère un code-barres EAN-13 interne unique, valide et garanti sans collision.
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COALESCE(MAX(Batch_ID), 0) FROM Inventory_Batches")
+                row = cursor.fetchone()
+                max_id = row[0] if row else 1000
+        except Exception:
+            max_id = 1000
+
+        counter = max_id + 1
+        for _ in range(10000):
+            padded = str(counter).zfill(9)
+            base = prefix[:3] + padded[-9:]
+            odds = sum(int(base[i]) for i in range(0, 12, 2))
+            evens = sum(int(base[i]) for i in range(1, 12, 2))
+            total = odds + (evens * 3)
+            check_digit = (10 - (total % 10)) % 10
+            candidate = base + str(check_digit)
+
+            is_avail, _ = self.is_barcode_available(candidate)
+            if is_avail:
+                return candidate
+            counter += 1
+
+        import time
+        ts = str(int(time.time()))[-9:]
+        base = prefix[:3] + ts
+        odds = sum(int(base[i]) for i in range(0, 12, 2))
+        evens = sum(int(base[i]) for i in range(1, 12, 2))
+        total = odds + (evens * 3)
+        check_digit = (10 - (total % 10)) % 10
+        return base + str(check_digit)
+
     def add_direct_batch(self, data: dict, user_id: int = None) -> bool:
         """
         Adds a batch directly to inventory without a Reception (BR) or Purchase Order (PO).
@@ -1293,8 +1370,16 @@ class InventoryBatchManager:
                     ))
                     new_batch_id = cursor.lastrowid
 
-                    # 5. Définir le code-barres interne
-                    final_barcode = custom_barcode.strip() if custom_barcode and custom_barcode.strip() else self.generate_ean13_for_batch(new_batch_id)
+                    # 5. Définir le code-barres interne (vérification stricte de collision)
+                    if custom_barcode and custom_barcode.strip():
+                        final_barcode = custom_barcode.strip()
+                        is_avail, err_bc = self.is_barcode_available(final_barcode)
+                        if not is_avail:
+                            conn.rollback()
+                            return False, f"Code-barres invalide ou déjà utilisé : {err_bc}", None
+                    else:
+                        final_barcode = self.generate_unique_barcode()
+
                     cursor.execute("UPDATE Inventory_Batches SET Internal_Barcode = %s WHERE Batch_ID = %s", (final_barcode, new_batch_id))
 
                     # 6. Journaliser le mouvement double

@@ -560,17 +560,19 @@ class UnpackTransferDialog(BaseDialog):
     Exploite les unités et quantités pré-configurées dans les Données de Base (Produits) tout en laissant à l'utilisateur
     la liberté d'intervenir et de modifier manuellement le ratio de conversion ou les unités.
     """
-    def __init__(self, batch_data, location_manager, product_manager=None, parent=None):
+    def __init__(self, batch_data, location_manager, product_manager=None, batch_manager=None, parent=None):
         prod_name = batch_data.get('Product_Name', 'Produit')
-        super().__init__(f"Déconditionnement & Transfert - {prod_name}", parent)
+        super().__init__(f"Déconditionnement && Transfert - {prod_name}", parent)
         self.batch = batch_data
         self.location_manager = location_manager
         self.product_manager = product_manager
+        self.batch_manager = batch_manager
 
         # Charger la hiérarchie des unités et facteurs depuis Données de Base
         self.prod_units = self._load_product_units()
 
-        self.resize(650, 720)
+        self.resize(680, 780)
+        self.setMinimumWidth(640)
         self.init_ui()
 
     def _load_product_units(self):
@@ -615,12 +617,94 @@ class UnpackTransferDialog(BaseDialog):
         }
 
     def init_ui(self):
+        # Appliquer un style ciblé garantissant une hauteur suffisante sans clipping ni double flèches
+        self.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 14px;
+                padding-bottom: 8px;
+                padding-left: 10px;
+                padding-right: 10px;
+            }
+            QLineEdit, QComboBox {
+                min-height: 38px;
+                max-height: 38px;
+                font-size: 13px;
+                padding: 4px 10px;
+                border: 1px solid #ced4da;
+                border-radius: 5px;
+                background-color: #ffffff;
+                color: #2c3e50;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border: 1.5px solid #007572;
+                background-color: #fcfefe;
+            }
+            QSpinBox, QDoubleSpinBox {
+                min-height: 38px;
+                max-height: 38px;
+                font-size: 13px;
+                padding: 4px 28px 4px 10px;
+                border: 1px solid #ced4da;
+                border-radius: 5px;
+                background-color: #ffffff;
+                color: #2c3e50;
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus {
+                border: 1.5px solid #007572;
+                background-color: #fcfefe;
+            }
+            QSpinBox::up-button, QDoubleSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 22px;
+                height: 18px;
+                border-left: 1px solid #ced4da;
+                border-bottom: 1px solid #ced4da;
+                background: #f8f9fa;
+                border-top-right-radius: 5px;
+            }
+            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover {
+                background: #e2e6ea;
+            }
+            QSpinBox::down-button, QDoubleSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: 22px;
+                height: 18px;
+                border-left: 1px solid #ced4da;
+                background: #f8f9fa;
+                border-bottom-right-radius: 5px;
+            }
+            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+                background: #e2e6ea;
+            }
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-bottom: 5px solid #495057;
+            }
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #495057;
+            }
+        """)
+
         main_layout = QVBoxLayout(self.form_widget)
-        main_layout.setSpacing(12)
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(12, 8, 12, 8)
 
         # 1. Carte d'information du lot source
         info_group = QGroupBox("📦 Informations du Lot Source (Parent)")
-        info_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 6px; padding-top: 10px; }")
+        info_group.setStyleSheet("QGroupBox { color: #2c3e50; border: 1px solid #bdc3c7; }")
         info_layout = QFormLayout(info_group)
         info_layout.setSpacing(6)
 
@@ -640,7 +724,7 @@ class UnpackTransferDialog(BaseDialog):
 
         # 2. Référentiel Données de Base (Produits)
         master_group = QGroupBox("📋 Configuration Définie dans Produits (Données de Base)")
-        master_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2980b9; border: 1px solid #7fb3d5; border-radius: 6px; background-color: #f4f9fd; margin-top: 4px; padding-top: 8px; }")
+        master_group.setStyleSheet("QGroupBox { color: #2980b9; border: 1px solid #7fb3d5; background-color: #f4f9fd; }")
         master_layout = QVBoxLayout(master_group)
         master_layout.setSpacing(4)
 
@@ -660,14 +744,13 @@ class UnpackTransferDialog(BaseDialog):
         main_layout.addWidget(master_group)
 
         # 3. Paramètres de déconditionnement & Intervention Utilisateur
-        decond_group = QGroupBox("⚙️ Ordre de Déconditionnement (Intervention & Conversion)")
-        decond_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007572; border: 1px solid #007572; border-radius: 6px; margin-top: 4px; padding-top: 10px; }")
+        decond_group = QGroupBox("⚙️ Ordre de Déconditionnement (Intervention && Conversion)")
+        decond_group.setStyleSheet("QGroupBox { color: #007572; border: 1px solid #007572; }")
         decond_layout = QFormLayout(decond_group)
         decond_layout.setSpacing(8)
 
         # Sélecteur de modèle basé sur Master Data
         self.combo_preset = QComboBox()
-        self.combo_preset.setMinimumHeight(32)
 
         # Option 1: vers Usage_Unit
         self.combo_preset.addItem(
@@ -693,14 +776,16 @@ class UnpackTransferDialog(BaseDialog):
         # Option 4: Personnalisé
         self.combo_preset.addItem("✏️ Saisie Personnalisée (Libre)", None)
 
-        # Quantité à déconditionner
+        # Quantité à déconditionner (avec label dynamique pour l'unité source)
+        self.lbl_qty_to_unpack = QLabel(f"Quantité à Sortir ({self.current_source_unit}) * :")
+        self.lbl_qty_to_unpack.setStyleSheet("font-weight: 500; font-size: 13px; color: #2c3e50;")
+
         self.spin_qty = QSpinBox()
         max_q = max(1, curr_stock)
         self.spin_qty.setRange(1, max_q)
         self.spin_qty.setValue(1)
         self.spin_qty.setSuffix(f" {self.current_source_unit}")
-        self.spin_qty.setMinimumHeight(32)
-        self.spin_qty.setStyleSheet("font-weight: bold; font-size: 13px;")
+        self.spin_qty.setStyleSheet("font-weight: bold;")
         self.spin_qty.valueChanged.connect(self._recalculate_preview)
 
         # Facteur de conversion (Modifiable par l'utilisateur)
@@ -708,14 +793,12 @@ class UnpackTransferDialog(BaseDialog):
         self.spin_factor.setRange(0.01, 1000000.0)
         self.spin_factor.setDecimals(2)
         self.spin_factor.setValue(uq)
-        self.spin_factor.setMinimumHeight(32)
         self.spin_factor.setToolTip("Facteur pré-rempli depuis les données du produit, modifiable manuellement.")
         self.spin_factor.valueChanged.connect(self._recalculate_preview)
 
         # Nom de l'unité détail résultante (Modifiable par l'utilisateur)
         self.inp_target_unit = QLineEdit(uu)
         self.inp_target_unit.setPlaceholderText("Ex: Pièce, Flacon, Sachet, Test, Unité...")
-        self.inp_target_unit.setMinimumHeight(32)
         self.inp_target_unit.textChanged.connect(self._recalculate_preview)
 
         # Prix de vente unitaire HT (recalculé mais modifiable par l'utilisateur pour le magasin/vente)
@@ -727,14 +810,13 @@ class UnpackTransferDialog(BaseDialog):
         self.spin_selling_price.setDecimals(2)
         self.spin_selling_price.setSuffix(" DA HT")
         self.spin_selling_price.setValue(init_selling_unit)
-        self.spin_selling_price.setMinimumHeight(32)
         self.spin_selling_price.setToolTip("Prix de vente unitaire HT pour la vente au détail en magasin.")
         self.spin_selling_price.valueChanged.connect(self._recalculate_preview)
 
         self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
 
         decond_layout.addRow("Modèle Préconfiguré :", self.combo_preset)
-        decond_layout.addRow(f"Quantité à Sortir ({self.current_source_unit}) * :", self.spin_qty)
+        decond_layout.addRow(self.lbl_qty_to_unpack, self.spin_qty)
         decond_layout.addRow("Facteur de Conversion (Modifiable) * :", self.spin_factor)
         decond_layout.addRow("Nom Unité Détail (Modifiable) * :", self.inp_target_unit)
         decond_layout.addRow("Prix de Vente Unitaire Détail :", self.spin_selling_price)
@@ -742,9 +824,9 @@ class UnpackTransferDialog(BaseDialog):
 
         # 4. Carte d'aperçu dynamique du résultat
         self.preview_card = QFrame()
-        self.preview_card.setStyleSheet("background-color: #e8f8f5; border: 1px solid #a3e4d7; border-radius: 6px; padding: 8px;")
+        self.preview_card.setStyleSheet("background-color: #e8f8f5; border: 1px solid #a3e4d7; border-radius: 6px; padding: 10px;")
         prev_layout = QVBoxLayout(self.preview_card)
-        prev_layout.setSpacing(3)
+        prev_layout.setSpacing(4)
 
         self.lbl_result_qty = QLabel()
         self.lbl_result_qty.setStyleSheet("font-size: 13px; font-weight: bold; color: #117a65;")
@@ -759,27 +841,116 @@ class UnpackTransferDialog(BaseDialog):
         main_layout.addWidget(self.preview_card)
 
         # 5. Destination & Options
-        dest_group = QGroupBox("📍 Emplacement Magasin & Code-Barres")
-        dest_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 4px; padding-top: 8px; }")
+        dest_group = QGroupBox("📍 Emplacement && Code-Barres")
+        dest_group.setStyleSheet("QGroupBox { color: #2c3e50; border: 1px solid #bdc3c7; }")
         dest_layout = QFormLayout(dest_group)
         dest_layout.setSpacing(8)
 
         self.dest_combo = LocationTreeComboBox(self.location_manager)
-        self.dest_combo.setMinimumHeight(32)
+
+        # Code-barres avec bouton Générer inline
+        bc_container = QWidget()
+        bc_layout = QHBoxLayout(bc_container)
+        bc_layout.setContentsMargins(0, 0, 0, 0)
+        bc_layout.setSpacing(6)
 
         self.inp_barcode = QLineEdit()
-        self.inp_barcode.setPlaceholderText("Laisser vide pour génération automatique (EAN-13)")
-        self.inp_barcode.setMinimumHeight(32)
+        self.inp_barcode.setPlaceholderText("Laisser vide pour auto-générer (EAN-13) ou saisir")
+        self.inp_barcode.textChanged.connect(self._on_barcode_text_changed)
+
+        self.btn_gen_barcode = QPushButton("⚡ Générer")
+        self.btn_gen_barcode.setCursor(Qt.PointingHandCursor)
+        self.btn_gen_barcode.setToolTip("Générer un code-barres EAN-13 interne garanti unique")
+        self.btn_gen_barcode.setStyleSheet("""
+            QPushButton {
+                min-height: 38px;
+                max-height: 38px;
+                padding: 0 14px;
+                background-color: #007572;
+                color: #ffffff;
+                font-weight: bold;
+                border-radius: 5px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #005a57;
+            }
+        """)
+        self.btn_gen_barcode.clicked.connect(self._on_generate_barcode)
+
+        bc_layout.addWidget(self.inp_barcode, 1)
+        bc_layout.addWidget(self.btn_gen_barcode)
+
+        self.lbl_barcode_status = QLabel("ℹ️ Un code EAN-13 unique sera généré automatiquement si le champ reste vide.")
+        self.lbl_barcode_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+
+        # Options d'impression
+        print_container = QWidget()
+        print_layout = QHBoxLayout(print_container)
+        print_layout.setContentsMargins(0, 0, 0, 0)
+        print_layout.setSpacing(12)
 
         self.cb_print = QCheckBox("🖨️ Imprimer l'étiquette code-barres après le transfert")
         self.cb_print.setChecked(True)
 
+        self.spin_copies = QSpinBox()
+        self.spin_copies.setRange(1, 100)
+        self.spin_copies.setValue(1)
+        self.spin_copies.setSuffix(" copie(s)")
+        self.spin_copies.setToolTip("Nombre d'exemplaires d'étiquettes à imprimer")
+        self.spin_copies.setEnabled(self.cb_print.isChecked())
+        self.cb_print.toggled.connect(self.spin_copies.setEnabled)
+
+        print_layout.addWidget(self.cb_print)
+        print_layout.addWidget(self.spin_copies)
+        print_layout.addStretch()
+
         dest_layout.addRow("Emplacement Destination (Rayon / Magasin) * :", self.dest_combo)
-        dest_layout.addRow("Code-Barres Spécifique (Optionnel) :", self.inp_barcode)
-        dest_layout.addRow("", self.cb_print)
+        dest_layout.addRow("Code-Barres Spécifique :", bc_container)
+        dest_layout.addRow("", self.lbl_barcode_status)
+        dest_layout.addRow("Impression :", print_container)
         main_layout.addWidget(dest_group)
 
         self._recalculate_preview()
+
+    def _on_generate_barcode(self):
+        new_bc = None
+        if self.batch_manager and hasattr(self.batch_manager, 'generate_unique_barcode'):
+            try:
+                new_bc = self.batch_manager.generate_unique_barcode()
+            except Exception as e:
+                logging.error(f"Error generating unique barcode: {e}")
+
+        if not new_bc:
+            # Algorithme local EAN-13 de secours
+            import time
+            base = "200" + str(int(time.time()))[-9:]
+            odds = sum(int(base[i]) for i in range(0, 12, 2))
+            evens = sum(int(base[i]) for i in range(1, 12, 2))
+            check = (10 - ((odds + (evens * 3)) % 10)) % 10
+            new_bc = base + str(check)
+
+        self.inp_barcode.setText(new_bc)
+
+    def _on_barcode_text_changed(self, text):
+        clean_code = text.strip()
+        if not clean_code:
+            self.lbl_barcode_status.setText("ℹ️ Un code EAN-13 unique sera généré automatiquement si le champ reste vide.")
+            self.lbl_barcode_status.setStyleSheet("color: #7f8c8d; font-size: 11px;")
+            return
+
+        if self.batch_manager and hasattr(self.batch_manager, 'is_barcode_available'):
+            try:
+                is_avail, err = self.batch_manager.is_barcode_available(clean_code)
+                if is_avail:
+                    self.lbl_barcode_status.setText("✅ Code-barres valide et disponible.")
+                    self.lbl_barcode_status.setStyleSheet("color: #27ae60; font-size: 11px; font-weight: bold;")
+                else:
+                    self.lbl_barcode_status.setText(f"❌ {err}")
+                    self.lbl_barcode_status.setStyleSheet("color: #c0392b; font-size: 11px; font-weight: bold;")
+            except Exception as e:
+                self.lbl_barcode_status.setText(f"⚠️ Erreur de validation: {e}")
+                self.lbl_barcode_status.setStyleSheet("color: #e67e22; font-size: 11px;")
 
     def _on_preset_changed(self, index):
         data = self.combo_preset.currentData()
@@ -788,6 +959,8 @@ class UnpackTransferDialog(BaseDialog):
             factor = float(data.get('factor', 1.0))
             source_unit = data.get('source_unit', self.current_source_unit)
 
+            self.current_source_unit = source_unit
+            self.lbl_qty_to_unpack.setText(f"Quantité à Sortir ({source_unit}) * :")
             self.inp_target_unit.setText(target_unit)
             self.spin_factor.setValue(factor)
             self.spin_qty.setSuffix(f" {source_unit}")
@@ -815,24 +988,47 @@ class UnpackTransferDialog(BaseDialog):
 
         selling_u = self.spin_selling_price.value()
 
-        self.lbl_result_qty.setText(f"🎯 Nouveau Stock Détail : {target_total_qty} {unit_tgt} (depuis {qty_src} {src_unit})")
-        self.lbl_result_cost.setText(f"💰 Coût Achat Déconditionné : {format_money(target_unit_cost, 'DA')} / {unit_tgt} | Prix Vente : {format_money(selling_u, 'DA')}")
-        self.lbl_result_remain.setText(f"📦 Stock Restant dans le Lot Parent : {remaining} {src_unit}")
+        self.lbl_result_qty.setText(f"🎯 <b>Nouveau Stock Détail :</b> {format_quantity(target_total_qty)} {unit_tgt} <i>(depuis {format_quantity(qty_src)} {src_unit})</i>")
+        self.lbl_result_cost.setText(f"💰 <b>Coût Achat Unitaire :</b> {format_money(target_unit_cost, 'DA')} / {unit_tgt} &nbsp;|&nbsp; 🏷️ <b>Prix Vente HT :</b> {format_money(selling_u, 'DA')}")
+        self.lbl_result_remain.setText(f"📦 <b>Stock Restant Lot Parent :</b> {format_quantity(remaining)} {src_unit}")
 
     def accept(self):
-        dest_id = self.dest_combo.get_current_location_id()
-        if not dest_id:
-            QMessageBox.warning(self, "Validation", "Veuillez sélectionner un emplacement de destination.")
+        # 1. Validation de la quantité
+        qty_to_unpack = self.spin_qty.value()
+        curr_stock = quantity_to_int(self.batch.get('Quantity_Current', 0))
+        if qty_to_unpack <= 0:
+            QMessageBox.warning(self, "Validation", "La quantité à déconditionner doit être supérieure à zéro.")
+            return
+        if qty_to_unpack > curr_stock:
+            QMessageBox.warning(self, "Validation", f"Stock insuffisant : {curr_stock} {self.current_source_unit} disponible(s).")
             return
 
+        # 2. Validation du facteur de conversion
+        if self.spin_factor.value() <= 0:
+            QMessageBox.warning(self, "Validation", "Le facteur de conversion doit être strictement supérieur à zéro.")
+            return
+
+        # 3. Validation de l'unité cible
         unit_tgt = self.inp_target_unit.text().strip()
         if not unit_tgt:
             QMessageBox.warning(self, "Validation", "Veuillez renseigner le nom de l'unité de détail.")
+            self.inp_target_unit.setFocus()
             return
 
-        if self.spin_factor.value() <= 0:
-            QMessageBox.warning(self, "Validation", "Le facteur de conversion doit être supérieur à zéro.")
+        # 4. Validation de la destination
+        dest_id = self.dest_combo.get_current_location_id()
+        if not dest_id:
+            QMessageBox.warning(self, "Validation", "Veuillez sélectionner un emplacement de destination valide.")
             return
+
+        # 5. Validation du code-barres spécifique
+        custom_bc = self.inp_barcode.text().strip()
+        if custom_bc and self.batch_manager and hasattr(self.batch_manager, 'is_barcode_available'):
+            is_avail, err = self.batch_manager.is_barcode_available(custom_bc)
+            if not is_avail:
+                QMessageBox.warning(self, "Code-Barres Indisponible", f"Impossible d'utiliser ce code-barres :<br><br>{err}")
+                self.inp_barcode.setFocus()
+                return
 
         super().accept()
 
@@ -845,5 +1041,6 @@ class UnpackTransferDialog(BaseDialog):
             'selling_price_ht': self.spin_selling_price.value(),
             'dest_id': self.dest_combo.get_current_location_id(),
             'custom_barcode': self.inp_barcode.text().strip() or None,
-            'print_label': self.cb_print.isChecked()
+            'print_label': self.cb_print.isChecked(),
+            'print_copies': self.spin_copies.value()
         }

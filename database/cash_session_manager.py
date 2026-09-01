@@ -80,6 +80,58 @@ class CashSessionManager:
             logging.error(f"Could not fetch open cash session: {e}", exc_info=True)
             return None
 
+    def get_terminals(self) -> list:
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT * FROM POS_Terminals WHERE Is_Active = 1 ORDER BY Terminal_ID ASC")
+                rows = cursor.fetchall()
+                if not rows:
+                    cursor.execute("INSERT INTO POS_Terminals (Terminal_Code, Terminal_Name, Is_Active) VALUES ('CAISSE-01', 'Caisse Principale', 1)")
+                    conn.commit()
+                    cursor.execute("SELECT * FROM POS_Terminals WHERE Is_Active = 1 ORDER BY Terminal_ID ASC")
+                    rows = cursor.fetchall()
+                return rows
+        except Exception as e:
+            logging.error(f"Could not fetch terminals: {e}", exc_info=True)
+            return []
+
+    def get_any_open_session(self, user_id=None) -> Optional[Dict]:
+        """Récupère la session ouverte la plus récente, optionnellement pour cet utilisateur."""
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                if user_id:
+                    cursor.execute(
+                        """
+                        SELECT s.*, t.Terminal_Code, t.Terminal_Name
+                        FROM POS_Cash_Sessions s
+                        JOIN POS_Terminals t ON s.Terminal_ID = t.Terminal_ID
+                        WHERE s.Status = 'Open' AND s.Opened_By = %s
+                        ORDER BY s.Opened_At DESC
+                        LIMIT 1
+                        """,
+                        (user_id,)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        return row
+
+                cursor.execute(
+                    """
+                    SELECT s.*, t.Terminal_Code, t.Terminal_Name
+                    FROM POS_Cash_Sessions s
+                    JOIN POS_Terminals t ON s.Terminal_ID = t.Terminal_ID
+                    WHERE s.Status = 'Open'
+                    ORDER BY s.Opened_At DESC
+                    LIMIT 1
+                    """
+                )
+                return cursor.fetchone()
+        except Exception as e:
+            logging.error(f"Could not fetch any open cash session: {e}", exc_info=True)
+            return None
+
     def open_session(self, terminal_id: int, user_id: Optional[int], opening_amount=0.0, notes=None) -> Tuple[bool, Dict]:
         try:
             with self.db.get_db_connection() as conn:

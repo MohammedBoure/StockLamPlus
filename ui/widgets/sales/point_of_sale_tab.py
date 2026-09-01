@@ -6,11 +6,12 @@ from datetime import date
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QComboBox, QMessageBox, QDoubleSpinBox, QSpinBox, QDialog,
-                               QDateEdit, QFrame, QCompleter, QAbstractItemView, QInputDialog)
+                               QDateEdit, QFrame, QCompleter, QAbstractItemView, QInputDialog,
+                               QScrollArea, QGridLayout, QCheckBox)
 from PySide6.QtCore import Qt, QDate, Signal, QStringListModel, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut, QFont
 from branding import get_logo_path
-from .dialogs import ClientDialog
+from .dialogs import ClientDialog, OpenSessionDialog, CloseSessionDialog, QuickCashPaymentDialog
 from .pos_payment_dialog import PaymentDialog
 from ui.formatting import format_money
 
@@ -100,52 +101,109 @@ class PointOfSaleTab(QWidget):
         self._install_shortcuts()
 
     def init_ui(self):
-        pass
-        
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
-        
-        # --- Left Section (Cart Frame) ---
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(6, 6, 6, 6)
+        root_layout.setSpacing(6)
+
+        # 1. Very Thin Full-Width Top Bar (outside of each container, no space wasted)
+        top_bar = self._build_top_bar()
+        root_layout.addWidget(top_bar)
+
+        # 2. Main Workspace (Horizontal Split: Cart area on left, Favorites panel on right)
+        workspace = QHBoxLayout()
+        workspace.setSpacing(8)
+        workspace.setContentsMargins(0, 0, 0, 0)
+
+        # --- Left Section: Cart Frame ---
         cart_frame = QFrame()
         cart_frame.setObjectName("CartFrame")
+        cart_frame.setStyleSheet("""
+            QFrame#CartFrame {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+            }
+        """)
         left_layout = QVBoxLayout(cart_frame)
-        left_layout.setContentsMargins(15, 15, 15, 15)
-        left_layout.setSpacing(15)
-        
-        # Header controls
-        header_layout = QHBoxLayout()
-        
+        left_layout.setContentsMargins(8, 8, 8, 8)
+        left_layout.setSpacing(6)
+
+        # Line 1: Client, New Client, and Date on the EXACT SAME LINE (Maximum Space Saving)
+        client_row = QHBoxLayout()
+        client_row.setSpacing(6)
+        client_row.setContentsMargins(0, 0, 0, 0)
+
         self.cb_client = QComboBox()
-        self.cb_client.setMinimumWidth(300)
-        self.cb_client.setPlaceholderText("👤 Sélectionner un Client...")
+        self.cb_client.setPlaceholderText("👤 Sélectionner un Client (ou Vente comptoir)...")
+        self.cb_client.setMinimumHeight(32)
         self.make_combo_searchable(self.cb_client)
-        
+
+        self.btn_new_client = QPushButton("➕ Client")
+        self.btn_new_client.setCursor(Qt.PointingHandCursor)
+        self.btn_new_client.setToolTip("Créer rapidement un nouveau client")
+        self.btn_new_client.setFixedWidth(85)
+        self.btn_new_client.setMinimumHeight(32)
+        self.btn_new_client.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #007572;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #e6f4f1;
+                border-color: #007572;
+            }
+        """)
+        self.btn_new_client.clicked.connect(self.create_quick_client)
+
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setMinimumWidth(150)
-        
-        header_layout.addWidget(QLabel("Client :"))
-        header_layout.addWidget(self.cb_client)
-        header_layout.addSpacing(20)
-        header_layout.addWidget(QLabel("Date :"))
-        header_layout.addWidget(self.date_edit)
-        header_layout.addStretch()
-        
-        left_layout.addLayout(header_layout)
+        self.date_edit.setFixedWidth(115)
+        self.date_edit.setMinimumHeight(32)
+        self.date_edit.setStyleSheet("""
+            QDateEdit {
+                background-color: #ffffff;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 12px;
+                color: #2c3e50;
+            }
+        """)
 
-        self.btn_new_client = QPushButton("+ Nouveau client")
-        self.btn_new_client.clicked.connect(self.create_quick_client)
-        left_layout.addWidget(self.btn_new_client, alignment=Qt.AlignLeft)
-        
-        # Product Search / Barcode
+        client_row.addWidget(self.cb_client, stretch=1)
+        client_row.addWidget(self.btn_new_client)
+        client_row.addWidget(self.date_edit)
+        left_layout.addLayout(client_row)
+
+        # Line 2: Barcode & Search Input (NO UNNECESSARY TEXT IN FRONT TO SAVE SPACE)
         search_layout = QHBoxLayout()
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(0)
+
         self.cb_product_search = BarcodeLineEdit()
         self.cb_product_search.setObjectName("ScanSearchInput")
-        self.cb_product_search.setMinimumWidth(450)
-        self.cb_product_search.setMinimumHeight(44)
-        self.cb_product_search.setPlaceholderText("🔍 Scanner code-barres ou chercher un produit...")
+        self.cb_product_search.setMinimumHeight(36)
+        self.cb_product_search.setPlaceholderText("🔍 Scanner code-barres ou rechercher un produit / référence (Appuyer sur Entrée)...")
+        self.cb_product_search.setStyleSheet("""
+            QLineEdit#ScanSearchInput {
+                background-color: #ffffff;
+                border: 1.5px solid #007572;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #2c3e50;
+            }
+            QLineEdit#ScanSearchInput:focus {
+                border: 2px solid #005a57;
+                background-color: #ffffff;
+            }
+        """)
 
         self.product_completer = QCompleter(self)
         self.product_completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -155,41 +213,30 @@ class PointOfSaleTab(QWidget):
         self.product_completer.activated.connect(self.on_product_selected)
         self.cb_product_search.returnPressed.connect(self.handle_search_return)
         self.cb_product_search.textChanged.connect(self.schedule_instant_scan)
-        
-        self.lbl_scan_hint = QLabel("Scan direct: le produit est ajoute des que le code correspond.")
-        self.lbl_scan_hint.setStyleSheet("color: #7f8c8d; font-size: 12px; font-weight: 500;")
-        
+
         search_layout.addWidget(self.cb_product_search)
-        search_layout.addWidget(self.lbl_scan_hint)
-        search_layout.addStretch()
-        
         left_layout.addLayout(search_layout)
-        
-        # Cart Table
+
+        # Line 3: Cart Table (Dynamic unlimited width/height, touch-friendly scrollbars, full text visible)
         self.cart_table = QTableWidget()
         self.cart_table.setObjectName("POSCartTable")
-        cols = ["Produit", "Lot", "Code-barres", "Stock", "Qté vendue", "Prix vente HT", "Remise", "TVA", "Total TTC", ""]
+        cols = ["Produit", "Lot", "Code-barres", "Stock", "Qté vendue", "Prix HT", "Remise", "TVA", "Total TTC", ""]
         self.cart_table.setColumnCount(len(cols))
         self.cart_table.setHorizontalHeaderLabels(cols)
-        
-        # Adjust column sizing
+
         header = self.cart_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch) # Produit
-        for i in range(1, len(cols)):
-            header.setSectionResizeMode(i, QHeaderView.Fixed)
-        self.cart_table.setColumnWidth(1, 88)
-        self.cart_table.setColumnWidth(2, 122)
-        self.cart_table.setColumnWidth(3, 62)
-        self.cart_table.setColumnWidth(4, 108)
-        self.cart_table.setColumnWidth(5, 162)
-        self.cart_table.setColumnWidth(6, 138)
-        self.cart_table.setColumnWidth(7, 86)
-        self.cart_table.setColumnWidth(8, 118)
-        self.cart_table.setColumnWidth(9, 46)
-            
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setMinimumSectionSize(140)
+        for i in range(1, 9):
+            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(9, QHeaderView.Fixed)
+        self.cart_table.setColumnWidth(9, 42)
+
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.cart_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.cart_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.cart_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.cart_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.cart_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.cart_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.cart_table.setAlternatingRowColors(True)
@@ -197,138 +244,392 @@ class PointOfSaleTab(QWidget):
         self.cart_table.setWordWrap(False)
         self.cart_table.setFocusPolicy(Qt.NoFocus)
         self.cart_table.verticalHeader().setVisible(False)
-        self.cart_table.verticalHeader().setDefaultSectionSize(58)
-        self.cart_table.verticalHeader().setMinimumSectionSize(56)
-        
-        left_layout.addWidget(self.cart_table)
-        
-        # --- Right Section (Summary Frame) ---
-        summary_frame = QFrame()
-        summary_frame.setObjectName("SummaryFrame")
-        summary_frame.setMinimumWidth(320)
-        summary_frame.setMaximumWidth(400)
-        
-        right_layout = QVBoxLayout(summary_frame)
-        right_layout.setContentsMargins(20, 20, 20, 20)
-        right_layout.setSpacing(10)
-        
-        summary_title = QLabel("Résumé de la Vente")
-        summary_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 10px;")
-        right_layout.addWidget(summary_title)
+        self.cart_table.verticalHeader().setDefaultSectionSize(48)
+        self.cart_table.verticalHeader().setMinimumSectionSize(44)
 
-        self.lbl_pos_context = QLabel("Caisse : non initialisee")
-        self.lbl_pos_context.setWordWrap(True)
-        self.lbl_pos_context.setStyleSheet("font-size: 12px; color: #2c3e50; padding: 6px; background: #f4f7fa; border-radius: 6px;")
+        self.cart_table.setStyleSheet("""
+            QTableWidget#POSCartTable {
+                background-color: #ffffff;
+                border: 1px solid #dcdfe6;
+                gridline-color: #f1f5f9;
+                font-size: 12px;
+                color: #2c3e50;
+            }
+            QHeaderView::section {
+                background-color: #f8fafc;
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 12px;
+                border: none;
+                border-bottom: 2px solid #007572;
+                border-right: 1px solid #e2e8f0;
+                padding: 6px 8px;
+            }
+            QScrollBar:vertical {
+                background: #f1f5f9;
+                width: 14px;
+                margin: 0px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                min-height: 30px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #007572;
+            }
+            QScrollBar:horizontal {
+                background: #f1f5f9;
+                height: 14px;
+                margin: 0px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #cbd5e1;
+                min-width: 30px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background: #007572;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                width: 0px;
+                height: 0px;
+            }
+        """)
+        left_layout.addWidget(self.cart_table, stretch=1)
 
-        session_buttons = QHBoxLayout()
-        self.btn_open_session = QPushButton("Ouvrir caisse")
-        self.btn_close_session = QPushButton("Cloturer")
-        self.btn_open_session.clicked.connect(self.open_cash_session)
-        self.btn_close_session.clicked.connect(self.close_cash_session)
-        session_buttons.addWidget(self.btn_open_session)
-        session_buttons.addWidget(self.btn_close_session)
-        self.btn_cash_in = QPushButton("Cash In")
-        self.btn_cash_out = QPushButton("Cash Out")
-        self.btn_cash_in.clicked.connect(lambda: self.record_cash_movement("Cash_In"))
-        self.btn_cash_out.clicked.connect(lambda: self.record_cash_movement("Cash_Out"))
-        session_buttons.addWidget(self.btn_cash_in)
-        session_buttons.addWidget(self.btn_cash_out)
+        # Line 4: Middle Action Bar at the bottom
+        bottom_bar = self._build_bottom_bar()
+        left_layout.addLayout(bottom_bar)
 
-        self.cb_payment_method = QComboBox()
-        self.cb_payment_method.addItem("Especes", "Cash")
-        self.cb_payment_method.addItem("Carte", "Card")
-        self.cb_payment_method.addItem("Virement", "Transfer")
-        self.cb_payment_method.addItem("Versement", "Versement")
-        self.cb_payment_method.addItem("Autre", "Other")
-        self.cb_payment_method.addItem("Crédit client", "Credit")
-        
-        self.lbl_total_ht = QLabel("Total HT : 0.00 DA")
-        self.lbl_total_ht.setObjectName("SubTotalLabel")
-        
-        self.lbl_total_tva = QLabel("TVA : 0.00 DA")
-        self.lbl_total_tva.setObjectName("SubTotalLabel")
-        
-        self.lbl_total_remise = QLabel("Remise : 0.00 DA")
-        self.lbl_total_remise.setObjectName("SubTotalLabel")
-        
-        self.lbl_total_ttc = QLabel("TOTAL TTC : 0.00 DA")
-        self.lbl_total_ttc.setObjectName("TotalLabel")
+        workspace.addWidget(cart_frame, stretch=4)
+
+        # --- Right Section: Favorites Panel (Empty space ready for fast access products) ---
+        fav_panel = self._build_favorites_panel()
+        workspace.addWidget(fav_panel, stretch=1)
+
+        root_layout.addLayout(workspace)
+
+    def _build_top_bar(self):
+        """Barre supérieure ultra-fine placée à l'extérieur de chaque conteneur pour optimiser l'espace."""
+        top_frame = QFrame()
+        top_frame.setObjectName("POSTopBar")
+        top_frame.setStyleSheet("""
+            QFrame#POSTopBar {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 4px 10px;
+                min-height: 44px;
+                max-height: 50px;
+            }
+        """)
+        top_layout = QHBoxLayout(top_frame)
+        top_layout.setContentsMargins(6, 2, 6, 2)
+        top_layout.setSpacing(12)
+
+        # 1. Caisse & Session Badge Button
+        self.btn_caisse_status = QPushButton("🔴 Caisse Fermée (Cliquer pour ouvrir)")
+        self.btn_caisse_status.setCursor(Qt.PointingHandCursor)
+        self.btn_caisse_status.setStyleSheet("""
+            QPushButton {
+                background: #fdf2f1;
+                color: #c0392b;
+                border: 1px solid #fecaca;
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-weight: bold;
+                font-size: 12px;
+                min-height: 28px;
+            }
+            QPushButton:hover {
+                background: #fadbd8;
+            }
+        """)
+        self.btn_caisse_status.clicked.connect(self.manage_cash_session)
+        top_layout.addWidget(self.btn_caisse_status)
+
+        # Séparateur
+        sep1 = QFrame()
+        sep1.setFrameShape(QFrame.VLine)
+        sep1.setStyleSheet("color: #cbd5e1;")
+        top_layout.addWidget(sep1)
+
+        # 2. Informations Financières Secondaires (fines et compactes)
+        self.lbl_total_ht = QLabel("Total HT : 0,00 DA")
+        self.lbl_total_ht.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600;")
+        top_layout.addWidget(self.lbl_total_ht)
+
+        self.lbl_total_remise = QLabel("Remise : 0,00 DA")
+        self.lbl_total_remise.setStyleSheet("font-size: 12px; color: #d35400; font-weight: 600;")
+        top_layout.addWidget(self.lbl_total_remise)
+
+        self.lbl_total_tva = QLabel("TVA : 0,00 DA")
+        self.lbl_total_tva.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600;")
+        top_layout.addWidget(self.lbl_total_tva)
+
+        top_layout.addStretch(1)
+
+        # 3. Prix Final Net à Payer (Cadre clair avec taille de police dynamique auto-adaptable)
+        self.frame_net_total = QFrame()
+        self.frame_net_total.setObjectName("NetTotalFrame")
+        self.frame_net_total.setStyleSheet("""
+            QFrame#NetTotalFrame {
+                background-color: #007572;
+                border: 1px solid #005a57;
+                border-radius: 6px;
+                padding: 2px 14px;
+                min-height: 38px;
+            }
+        """)
+        frame_layout = QHBoxLayout(self.frame_net_total)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setSpacing(0)
+
+        self.lbl_total_ttc = QLabel("NET À PAYER : 0,00 DA")
         self.lbl_total_ttc.setAlignment(Qt.AlignCenter)
-        
-        from PySide6.QtWidgets import QCheckBox
-        self.chk_print_receipt = QCheckBox("🖨️ Imprimer la Facture (Thermique)")
-        self.chk_print_receipt.setChecked(True)
-        self.chk_print_receipt.setStyleSheet("font-size: 14px; font-weight: bold; color: #2c3e50;")
-        right_layout.addWidget(self.chk_print_receipt)
-        
-        self.btn_validate = QPushButton("✔️ Valider la Vente")
-        self.btn_validate.setMinimumHeight(60)
+        self.lbl_total_ttc.setStyleSheet("font-size: 20px; font-weight: 800; color: #ffffff;")
+        frame_layout.addWidget(self.lbl_total_ttc)
+
+        top_layout.addWidget(self.frame_net_total)
+
+        return top_frame
+
+    def _update_total_display(self, total):
+        """Modifie la taille du texte dynamiquement selon la longueur du montant pour éviter tout chevauchement."""
+        self.current_total_ttc = float(total or 0.0)
+        val_str = f"{format_money(self.current_total_ttc)} DA"
+        txt = f"NET À PAYER : {val_str}"
+        length = len(val_str)
+        if length <= 12:
+            font_size = 20
+        elif length <= 16:
+            font_size = 17
+        elif length <= 22:
+            font_size = 15
+        else:
+            font_size = 13
+        self.lbl_total_ttc.setText(txt)
+        self.lbl_total_ttc.setStyleSheet(f"font-size: {font_size}px; font-weight: 800; color: #ffffff;")
+
+    def _build_favorites_panel(self):
+        """Panneau droit réservé aux produits favoris / raccourcis de vente rapide."""
+        fav_frame = QFrame()
+        fav_frame.setObjectName("FavoritesFrame")
+        fav_frame.setFixedWidth(260)
+        fav_frame.setStyleSheet("""
+            QFrame#FavoritesFrame {
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+            }
+        """)
+        fav_layout = QVBoxLayout(fav_frame)
+        fav_layout.setContentsMargins(8, 8, 8, 8)
+        fav_layout.setSpacing(8)
+
+        header_fav = QLabel("⭐ <b>Produits Favoris / Raccourcis</b>")
+        header_fav.setStyleSheet("font-size: 13px; color: #007572; padding: 2px 0;")
+        fav_layout.addWidget(header_fav)
+
+        self.scroll_fav = QScrollArea()
+        self.scroll_fav.setWidgetResizable(True)
+        self.scroll_fav.setFrameShape(QFrame.NoFrame)
+        self.scroll_fav.setStyleSheet("background: transparent; border: none;")
+
+        self.fav_container = QWidget()
+        self.fav_container.setStyleSheet("background: transparent;")
+        self.fav_grid = QVBoxLayout(self.fav_container)
+        self.fav_grid.setContentsMargins(0, 0, 0, 0)
+        self.fav_grid.setSpacing(6)
+
+        self.scroll_fav.setWidget(self.fav_container)
+        fav_layout.addWidget(self.scroll_fav)
+
+        return fav_frame
+
+    def refresh_favorites_display(self):
+        """Actualise l'affichage formel de la grille des produits favoris."""
+        while self.fav_grid.count():
+            item = self.fav_grid.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        if not self.batches_cache:
+            lbl_empty = QLabel("⭐ Espace réservé aux produits favoris.\nLes articles fréquents apparaîtront ici.")
+            lbl_empty.setAlignment(Qt.AlignCenter)
+            lbl_empty.setWordWrap(True)
+            lbl_empty.setStyleSheet("color: #94a3b8; font-size: 11px; padding: 20px 10px;")
+            self.fav_grid.addWidget(lbl_empty)
+            self.fav_grid.addStretch()
+            return
+
+        seen_products = set()
+        count = 0
+        for batch in self.batches_cache:
+            p_id = batch.get('Product_ID')
+            if p_id in seen_products:
+                continue
+            seen_products.add(p_id)
+
+            p_name = batch.get('Product_Name', 'Produit')
+            p_price = float(batch.get('Selling_Price_HT') or 0.0)
+            tva = float(batch.get('Selling_TVA_Percent') or batch.get('Tax_Rate_Percent') or 0.0)
+            p_ttc = p_price * (1 + tva / 100.0)
+            stock_q = batch.get('Quantity_Current', 0)
+
+            btn = QPushButton()
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 5px;
+                    text-align: left;
+                    padding: 6px 8px;
+                    min-height: 38px;
+                }
+                QPushButton:hover {
+                    background-color: #e6f4f1;
+                    border-color: #007572;
+                }
+            """)
+            btn_layout = QVBoxLayout(btn)
+            btn_layout.setContentsMargins(0, 0, 0, 0)
+            btn_layout.setSpacing(2)
+
+            lbl_n = QLabel(p_name)
+            lbl_n.setStyleSheet("font-weight: 600; font-size: 11px; color: #1e293b; background: transparent;")
+            lbl_p = QLabel(f"{format_money(p_ttc)} DA (Stock: {stock_q})")
+            lbl_p.setStyleSheet("font-size: 10px; color: #007572; font-weight: bold; background: transparent;")
+
+            btn_layout.addWidget(lbl_n)
+            btn_layout.addWidget(lbl_p)
+
+            btn.clicked.connect(lambda _chk=False, b=batch: self.add_product_to_cart(b, quantity=1.0))
+            self.fav_grid.addWidget(btn)
+
+            count += 1
+            if count >= 10:
+                break
+
+        self.fav_grid.addStretch()
+
+    def _build_bottom_bar(self):
+        """Barre centrale inférieure contenant les boutons interactifs essentiels."""
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setContentsMargins(0, 4, 0, 0)
+        bottom_layout.setSpacing(8)
+
+        # 1. Bouton Valider & Encaisser (en Dinars directement)
+        self.btn_validate = QPushButton("✔️ Valider & Encaisser (F10)")
+        self.btn_validate.setCursor(Qt.PointingHandCursor)
         self.btn_validate.setStyleSheet("""
             QPushButton {
-                background-color: #27ae60; 
-                color: white; 
-                font-size: 18px; 
+                background-color: #007572;
+                color: #ffffff;
+                font-size: 13px;
                 font-weight: bold;
-                border-radius: 8px;
+                border-radius: 6px;
+                padding: 6px 18px;
+                min-height: 38px;
+                border: none;
             }
-            QPushButton:hover { background-color: #2ecc71; }
-            QPushButton:pressed { background-color: #229954; }
+            QPushButton:hover { background-color: #005a57; }
+            QPushButton:pressed { background-color: #004543; }
         """)
-        self.btn_validate.setCursor(Qt.PointingHandCursor)
         self.btn_validate.clicked.connect(self.validate_sale)
-        
-        self.btn_clear = QPushButton("🗑️ Vider le Panier")
-        self.btn_clear.setMinimumHeight(45)
+        bottom_layout.addWidget(self.btn_validate)
+
+        # 2. Suspendre
+        self.btn_hold_sale = QPushButton("⏸️ Suspendre (F8)")
+        self.btn_hold_sale.setCursor(Qt.PointingHandCursor)
+        self.btn_hold_sale.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #2c3e50;
+                font-weight: 600;
+                font-size: 12px;
+                border: 1px solid #ced4da;
+                border-radius: 6px;
+                padding: 6px 12px;
+                min-height: 38px;
+            }
+            QPushButton:hover { background-color: #e2e8f0; }
+        """)
+        self.btn_hold_sale.clicked.connect(lambda: self.save_current_draft("Held"))
+        bottom_layout.addWidget(self.btn_hold_sale)
+
+        # 3. Reprendre
+        self.btn_resume_sale = QPushButton("▶️ Reprendre (F9)")
+        self.btn_resume_sale.setCursor(Qt.PointingHandCursor)
+        self.btn_resume_sale.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #2c3e50;
+                font-weight: 600;
+                font-size: 12px;
+                border: 1px solid #ced4da;
+                border-radius: 6px;
+                padding: 6px 12px;
+                min-height: 38px;
+            }
+            QPushButton:hover { background-color: #e2e8f0; }
+        """)
+        self.btn_resume_sale.clicked.connect(self.resume_draft)
+        bottom_layout.addWidget(self.btn_resume_sale)
+
+        # 4. Vider Panier
+        self.btn_clear = QPushButton("🗑️ Vider Panier")
+        self.btn_clear.setCursor(Qt.PointingHandCursor)
         self.btn_clear.setStyleSheet("""
             QPushButton {
-                background-color: #ffffff; 
-                color: #e74c3c; 
-                font-weight: bold; 
-                font-size: 14px;
-                border: 2px solid #e74c3c;
-                border-radius: 8px;
+                background-color: #ffffff;
+                color: #e74c3c;
+                font-weight: 600;
+                font-size: 12px;
+                border: 1px solid #fca5a5;
+                border-radius: 6px;
+                padding: 6px 12px;
+                min-height: 38px;
             }
-            QPushButton:hover { background-color: #fdf2f1; }
-            QPushButton:pressed { background-color: #fadbd8; }
+            QPushButton:hover { background-color: #fee2e2; }
         """)
-        self.btn_clear.setCursor(Qt.PointingHandCursor)
         self.btn_clear.clicked.connect(self.clear_cart)
-        
-        right_layout.addWidget(self.lbl_pos_context)
-        right_layout.addLayout(session_buttons)
-        right_layout.addWidget(QLabel("Paiement :"))
-        right_layout.addWidget(self.cb_payment_method)
-        self.btn_payment_details = QPushButton("Paiement détaillé / multi-paiement (F6)")
-        self.btn_payment_details.clicked.connect(self.open_payment_dialog)
-        right_layout.addWidget(self.btn_payment_details)
-        self.btn_promotion = QPushButton("Coupon / Promotion")
-        self.btn_promotion.clicked.connect(self.apply_promotion_code)
-        right_layout.addWidget(self.btn_promotion)
-        self.btn_loyalty = QPushButton("Points fidélité")
-        self.btn_loyalty.clicked.connect(self.apply_loyalty_points)
-        right_layout.addWidget(self.btn_loyalty)
-        right_layout.addWidget(self.lbl_total_ht)
-        right_layout.addWidget(self.lbl_total_tva)
-        right_layout.addWidget(self.lbl_total_remise)
-        right_layout.addWidget(self.lbl_total_ttc)
-        draft_buttons = QHBoxLayout()
-        self.btn_hold_sale = QPushButton("Suspendre")
-        self.btn_quote = QPushButton("Devis")
-        self.btn_resume_sale = QPushButton("Reprendre")
-        self.btn_hold_sale.clicked.connect(lambda: self.save_current_draft("Held"))
-        self.btn_quote.clicked.connect(lambda: self.save_current_draft("Quote"))
-        self.btn_resume_sale.clicked.connect(self.resume_draft)
-        draft_buttons.addWidget(self.btn_hold_sale)
-        draft_buttons.addWidget(self.btn_quote)
-        draft_buttons.addWidget(self.btn_resume_sale)
-        right_layout.addLayout(draft_buttons)
-        right_layout.addStretch()
-        right_layout.addWidget(self.btn_validate)
-        right_layout.addSpacing(10)
-        right_layout.addWidget(self.btn_clear)
-        
-        main_layout.addWidget(cart_frame, stretch=3)
-        main_layout.addWidget(summary_frame, stretch=1)
+        bottom_layout.addWidget(self.btn_clear)
+
+        bottom_layout.addStretch(1)
+
+        # 5. Session Caisse
+        self.btn_session_mgr = QPushButton("💼 Caisse...")
+        self.btn_session_mgr.setCursor(Qt.PointingHandCursor)
+        self.btn_session_mgr.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #2c3e50;
+                font-weight: 600;
+                font-size: 12px;
+                border: 1px solid #ced4da;
+                border-radius: 6px;
+                padding: 6px 12px;
+                min-height: 38px;
+            }
+            QPushButton:hover { background-color: #e2e8f0; }
+        """)
+        self.btn_session_mgr.clicked.connect(self.manage_cash_session)
+        bottom_layout.addWidget(self.btn_session_mgr)
+
+        # 6. Impression Automatique Ticket
+        self.chk_print_receipt = QCheckBox("🖨️ Ticket Auto")
+        self.chk_print_receipt.setChecked(True)
+        self.chk_print_receipt.setStyleSheet("font-size: 12px; color: #2c3e50; font-weight: 600;")
+        bottom_layout.addWidget(self.chk_print_receipt)
+
+        return bottom_layout
 
     def _has_permission(self, permission):
         try:
@@ -338,12 +639,14 @@ class PointOfSaleTab(QWidget):
             return True
 
     def _install_shortcuts(self):
-        self._shortcut_payment = QShortcut(QKeySequence("F6"), self)
-        self._shortcut_payment.activated.connect(self.open_payment_dialog)
-        self._shortcut_validate = QShortcut(QKeySequence("F9"), self)
+        self._shortcut_validate = QShortcut(QKeySequence("F10"), self)
         self._shortcut_validate.activated.connect(self.validate_sale)
         self._shortcut_hold = QShortcut(QKeySequence("F8"), self)
         self._shortcut_hold.activated.connect(lambda: self.save_current_draft("Held"))
+        self._shortcut_resume = QShortcut(QKeySequence("F9"), self)
+        self._shortcut_resume.activated.connect(self.resume_draft)
+        self._shortcut_session = QShortcut(QKeySequence("F6"), self)
+        self._shortcut_session.activated.connect(self.manage_cash_session)
 
     def apply_promotion_code(self):
         if not self._has_permission("act_pos_discount"):
@@ -578,119 +881,154 @@ class PointOfSaleTab(QWidget):
             return None
 
     def refresh_cash_session_context(self):
-        terminal = self.data_manager.pos_terminals.get_or_create_default_terminal()
-        if not terminal:
-            self.terminal_id = None
-            self.cash_session_id = None
-            self.lbl_pos_context.setText("Caisse : terminal indisponible")
-            # Keep the action clickable so the user gets an actionable error
-            # instead of a button that appears to do nothing.
-            self.btn_validate.setEnabled(True)
-            self.btn_validate.setToolTip("Le terminal POS est indisponible.")
-            return
-
-        self.terminal_id = terminal.get('Terminal_ID')
-        self.terminal_label = terminal.get('Terminal_Name') or terminal.get('Terminal_Code') or "Caisse"
-        session = self.data_manager.cash_sessions.get_open_session(self.terminal_id)
+        """Actualise le badge et les informations de la session de caisse active."""
+        user_id = self.get_current_user_id()
+        session = self.data_manager.cash_sessions.get_any_open_session(user_id)
         if session:
             self.cash_session_id = session.get('Cash_Session_ID')
+            self.terminal_id = session.get('Terminal_ID')
+            self.terminal_label = session.get('Terminal_Name') or session.get('Terminal_Code') or "Caisse"
             self.cash_session_no = session.get('Session_No')
-            self.lbl_pos_context.setText(f"{self.terminal_label}\nSession ouverte : {self.cash_session_no}")
-            self.btn_open_session.setEnabled(False)
-            self.btn_close_session.setEnabled(True)
-            self.btn_validate.setEnabled(True)
-            self.btn_validate.setToolTip("")
+            if hasattr(self, 'btn_caisse_status'):
+                self.btn_caisse_status.setText(f"🟢 {self.terminal_label} ({self.cash_session_no})")
+                self.btn_caisse_status.setStyleSheet("""
+                    QPushButton {
+                        background: #e8f8f5;
+                        color: #007572;
+                        border: 1px solid #a3e4d7;
+                        border-radius: 4px;
+                        padding: 4px 10px;
+                        font-weight: bold;
+                        font-size: 12px;
+                        min-height: 28px;
+                    }
+                    QPushButton:hover { background: #d1f2eb; }
+                """)
         else:
             self.cash_session_id = None
             self.cash_session_no = None
-            self.lbl_pos_context.setText(f"{self.terminal_label}\nAucune session de caisse ouverte")
-            self.btn_open_session.setEnabled(True)
-            self.btn_close_session.setEnabled(False)
-            # Do not silently disable the sale action. validate_sale() will
-            # explain that opening the caisse is required.
-            self.btn_validate.setEnabled(True)
-            self.btn_validate.setToolTip("Ouvrez une session de caisse avant de valider la vente.")
+            if hasattr(self, 'btn_caisse_status'):
+                self.btn_caisse_status.setText("🔴 Caisse Fermée (Cliquer pour ouvrir)")
+                self.btn_caisse_status.setStyleSheet("""
+                    QPushButton {
+                        background: #fdf2f1;
+                        color: #c0392b;
+                        border: 1px solid #fecaca;
+                        border-radius: 4px;
+                        padding: 4px 10px;
+                        font-weight: bold;
+                        font-size: 12px;
+                        min-height: 28px;
+                    }
+                    QPushButton:hover { background: #fadbd8; }
+                """)
+
+    def manage_cash_session(self):
+        """Ouvre le dialogue de gestion de session de caisse (ouverture / clôture)."""
+        if not self.cash_session_id:
+            self.open_cash_session()
+        else:
+            summary = self.data_manager.cash_sessions.get_session_summary(self.cash_session_id)
+            exp_cash = float(summary.get('Expected_Cash') or 0.0)
+            invoices = summary.get('Invoice_Count') or 0
+            box = QMessageBox(self)
+            box.setWindowTitle("Gestion de Caisse")
+            box.setText(f"<b>Session en cours : {self.cash_session_no} ({self.terminal_label})</b><br><br>"
+                        f"• Ventes espèces : <b>{format_money(exp_cash)} DA</b><br>"
+                        f"• Nombre de tickets : <b>{invoices}</b><br><br>"
+                        f"Que souhaitez-vous faire ?")
+            btn_close = box.addButton("🔒 Clôturer la Session", QMessageBox.ActionRole)
+            btn_continue = box.addButton("Poursuivre les ventes", QMessageBox.RejectRole)
+            box.exec()
+            if box.clickedButton() == btn_close:
+                self.close_cash_session()
 
     def open_cash_session(self):
+        """Ouvre une nouvelle session de caisse en choisissant la caisse et le fond initial."""
         if not self._has_permission("act_pos_open_session"):
             QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour ouvrir la caisse.")
             return
-        if not self.terminal_id:
-            self.refresh_cash_session_context()
-        if not self.terminal_id:
-            QMessageBox.warning(self, "Caisse", "Terminal POS indisponible.")
+
+        terminals = self.data_manager.cash_sessions.get_terminals()
+        if not terminals:
+            QMessageBox.warning(self, "Caisse", "Aucune caisse disponible dans le système.")
             return
-        amount, ok = QInputDialog.getDouble(
-            self, "Ouvrir caisse", "Fond de caisse initial:", 0.0, 0.0, 999999999.0, 2
-        )
-        if not ok:
+
+        dlg = OpenSessionDialog(terminals, parent=self)
+        if dlg.exec() != QDialog.Accepted:
             return
+
+        data = dlg.get_data()
+        terminal_id = data['terminal_id']
+        opening_amount = data['opening_amount']
+        notes = data['notes']
+
         success, session = self.data_manager.cash_sessions.open_session(
-            self.terminal_id,
-            self.get_current_user_id(),
-            opening_amount=amount,
+            terminal_id=terminal_id,
+            user_id=self.get_current_user_id(),
+            opening_amount=opening_amount,
+            notes=notes
         )
+
         if success:
+            self.terminal_id = terminal_id
+            self.terminal_label = data['terminal_name']
+            self.cash_session_id = session.get('Cash_Session_ID')
+            self.cash_session_no = session.get('Session_No')
             self.refresh_cash_session_context()
-            QMessageBox.information(self, "Caisse", f"Session ouverte: {session.get('Session_No')}")
+            QMessageBox.information(
+                self, "Caisse Ouverte",
+                f"Session de caisse démarrée avec succès !\n\nSession : {self.cash_session_no}\nFond initial : {format_money(opening_amount)} DA"
+            )
         else:
-            QMessageBox.warning(self, "Caisse", session.get('message', "Impossible d'ouvrir la caisse."))
+            QMessageBox.critical(self, "Erreur", session.get('message', "Impossible d'ouvrir la caisse."))
 
     def close_cash_session(self):
+        """Clôture la session de caisse en cours avec comptage réel et enregistrement d'écart."""
         if not self._has_permission("act_pos_close_session"):
             QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour clôturer la caisse.")
             return
+
         if not self.cash_session_id:
-            self.refresh_cash_session_context()
-        if not self.cash_session_id:
-            QMessageBox.warning(self, "Caisse", "Aucune session ouverte.")
+            QMessageBox.warning(self, "Caisse", "Aucune session ouverte à clôturer.")
             return
+
         if self.cart_table.rowCount() > 0:
-            QMessageBox.warning(self, "Caisse", "Videz ou validez le panier avant de cloturer la caisse.")
+            QMessageBox.warning(self, "Caisse", "Veuillez vider ou valider le panier en cours avant de clôturer la caisse.")
             return
+
         summary = self.data_manager.cash_sessions.get_session_summary(self.cash_session_id)
-        open_session = self.data_manager.cash_sessions.get_open_session(self.terminal_id) or {}
-        opening_amount = float(open_session.get("Opening_Amount") or 0)
-        expected_cash = float(summary.get("Expected_Cash") or 0)
-        expected_card = float(summary.get("Expected_Card") or 0)
-        expected_transfer = float(summary.get("Expected_Transfer") or 0)
-        expected_versement = float(summary.get("Expected_Versement") or 0)
-        expected_other = float(summary.get("Expected_Other") or 0)
-        expected_credit = float(summary.get("Expected_Credit") or 0)
-        ask_values = [
-            ("Espèces à compter", expected_cash + opening_amount),
-            ("Carte à compter", expected_card),
-            ("Virement à compter", expected_transfer),
-            ("Versement à compter", expected_versement),
-            ("Autre à compter", expected_other),
-            ("Crédit à rapprocher", expected_credit),
-        ]
-        counted = []
-        for label, default in ask_values:
-            value, ok = QInputDialog.getDouble(self, "Clôturer caisse", label, default, 0.0, 999999999.0, 2)
-            if not ok:
-                return
-            counted.append(value)
+        open_session = self.data_manager.cash_sessions.get_open_session(self.terminal_id) or {
+            'Terminal_Name': self.terminal_label,
+            'Session_No': self.cash_session_no,
+            'Opening_Amount': 0.0
+        }
+
+        dlg = CloseSessionDialog(open_session, summary, parent=self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        data = dlg.get_data()
         success, result = self.data_manager.cash_sessions.close_session(
-            self.cash_session_id,
-            self.get_current_user_id(),
-            counted_cash=counted[0],
-            counted_card=counted[1],
-            counted_transfer=counted[2],
-            counted_versement=counted[3],
-            counted_other=counted[4],
-            counted_credit=counted[5],
+            cash_session_id=self.cash_session_id,
+            user_id=self.get_current_user_id(),
+            counted_cash=data['counted_cash'],
+            notes=data['notes']
         )
+
         if success:
-            diff = float(result.get('Cash_Difference') or 0)
-            QMessageBox.information(
-                self,
-                "Caisse",
-                f"Session cloturee.\nTotal: {format_money(result.get('Expected_Total') or 0)} DA\nEcart cash: {format_money(diff)} DA",
-            )
+            diff = float(result.get('Cash_Difference') or 0.0)
+            diff_str = f"+{format_money(diff)}" if diff > 0 else format_money(diff)
+            msg = (f"Session de caisse clôturée avec succès !\n\n"
+                   f"• Total théorique attendu : {format_money(result.get('Expected_Cash') or 0)} DA\n"
+                   f"• Montant réel compté : {format_money(data['counted_cash'])} DA\n"
+                   f"• Écart de caisse : {diff_str} DA")
+            QMessageBox.information(self, "Caisse Clôturée", msg)
+            self.cash_session_id = None
+            self.cash_session_no = None
             self.refresh_cash_session_context()
         else:
-            QMessageBox.warning(self, "Caisse", result.get('message', "Impossible de cloturer la caisse."))
+            QMessageBox.critical(self, "Erreur", result.get('message', "Impossible de clôturer la caisse."))
 
     def record_cash_movement(self, movement_type):
         if not self._has_permission("act_pos_cash_movement"):
@@ -740,6 +1078,8 @@ class PointOfSaleTab(QWidget):
                 self.search_map[suggestion] = batch
                 self.register_barcodes(batch)
             self.product_completer.setModel(QStringListModel(suggestions))
+            if hasattr(self, 'fav_grid'):
+                self.refresh_favorites_display()
         except Exception as e:
             logging.error(f"Error loading batches for POS: {e}")
 
@@ -1045,7 +1385,10 @@ class PointOfSaleTab(QWidget):
         self.lbl_total_ht.setText(f"Total HT : {format_money(total_ht)} DA")
         self.lbl_total_tva.setText(f"TVA : {format_money(total_tva)} DA")
         self.lbl_total_remise.setText(f"Remise : {format_money(total_remise)} DA")
-        self.lbl_total_ttc.setText(f"TOTAL TTC : {format_money(total_ttc)} DA")
+        if hasattr(self, '_update_total_display'):
+            self._update_total_display(total_ttc)
+        else:
+            self.lbl_total_ttc.setText(f"NET À PAYER : {format_money(total_ttc)} DA")
 
     def clear_cart(self):
         self.loyalty_redeem_points = 0
@@ -1211,27 +1554,40 @@ class PointOfSaleTab(QWidget):
         }
 
     def validate_sale(self):
+        """Processus d'encaissement normal direct en Dinars uniquement (Espèces)."""
         if not self._has_permission("act_validate_sale"):
             QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour la validation des ventes.")
             return
+
         if self.cart_table.rowCount() == 0:
-            QMessageBox.warning(self, "Erreur", "Le panier est vide.")
+            QMessageBox.warning(self, "Panier", "Le panier est vide. Veuillez ajouter des produits.")
             return
 
         self.refresh_cash_session_context()
-        if not self.terminal_id:
-            QMessageBox.warning(self, "Caisse", "Le terminal POS est indisponible.")
-            return
         if not self.cash_session_id:
-            QMessageBox.warning(self, "Caisse", "Veuillez ouvrir une session de caisse avant de vendre.")
-            return
+            res = QMessageBox.question(
+                self, "Session Caisse Requise",
+                "Aucune session de caisse n'est actuellement ouverte.\nVoulez-vous ouvrir une session maintenant pour enregistrer cette vente ?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+            )
+            if res == QMessageBox.Yes:
+                self.open_cash_session()
+            if not self.cash_session_id:
+                return
 
         client = self.cb_client.currentData()
         client_id = client['Client_ID'] if client else None
         invoice_date = self.date_edit.date().toString("yyyy-MM-dd")
 
-        if not self.open_payment_dialog():
+        # Dialogue rapide d'encaissement normal en Dinars (Espèces)
+        dlg = QuickCashPaymentDialog(self.current_total_ttc, parent=self)
+        if dlg.exec() != QDialog.Accepted:
             return
+
+        pay_data = dlg.get_data()
+        received = pay_data['received']
+        change = pay_data['change']
+        should_print = pay_data['print_receipt']
 
         cart_items = []
         for row in range(self.cart_table.rowCount()):
@@ -1266,11 +1622,11 @@ class PointOfSaleTab(QWidget):
                 cart_items=cart_items,
                 terminal_id=self.terminal_id,
                 cash_session_id=self.cash_session_id,
-                payment_method=self.cb_payment_method.currentData() or "Cash",
+                payment_method="Cash",
                 user_id=self.get_current_user_id(),
                 request_id=request_id,
                 notes=None if client else "Vente sans client",
-                payment_lines=self.payment_lines,
+                payment_lines=[{"method": "Cash", "amount": self.current_total_ttc}],
                 draft_id=self.active_draft_id,
             )
         except Exception as exc:
@@ -1278,49 +1634,33 @@ class PointOfSaleTab(QWidget):
             success = False
             result = {"message": str(exc) or "Une erreur inattendue est survenue."}
         finally:
-            self.btn_validate.setEnabled(bool(self.cash_session_id))
+            self.btn_validate.setEnabled(True)
 
         if success:
             invoice_label = result.get('invoice_no') or f"#{result.get('invoice_id')}"
             
-            # Print if enabled
-            if self.chk_print_receipt.isChecked():
+            # Impression ticket si demandée
+            if should_print:
                 try:
                     invoice_data = self._build_receipt_data(
                         invoice_label, invoice_date, client, cart_items
                     )
-                    print_success, msg = self.data_manager.printer.print_receipt(invoice_data)
-                    if not print_success:
-                        import logging
-                        logging.error(f"Echec impression recu: {msg}")
-                        QMessageBox.warning(self, "Impression", f"La vente est validée, mais l'impression a échoué.\nErreur: {msg}")
+                    self.data_manager.printer.print_receipt(invoice_data)
                 except Exception as e:
-                    import logging
-                    logging.error(f"Erreur lors de la préparation de l'impression: {e}", exc_info=True)
-                    QMessageBox.warning(self, "Erreur Impression", f"La vente a été enregistrée avec succès, mais une erreur s'est produite lors de l'impression.\nDétail: {e}")
+                    logging.error(f"Erreur impression recu: {e}", exc_info=True)
 
-            if client_id and not result.get("duplicate"):
-                if self.loyalty_redeem_points > 0:
-                    self.data_manager.pos_features.record_loyalty_transaction(
-                        client_id, result.get("invoice_id"), "Redeem", self.loyalty_redeem_points, self.get_current_user_id(),
-                        notes="Utilisation au paiement",
-                    )
-                points = int(float(self.current_total_ttc or 0) // 100)
-                if points > 0:
-                    self.data_manager.pos_features.record_loyalty_transaction(
-                        client_id, result.get("invoice_id"), "Earn", points, self.get_current_user_id()
-                    )
+            msg = f"Vente enregistrée avec succès !\n\nFacture : {invoice_label}\nMontant Payé : {format_money(self.current_total_ttc)} DA"
+            if change > 0:
+                msg += f"\nMonnaie Rendue : {format_money(change)} DA"
+            QMessageBox.information(self, "Vente Validée", msg)
 
-            QMessageBox.information(self, "Succès", f"Vente enregistrée avec succès ! Facture {invoice_label}")
             self.active_draft_id = None
-            self.payment_lines = []
             self.clear_cart()
             self.load_initial_data()
         else:
             QMessageBox.critical(
-                self,
-                "Erreur",
-                result.get('message', "Une erreur est survenue lors de l'enregistrement de la vente."),
+                self, "Erreur",
+                result.get('message', "Une erreur est survenue lors de l'enregistrement de la vente.")
             )
             self.load_initial_data()
         self.refresh_cash_session_context()

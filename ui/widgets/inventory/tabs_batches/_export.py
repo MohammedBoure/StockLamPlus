@@ -36,21 +36,21 @@ EXPORT_COLUMN_KEYS = {
     3: 'Unit_Price_Received_TTC',
     4: 'Total_Value',
     5: 'Selling_Price_HT',
-    6: 'Selling_Price_HT_2',
-    7: 'Selling_Price_HT_3',
-    8: 'Selling_Price_HT_4',
-    9: 'Lot_Number',
-    10: 'Expiry_Date',
-    11: 'Quantity_Initial',
-    12: 'Internal_Barcode',
-    13: 'External_Barcode',
-    14: 'Location_Name',
-    15: 'Family_Name',
-    16: 'Manuf_Name',
-    17: 'Automate_Name',
-    18: 'Supplier_Name',
-    19: 'PO_ID',
-    20: 'Date_Received',
+    6: 'Lot_Number',
+    7: 'Expiry_Date',
+    8: 'Quantity_Initial',
+    9: 'Internal_Barcode',
+    10: 'External_Barcode',
+    11: 'Location_Name',
+    12: 'Family_Name',
+    13: 'Manuf_Name',
+    14: 'Automate_Name',
+    15: 'Supplier_Name',
+    16: 'PO_ID',
+    17: 'Date_Received',
+    18: 'Selling_Price_HT_2',
+    19: 'Selling_Price_HT_3',
+    20: 'Selling_Price_HT_4',
     21: 'Reception_Note',
 }
 
@@ -67,7 +67,7 @@ def _export_column_indices(self):
     is_tech = _is_technician(self)
     return [
         c for c in range(self.table.columnCount())
-        if not (is_tech and c in range(2, 9))
+        if not (is_tech and c in (2, 3, 4, 5, 18, 19, 20))
     ]
 
 
@@ -92,28 +92,29 @@ def _format_export_cell(row, column_index):
         discount = float(row.get('Discount_Percent', 0) or 0) / 100.0
         tax = float(row.get('Tax_Rate_Percent', 0) or 0) / 100.0
         return format_money(qty * price * (1 - discount) * (1 + tax))
-    if column_index in (5, 6, 7, 8):
+    if column_index == 5:
+        return format_money(float(row.get('Selling_Price_HT', 0) or 0))
+    if column_index == 6:
+        return row.get('Lot_Number', '') or ''
+    if column_index == 7:
+        return str(row.get('Expiry_Date', ''))[:10]
+    if column_index == 8:
+        return format_quantity(row.get('Quantity_Initial', 0))
+    if column_index == 9:
+        return row.get('Internal_Barcode') or row.get('Barcode') or ''
+    if column_index == 10:
+        return row.get('External_Barcode') or ''
+    if column_index == 11:
+        return row.get('Location_Name', '') or ''
+    if column_index == 17:
+        return str(row.get('Date_Received') or row.get('Created_At', ''))[:10]
+    if column_index in (18, 19, 20):
         keys = {
-            5: 'Selling_Price_HT',
-            6: 'Selling_Price_HT_2',
-            7: 'Selling_Price_HT_3',
-            8: 'Selling_Price_HT_4',
+            18: 'Selling_Price_HT_2',
+            19: 'Selling_Price_HT_3',
+            20: 'Selling_Price_HT_4',
         }
         return format_money(float(row.get(keys[column_index], 0) or 0))
-    if column_index == 9:
-        return row.get('Lot_Number', '') or ''
-    if column_index == 10:
-        return str(row.get('Expiry_Date', ''))[:10]
-    if column_index == 11:
-        return format_quantity(row.get('Quantity_Initial', 0))
-    if column_index == 12:
-        return row.get('Internal_Barcode') or row.get('Barcode') or ''
-    if column_index == 13:
-        return row.get('External_Barcode') or ''
-    if column_index == 14:
-        return row.get('Location_Name', '') or ''
-    if column_index == 20:
-        return str(row.get('Date_Received') or row.get('Created_At', ''))[:10]
 
     key = EXPORT_COLUMN_KEYS.get(column_index)
     return row.get(key, '') if key else ''

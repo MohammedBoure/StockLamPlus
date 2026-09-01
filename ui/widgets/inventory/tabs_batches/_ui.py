@@ -284,13 +284,13 @@ def _build_table(self):
     self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
     self.table.verticalHeader().setLayoutDirection(Qt.RightToLeft)
 
-    # ترتيب الأعمدة: الأولوية الأولى للمنتج والمخزون وكافة أعمدة الأسعار، تليها بيانات اللوط، ثم التصنيفات
+    # ترتيب الأعمدة: الأولوية الأولى للمنتج والمخزون والأسعار الأساسية (HT, TTC, Valeur, Vente 1)، تليها بيانات اللوط والتصنيفات، ثم أسعار البيع 2 و 3 و 4 قبل الشكاوى
     cols = [
         "Désignation Produit", "Stock (Actuel)", "Prix U. HT", "Prix U. TTC",
-        "Valeur (DA)", "Prix Vente 1", "Prix Vente 2", "Prix Vente 3", "Prix Vente 4",
-        "N° Lot", "Date Exp.", "Qté Init.", "Code-Barres", "Code Ext",
-        "Emplacement", "Famille", "Marque", "Automate", "Fournisseur",
-        "Ref PO", "Date Entrée", "Réclamation"
+        "Valeur (DA)", "Prix Vente 1", "N° Lot", "Date Exp.", "Qté Init.",
+        "Code-Barres", "Code Ext", "Emplacement", "Famille", "Marque",
+        "Automate", "Fournisseur", "Ref PO", "Date Entrée",
+        "Prix Vente 2", "Prix Vente 3", "Prix Vente 4", "Réclamation"
     ]
     self.table.setColumnCount(len(cols))
     self.table.setHorizontalHeaderLabels(cols)

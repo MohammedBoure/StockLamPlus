@@ -97,7 +97,7 @@ class OpenSessionDialog(QDialog):
             QComboBox, QDoubleSpinBox, QLineEdit {
                 background-color: #ffffff;
                 border: 1px solid #ced4da;
-                border-radius: 4px;
+                border-radius: 0px;
                 padding: 6px 10px;
                 font-size: 13px;
                 color: #2c3e50;
@@ -145,13 +145,13 @@ class OpenSessionDialog(QDialog):
 
         btn_cancel = QPushButton("Annuler")
         btn_cancel.setCursor(Qt.PointingHandCursor)
-        btn_cancel.setStyleSheet("background: #ffffff; color: #495057; border: 1px solid #ced4da; border-radius: 4px; padding: 6px 16px; min-height: 32px;")
+        btn_cancel.setStyleSheet("background: #ffffff; color: #495057; border: 1px solid #ced4da; border-radius: 0px; padding: 6px 16px; min-height: 32px;")
         btn_cancel.clicked.connect(self.reject)
         btn_box.addWidget(btn_cancel)
 
         btn_open = QPushButton("🚀 Ouvrir la Caisse")
         btn_open.setCursor(Qt.PointingHandCursor)
-        btn_open.setStyleSheet("background: #007572; color: #ffffff; font-weight: bold; border-radius: 4px; padding: 6px 20px; min-height: 32px; border: none;")
+        btn_open.setStyleSheet("background: #007572; color: #ffffff; font-weight: bold; border-radius: 0px; padding: 6px 20px; min-height: 32px; border: none;")
         btn_open.clicked.connect(self.accept)
         btn_box.addWidget(btn_open)
 
@@ -182,7 +182,7 @@ class CloseSessionDialog(QDialog):
             QDoubleSpinBox, QLineEdit {
                 background-color: #ffffff;
                 border: 1px solid #ced4da;
-                border-radius: 4px;
+                border-radius: 0px;
                 padding: 6px 10px;
                 font-size: 13px;
                 color: #2c3e50;
@@ -204,7 +204,7 @@ class CloseSessionDialog(QDialog):
         layout.addWidget(header)
 
         card = QFrame()
-        card.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px;")
+        card.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0px; padding: 10px;")
         card_layout = QGridLayout(card)
         card_layout.setSpacing(6)
 
@@ -261,13 +261,13 @@ class CloseSessionDialog(QDialog):
 
         btn_cancel = QPushButton("Annuler")
         btn_cancel.setCursor(Qt.PointingHandCursor)
-        btn_cancel.setStyleSheet("background: #ffffff; color: #495057; border: 1px solid #ced4da; border-radius: 4px; padding: 6px 16px; min-height: 32px;")
+        btn_cancel.setStyleSheet("background: #ffffff; color: #495057; border: 1px solid #ced4da; border-radius: 0px; padding: 6px 16px; min-height: 32px;")
         btn_cancel.clicked.connect(self.reject)
         btn_box.addWidget(btn_cancel)
 
         btn_close = QPushButton("🔒 Confirmer Clôture")
         btn_close.setCursor(Qt.PointingHandCursor)
-        btn_close.setStyleSheet("background: #c0392b; color: #ffffff; font-weight: bold; border-radius: 4px; padding: 6px 20px; min-height: 32px; border: none;")
+        btn_close.setStyleSheet("background: #c0392b; color: #ffffff; font-weight: bold; border-radius: 0px; padding: 6px 20px; min-height: 32px; border: none;")
         btn_close.clicked.connect(self.accept)
         btn_box.addWidget(btn_close)
 
@@ -312,7 +312,7 @@ class QuickCashPaymentDialog(QDialog):
         layout.setSpacing(12)
 
         card_total = QFrame()
-        card_total.setStyleSheet("background: #007572; border-radius: 6px; padding: 12px;")
+        card_total.setStyleSheet("background: #007572; border-radius: 0px; padding: 12px;")
         card_layout = QVBoxLayout(card_total)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(4)
@@ -342,7 +342,7 @@ class QuickCashPaymentDialog(QDialog):
             QDoubleSpinBox {
                 background: #ffffff;
                 border: 2px solid #007572;
-                border-radius: 6px;
+                border-radius: 0px;
                 padding: 6px 12px;
                 font-size: 18px;
                 font-weight: bold;
@@ -359,7 +359,7 @@ class QuickCashPaymentDialog(QDialog):
         def _add_quick_btn(label, add_amount, is_exact=False):
             b = QPushButton(label)
             b.setCursor(Qt.PointingHandCursor)
-            b.setStyleSheet("background: #f1f5f9; color: #2c3e50; font-weight: bold; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; min-height: 28px;")
+            b.setStyleSheet("background: #f1f5f9; color: #2c3e50; font-weight: bold; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 0px; padding: 4px 6px; min-height: 28px;")
             if is_exact:
                 b.clicked.connect(lambda: self.spin_received.setValue(self.total_ttc))
             else:
@@ -392,7 +392,7 @@ class QuickCashPaymentDialog(QDialog):
                 color: #ffffff;
                 font-size: 15px;
                 font-weight: bold;
-                border-radius: 6px;
+                border-radius: 0px;
                 min-height: 44px;
                 border: none;
             }

@@ -8,12 +8,45 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QHeaderView, QComboBox, QMessageBox, QDoubleSpinBox, QSpinBox, QDialog,
                                QDateEdit, QFrame, QCompleter, QAbstractItemView, QInputDialog,
                                QScrollArea, QGridLayout, QCheckBox)
-from PySide6.QtCore import Qt, QDate, Signal, QStringListModel, QTimer
+from PySide6.QtCore import Qt, QDate, Signal, QStringListModel, QTimer, QSize, QPoint
 from PySide6.QtGui import QKeySequence, QShortcut, QFont
 from branding import get_logo_path
+from ui.icons import get_trash_icon
 from .dialogs import ClientDialog, OpenSessionDialog, CloseSessionDialog, QuickCashPaymentDialog
+from .touch_keypad import TouchKeypadDialog
 from .pos_payment_dialog import PaymentDialog
 from ui.formatting import format_money
+
+class AutoSelectLineEdit(QLineEdit):
+    """Champ de texte sélectionnant automatiquement tout son contenu au clic pour une saisie immédiate."""
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        QTimer.singleShot(0, self.selectAll)
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        QTimer.singleShot(0, self.selectAll)
+
+
+class AutoSelectDoubleSpinBox(QDoubleSpinBox):
+    """SpinBox numérique dont tout le texte est sélectionné dès la prise de focus ou le clic."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        le = self.lineEdit()
+        if le:
+            self._orig_press = le.mousePressEvent
+            self._orig_focus = le.focusInEvent
+            le.mousePressEvent = self._handle_mouse_press
+            le.focusInEvent = self._handle_focus_in
+
+    def _handle_mouse_press(self, event):
+        self._orig_press(event)
+        QTimer.singleShot(0, self.selectAll)
+
+    def _handle_focus_in(self, event):
+        self._orig_focus(event)
+        QTimer.singleShot(0, self.selectAll)
+
 
 class RemiseWidget(QWidget):
     valueChanged = Signal()
@@ -24,17 +57,19 @@ class RemiseWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(2)
         
-        self.value_spin = QDoubleSpinBox()
+        self.value_spin = AutoSelectDoubleSpinBox()
         self.value_spin.setRange(0, 9999999)
         self.value_spin.setValue(0.0)
         self.value_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.value_spin.setDecimals(2)
         self.value_spin.setAlignment(Qt.AlignCenter)
         self.value_spin.setMinimumWidth(82)
+        self.value_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
         
         self.type_combo = QComboBox()
         self.type_combo.addItems(["%", "DA"])
         self.type_combo.setMinimumWidth(58)
+        self.type_combo.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
         
         layout.addWidget(self.value_spin, 2)
         layout.addWidget(self.type_combo, 1)
@@ -49,8 +84,9 @@ class RemiseWidget(QWidget):
         return self.type_combo.currentText()
 
 
-class BarcodeLineEdit(QLineEdit):
-    """Line edit that accepts numeric input from common AZERTY scanner mappings."""
+class BarcodeLineEdit(AutoSelectLineEdit):
+    """Line edit that accepts numeric input from common AZERTY scanner mappings
+    and auto-selects all text on click for rapid overwrite."""
     def keyPressEvent(self, event):
         azerty_map = {
             Qt.Key_Ampersand: "1",
@@ -120,84 +156,32 @@ class PointOfSaleTab(QWidget):
         cart_frame.setStyleSheet("""
             QFrame#CartFrame {
                 background-color: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
             }
         """)
         left_layout = QVBoxLayout(cart_frame)
-        left_layout.setContentsMargins(8, 8, 8, 8)
-        left_layout.setSpacing(6)
+        left_layout.setContentsMargins(6, 6, 6, 6)
+        left_layout.setSpacing(5)
 
-        # Line 1: Client, New Client, and Date on the EXACT SAME LINE (Maximum Space Saving)
-        client_row = QHBoxLayout()
-        client_row.setSpacing(6)
-        client_row.setContentsMargins(0, 0, 0, 0)
-
-        self.cb_client = QComboBox()
-        self.cb_client.setPlaceholderText("👤 Sélectionner un Client (ou Vente comptoir)...")
-        self.cb_client.setMinimumHeight(32)
-        self.make_combo_searchable(self.cb_client)
-
-        self.btn_new_client = QPushButton("➕ Client")
-        self.btn_new_client.setCursor(Qt.PointingHandCursor)
-        self.btn_new_client.setToolTip("Créer rapidement un nouveau client")
-        self.btn_new_client.setFixedWidth(85)
-        self.btn_new_client.setMinimumHeight(32)
-        self.btn_new_client.setStyleSheet("""
-            QPushButton {
-                background-color: #f8fafc;
-                color: #007572;
-                border: 1px solid #cbd5e1;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #e6f4f1;
-                border-color: #007572;
-            }
-        """)
-        self.btn_new_client.clicked.connect(self.create_quick_client)
-
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setFixedWidth(115)
-        self.date_edit.setMinimumHeight(32)
-        self.date_edit.setStyleSheet("""
-            QDateEdit {
-                background-color: #ffffff;
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                padding: 2px 6px;
-                font-size: 12px;
-                color: #2c3e50;
-            }
-        """)
-
-        client_row.addWidget(self.cb_client, stretch=1)
-        client_row.addWidget(self.btn_new_client)
-        client_row.addWidget(self.date_edit)
-        left_layout.addLayout(client_row)
-
-        # Line 2: Barcode & Search Input (NO UNNECESSARY TEXT IN FRONT TO SAVE SPACE)
-        search_layout = QHBoxLayout()
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(0)
+        # Ligne Unique Compacte : Scanner Code-Barres/Recherche + Client + Nouveau Client + Date
+        top_inputs_row = QHBoxLayout()
+        top_inputs_row.setSpacing(5)
+        top_inputs_row.setContentsMargins(0, 0, 0, 0)
 
         self.cb_product_search = BarcodeLineEdit()
         self.cb_product_search.setObjectName("ScanSearchInput")
-        self.cb_product_search.setMinimumHeight(36)
-        self.cb_product_search.setPlaceholderText("🔍 Scanner code-barres ou rechercher un produit / référence (Appuyer sur Entrée)...")
+        self.cb_product_search.setMinimumHeight(32)
+        self.cb_product_search.setPlaceholderText("🔍 Scanner code-barres ou chercher un produit / référence...")
         self.cb_product_search.setStyleSheet("""
             QLineEdit#ScanSearchInput {
                 background-color: #ffffff;
                 border: 1.5px solid #007572;
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 13px;
+                border-radius: 0px;
+                padding: 3px 8px;
+                font-size: 12px;
                 font-weight: 500;
-                color: #2c3e50;
+                color: #1e293b;
             }
             QLineEdit#ScanSearchInput:focus {
                 border: 2px solid #005a57;
@@ -214,8 +198,64 @@ class PointOfSaleTab(QWidget):
         self.cb_product_search.returnPressed.connect(self.handle_search_return)
         self.cb_product_search.textChanged.connect(self.schedule_instant_scan)
 
-        search_layout.addWidget(self.cb_product_search)
-        left_layout.addLayout(search_layout)
+        self.cb_client = QComboBox()
+        self.cb_client.setPlaceholderText("👤 Client / Comptoir...")
+        self.cb_client.setMinimumHeight(32)
+        self.cb_client.setStyleSheet("""
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 2px 6px;
+                font-size: 12px;
+                color: #1e293b;
+            }
+        """)
+        self.make_combo_searchable(self.cb_client)
+
+        self.btn_new_client = QPushButton("➕ Client")
+        self.btn_new_client.setCursor(Qt.PointingHandCursor)
+        self.btn_new_client.setToolTip("Créer rapidement un nouveau client")
+        self.btn_new_client.setFixedWidth(75)
+        self.btn_new_client.setMinimumHeight(32)
+        self.btn_new_client.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #007572;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                font-weight: bold;
+                font-size: 11px;
+                padding: 2px 4px;
+            }
+            QPushButton:hover {
+                background-color: #e6f4f1;
+                border-color: #007572;
+            }
+        """)
+        self.btn_new_client.clicked.connect(self.create_quick_client)
+
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setFixedWidth(105)
+        self.date_edit.setMinimumHeight(32)
+        self.date_edit.setStyleSheet("""
+            QDateEdit {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 2px 4px;
+                font-size: 12px;
+                color: #1e293b;
+            }
+        """)
+
+        top_inputs_row.addWidget(self.cb_product_search, stretch=5)
+        top_inputs_row.addWidget(self.cb_client, stretch=3)
+        top_inputs_row.addWidget(self.btn_new_client)
+        top_inputs_row.addWidget(self.date_edit)
+        left_layout.addLayout(top_inputs_row)
 
         # Line 3: Cart Table (Dynamic unlimited width/height, touch-friendly scrollbars, full text visible)
         self.cart_table = QTableWidget()
@@ -251,31 +291,34 @@ class PointOfSaleTab(QWidget):
         self.cart_table.setStyleSheet("""
             QTableWidget#POSCartTable {
                 background-color: #ffffff;
-                border: 1px solid #dcdfe6;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
                 gridline-color: #f1f5f9;
                 font-size: 12px;
-                color: #2c3e50;
+                color: #1e293b;
             }
             QHeaderView::section {
                 background-color: #f8fafc;
-                color: #2c3e50;
+                color: #1e293b;
                 font-weight: bold;
                 font-size: 12px;
                 border: none;
                 border-bottom: 2px solid #007572;
                 border-right: 1px solid #e2e8f0;
-                padding: 6px 8px;
+                padding: 4px 6px;
+                border-radius: 0px;
             }
             QScrollBar:vertical {
                 background: #f1f5f9;
                 width: 14px;
                 margin: 0px;
-                border-radius: 7px;
+                border: none;
+                border-radius: 0px;
             }
             QScrollBar::handle:vertical {
                 background: #cbd5e1;
                 min-height: 30px;
-                border-radius: 7px;
+                border-radius: 0px;
             }
             QScrollBar::handle:vertical:hover {
                 background: #007572;
@@ -284,12 +327,13 @@ class PointOfSaleTab(QWidget):
                 background: #f1f5f9;
                 height: 14px;
                 margin: 0px;
-                border-radius: 7px;
+                border: none;
+                border-radius: 0px;
             }
             QScrollBar::handle:horizontal {
                 background: #cbd5e1;
                 min-width: 30px;
-                border-radius: 7px;
+                border-radius: 0px;
             }
             QScrollBar::handle:horizontal:hover {
                 background: #007572;
@@ -315,24 +359,24 @@ class PointOfSaleTab(QWidget):
         root_layout.addLayout(workspace)
 
     def _build_top_bar(self):
-        """Barre supérieure ultra-fine placée à l'extérieur de chaque conteneur pour optimiser l'espace."""
+        """Barre supérieure ultra-fine à bords vifs (sharp edges, sans arrondis)."""
         top_frame = QFrame()
         top_frame.setObjectName("POSTopBar")
         top_frame.setStyleSheet("""
             QFrame#POSTopBar {
                 background-color: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                padding: 4px 10px;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 2px 8px;
                 min-height: 44px;
-                max-height: 50px;
+                max-height: 48px;
             }
         """)
         top_layout = QHBoxLayout(top_frame)
-        top_layout.setContentsMargins(6, 2, 6, 2)
-        top_layout.setSpacing(12)
+        top_layout.setContentsMargins(4, 2, 4, 2)
+        top_layout.setSpacing(10)
 
-        # 1. Caisse & Session Badge Button
+        # 1. Caisse & Session Badge Button (Unique bouton de caisse dans l'interface)
         self.btn_caisse_status = QPushButton("🔴 Caisse Fermée (Cliquer pour ouvrir)")
         self.btn_caisse_status.setCursor(Qt.PointingHandCursor)
         self.btn_caisse_status.setStyleSheet("""
@@ -340,7 +384,7 @@ class PointOfSaleTab(QWidget):
                 background: #fdf2f1;
                 color: #c0392b;
                 border: 1px solid #fecaca;
-                border-radius: 4px;
+                border-radius: 0px;
                 padding: 4px 10px;
                 font-weight: bold;
                 font-size: 12px;
@@ -359,40 +403,40 @@ class PointOfSaleTab(QWidget):
         sep1.setStyleSheet("color: #cbd5e1;")
         top_layout.addWidget(sep1)
 
-        # 2. Informations Financières Secondaires (fines et compactes)
+        # 2. Informations Financières Secondaires (fines, sans chevauchement)
         self.lbl_total_ht = QLabel("Total HT : 0,00 DA")
-        self.lbl_total_ht.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600;")
+        self.lbl_total_ht.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600; padding: 2px;")
         top_layout.addWidget(self.lbl_total_ht)
 
         self.lbl_total_remise = QLabel("Remise : 0,00 DA")
-        self.lbl_total_remise.setStyleSheet("font-size: 12px; color: #d35400; font-weight: 600;")
+        self.lbl_total_remise.setStyleSheet("font-size: 12px; color: #d35400; font-weight: 600; padding: 2px;")
         top_layout.addWidget(self.lbl_total_remise)
 
         self.lbl_total_tva = QLabel("TVA : 0,00 DA")
-        self.lbl_total_tva.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600;")
+        self.lbl_total_tva.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600; padding: 2px;")
         top_layout.addWidget(self.lbl_total_tva)
 
         top_layout.addStretch(1)
 
-        # 3. Prix Final Net à Payer (Cadre clair avec taille de police dynamique auto-adaptable)
+        # 3. Prix Final Net à Payer (Bords vifs, sans rognage de texte)
         self.frame_net_total = QFrame()
         self.frame_net_total.setObjectName("NetTotalFrame")
         self.frame_net_total.setStyleSheet("""
             QFrame#NetTotalFrame {
                 background-color: #007572;
                 border: 1px solid #005a57;
-                border-radius: 6px;
-                padding: 2px 14px;
-                min-height: 38px;
+                border-radius: 0px;
+                padding: 2px 12px;
+                min-height: 36px;
             }
         """)
         frame_layout = QHBoxLayout(self.frame_net_total)
-        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setContentsMargins(4, 0, 4, 0)
         frame_layout.setSpacing(0)
 
         self.lbl_total_ttc = QLabel("NET À PAYER : 0,00 DA")
         self.lbl_total_ttc.setAlignment(Qt.AlignCenter)
-        self.lbl_total_ttc.setStyleSheet("font-size: 20px; font-weight: 800; color: #ffffff;")
+        self.lbl_total_ttc.setStyleSheet("font-size: 18px; font-weight: 800; color: #ffffff; padding: 0px; margin: 0px;")
         frame_layout.addWidget(self.lbl_total_ttc)
 
         top_layout.addWidget(self.frame_net_total)
@@ -417,35 +461,46 @@ class PointOfSaleTab(QWidget):
         self.lbl_total_ttc.setStyleSheet(f"font-size: {font_size}px; font-weight: 800; color: #ffffff;")
 
     def _build_favorites_panel(self):
-        """Panneau droit réservé aux produits favoris / raccourcis de vente rapide."""
+        """Panneau droit réservé aux produits favoris compacts (bords vifs, hauteur réduite)."""
         fav_frame = QFrame()
         fav_frame.setObjectName("FavoritesFrame")
-        fav_frame.setFixedWidth(260)
+        fav_frame.setFixedWidth(270)
         fav_frame.setStyleSheet("""
             QFrame#FavoritesFrame {
                 background-color: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
             }
         """)
         fav_layout = QVBoxLayout(fav_frame)
-        fav_layout.setContentsMargins(8, 8, 8, 8)
-        fav_layout.setSpacing(8)
+        fav_layout.setContentsMargins(6, 6, 6, 6)
+        fav_layout.setSpacing(6)
 
-        header_fav = QLabel("⭐ <b>Produits Favoris / Raccourcis</b>")
-        header_fav.setStyleSheet("font-size: 13px; color: #007572; padding: 2px 0;")
+        header_fav = QLabel("⭐ <b>PRODUITS FAVORIS (Accès Rapide)</b>")
+        header_fav.setStyleSheet("font-size: 11px; color: #007572; padding: 2px 0; font-weight: bold;")
         fav_layout.addWidget(header_fav)
 
         self.scroll_fav = QScrollArea()
         self.scroll_fav.setWidgetResizable(True)
         self.scroll_fav.setFrameShape(QFrame.NoFrame)
-        self.scroll_fav.setStyleSheet("background: transparent; border: none;")
+        self.scroll_fav.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: #f1f5f9;
+                width: 10px;
+                border-radius: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                border-radius: 0px;
+            }
+        """)
 
         self.fav_container = QWidget()
         self.fav_container.setStyleSheet("background: transparent;")
         self.fav_grid = QVBoxLayout(self.fav_container)
         self.fav_grid.setContentsMargins(0, 0, 0, 0)
-        self.fav_grid.setSpacing(6)
+        self.fav_grid.setSpacing(3)
 
         self.scroll_fav.setWidget(self.fav_container)
         fav_layout.addWidget(self.scroll_fav)
@@ -453,7 +508,7 @@ class PointOfSaleTab(QWidget):
         return fav_frame
 
     def refresh_favorites_display(self):
-        """Actualise l'affichage formel de la grille des produits favoris."""
+        """Actualise les produits favoris en boutons ultra-compacts pour afficher un maximum d'articles."""
         while self.fav_grid.count():
             item = self.fav_grid.takeAt(0)
             widget = item.widget()
@@ -464,7 +519,7 @@ class PointOfSaleTab(QWidget):
             lbl_empty = QLabel("⭐ Espace réservé aux produits favoris.\nLes articles fréquents apparaîtront ici.")
             lbl_empty.setAlignment(Qt.AlignCenter)
             lbl_empty.setWordWrap(True)
-            lbl_empty.setStyleSheet("color: #94a3b8; font-size: 11px; padding: 20px 10px;")
+            lbl_empty.setStyleSheet("color: #94a3b8; font-size: 11px; padding: 15px 5px;")
             self.fav_grid.addWidget(lbl_empty)
             self.fav_grid.addStretch()
             return
@@ -485,49 +540,53 @@ class PointOfSaleTab(QWidget):
 
             btn = QPushButton()
             btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(f"{p_name}\nPrix: {format_money(p_ttc)} DA | Stock: {stock_q}")
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #f8fafc;
                     border: 1px solid #e2e8f0;
-                    border-radius: 5px;
+                    border-radius: 0px;
                     text-align: left;
-                    padding: 6px 8px;
-                    min-height: 38px;
+                    padding: 2px 6px;
+                    min-height: 26px;
+                    max-height: 28px;
                 }
                 QPushButton:hover {
                     background-color: #e6f4f1;
                     border-color: #007572;
                 }
             """)
-            btn_layout = QVBoxLayout(btn)
-            btn_layout.setContentsMargins(0, 0, 0, 0)
-            btn_layout.setSpacing(2)
+            btn_layout = QHBoxLayout(btn)
+            btn_layout.setContentsMargins(4, 0, 4, 0)
+            btn_layout.setSpacing(4)
 
             lbl_n = QLabel(p_name)
             lbl_n.setStyleSheet("font-weight: 600; font-size: 11px; color: #1e293b; background: transparent;")
-            lbl_p = QLabel(f"{format_money(p_ttc)} DA (Stock: {stock_q})")
+
+            lbl_p = QLabel(f"{format_money(p_ttc)} DA")
+            lbl_p.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             lbl_p.setStyleSheet("font-size: 10px; color: #007572; font-weight: bold; background: transparent;")
 
-            btn_layout.addWidget(lbl_n)
+            btn_layout.addWidget(lbl_n, stretch=1)
             btn_layout.addWidget(lbl_p)
 
             btn.clicked.connect(lambda _chk=False, b=batch: self.add_product_to_cart(b, quantity=1.0))
             self.fav_grid.addWidget(btn)
 
             count += 1
-            if count >= 10:
+            if count >= 35:
                 break
 
         self.fav_grid.addStretch()
 
     def _build_bottom_bar(self):
-        """Barre centrale inférieure contenant les boutons interactifs essentiels."""
+        """Barre centrale inférieure contenant les boutons interactifs essentiels à bords vifs."""
         bottom_layout = QHBoxLayout()
         bottom_layout.setContentsMargins(0, 4, 0, 0)
-        bottom_layout.setSpacing(8)
+        bottom_layout.setSpacing(6)
 
-        # 1. Bouton Valider & Encaisser (en Dinars directement)
-        self.btn_validate = QPushButton("✔️ Valider & Encaisser (F10)")
+        # 1. Bouton Valider (Renommé simplement 'Valider')
+        self.btn_validate = QPushButton("✔️ Valider (F10)")
         self.btn_validate.setCursor(Qt.PointingHandCursor)
         self.btn_validate.setStyleSheet("""
             QPushButton {
@@ -535,9 +594,9 @@ class PointOfSaleTab(QWidget):
                 color: #ffffff;
                 font-size: 13px;
                 font-weight: bold;
-                border-radius: 6px;
-                padding: 6px 18px;
-                min-height: 38px;
+                border-radius: 0px;
+                padding: 6px 16px;
+                min-height: 36px;
                 border: none;
             }
             QPushButton:hover { background-color: #005a57; }
@@ -546,7 +605,26 @@ class PointOfSaleTab(QWidget):
         self.btn_validate.clicked.connect(self.validate_sale)
         bottom_layout.addWidget(self.btn_validate)
 
-        # 2. Suspendre
+        # 2. Pavé Tactile / Clavier Virtuel Animé et Déplaçable
+        self.btn_keypad = QPushButton("🔢 Pavé Tactile")
+        self.btn_keypad.setCursor(Qt.PointingHandCursor)
+        self.btn_keypad.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #007572;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #007572;
+                border-radius: 0px;
+                padding: 6px 12px;
+                min-height: 36px;
+            }
+            QPushButton:hover { background-color: #e6f4f1; }
+        """)
+        self.btn_keypad.clicked.connect(self.toggle_touch_keypad)
+        bottom_layout.addWidget(self.btn_keypad)
+
+        # 3. Suspendre
         self.btn_hold_sale = QPushButton("⏸️ Suspendre (F8)")
         self.btn_hold_sale.setCursor(Qt.PointingHandCursor)
         self.btn_hold_sale.setStyleSheet("""
@@ -555,17 +633,17 @@ class PointOfSaleTab(QWidget):
                 color: #2c3e50;
                 font-weight: 600;
                 font-size: 12px;
-                border: 1px solid #ced4da;
-                border-radius: 6px;
-                padding: 6px 12px;
-                min-height: 38px;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 6px 10px;
+                min-height: 36px;
             }
             QPushButton:hover { background-color: #e2e8f0; }
         """)
         self.btn_hold_sale.clicked.connect(lambda: self.save_current_draft("Held"))
         bottom_layout.addWidget(self.btn_hold_sale)
 
-        # 3. Reprendre
+        # 4. Reprendre
         self.btn_resume_sale = QPushButton("▶️ Reprendre (F9)")
         self.btn_resume_sale.setCursor(Qt.PointingHandCursor)
         self.btn_resume_sale.setStyleSheet("""
@@ -574,17 +652,17 @@ class PointOfSaleTab(QWidget):
                 color: #2c3e50;
                 font-weight: 600;
                 font-size: 12px;
-                border: 1px solid #ced4da;
-                border-radius: 6px;
-                padding: 6px 12px;
-                min-height: 38px;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 6px 10px;
+                min-height: 36px;
             }
             QPushButton:hover { background-color: #e2e8f0; }
         """)
         self.btn_resume_sale.clicked.connect(self.resume_draft)
         bottom_layout.addWidget(self.btn_resume_sale)
 
-        # 4. Vider Panier
+        # 5. Vider Panier
         self.btn_clear = QPushButton("🗑️ Vider Panier")
         self.btn_clear.setCursor(Qt.PointingHandCursor)
         self.btn_clear.setStyleSheet("""
@@ -594,9 +672,9 @@ class PointOfSaleTab(QWidget):
                 font-weight: 600;
                 font-size: 12px;
                 border: 1px solid #fca5a5;
-                border-radius: 6px;
-                padding: 6px 12px;
-                min-height: 38px;
+                border-radius: 0px;
+                padding: 6px 10px;
+                min-height: 36px;
             }
             QPushButton:hover { background-color: #fee2e2; }
         """)
@@ -605,25 +683,6 @@ class PointOfSaleTab(QWidget):
 
         bottom_layout.addStretch(1)
 
-        # 5. Session Caisse
-        self.btn_session_mgr = QPushButton("💼 Caisse...")
-        self.btn_session_mgr.setCursor(Qt.PointingHandCursor)
-        self.btn_session_mgr.setStyleSheet("""
-            QPushButton {
-                background-color: #f8fafc;
-                color: #2c3e50;
-                font-weight: 600;
-                font-size: 12px;
-                border: 1px solid #ced4da;
-                border-radius: 6px;
-                padding: 6px 12px;
-                min-height: 38px;
-            }
-            QPushButton:hover { background-color: #e2e8f0; }
-        """)
-        self.btn_session_mgr.clicked.connect(self.manage_cash_session)
-        bottom_layout.addWidget(self.btn_session_mgr)
-
         # 6. Impression Automatique Ticket
         self.chk_print_receipt = QCheckBox("🖨️ Ticket Auto")
         self.chk_print_receipt.setChecked(True)
@@ -631,6 +690,18 @@ class PointOfSaleTab(QWidget):
         bottom_layout.addWidget(self.chk_print_receipt)
 
         return bottom_layout
+
+    def toggle_touch_keypad(self):
+        """Affiche ou masque le dialogue animé et déplaçable du pavé tactile."""
+        if not hasattr(self, 'touch_keypad') or self.touch_keypad is None:
+            self.touch_keypad = TouchKeypadDialog(parent=self)
+        if self.touch_keypad.isVisible():
+            self.touch_keypad.hide()
+        else:
+            btn_pos = self.btn_keypad.mapToGlobal(QPoint(0, 0))
+            x = max(20, btn_pos.x() - 50)
+            y = max(20, btn_pos.y() - 370)
+            self.touch_keypad.show_animated(QPoint(x, y))
 
     def _has_permission(self, permission):
         try:
@@ -897,7 +968,7 @@ class PointOfSaleTab(QWidget):
                         background: #e8f8f5;
                         color: #007572;
                         border: 1px solid #a3e4d7;
-                        border-radius: 4px;
+                        border-radius: 0px;
                         padding: 4px 10px;
                         font-weight: bold;
                         font-size: 12px;
@@ -915,7 +986,7 @@ class PointOfSaleTab(QWidget):
                         background: #fdf2f1;
                         color: #c0392b;
                         border: 1px solid #fecaca;
-                        border-radius: 4px;
+                        border-radius: 0px;
                         padding: 4px 10px;
                         font-weight: bold;
                         font-size: 12px;
@@ -1202,25 +1273,27 @@ class PointOfSaleTab(QWidget):
 
         row_idx = self.cart_table.rowCount()
         self.cart_table.insertRow(row_idx)
-        self.cart_table.setRowHeight(row_idx, 48)
+        self.cart_table.setRowHeight(row_idx, 46)
         
-        # Col 0: Action Delete (Bouton supprimer prioritaire en première colonne)
-        btn_del = QPushButton("X")
+        # Col 0: Action Delete (Icône professionnelle vectorielle et bords vifs)
+        btn_del = QPushButton()
+        btn_del.setIcon(get_trash_icon(18))
+        btn_del.setIconSize(QSize(18, 18))
         btn_del.setFixedSize(28, 28)
         btn_del.setToolTip("Supprimer cette ligne du panier")
         btn_del.setStyleSheet("""
             QPushButton {
-                color: #e74c3c;
-                border: 1px solid #fecaca;
-                border-radius: 14px;
-                background: #fff7f7;
-                font-weight: 900;
-                font-size: 13px;
+                background-color: #ffffff;
+                border: 1px solid #fca5a5;
+                border-radius: 0px;
+                padding: 2px;
             }
             QPushButton:hover {
-                color: #ffffff;
-                background: #e74c3c;
-                border-color: #e74c3c;
+                background-color: #fee2e2;
+                border: 1px solid #dc2626;
+            }
+            QPushButton:pressed {
+                background-color: #fca5a5;
             }
         """)
         btn_del.setCursor(Qt.PointingHandCursor)
@@ -1240,19 +1313,21 @@ class PointOfSaleTab(QWidget):
         name_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.cart_table.setItem(row_idx, 1, name_item)
         
-        # Col 2: Qty Sold Input
-        qty_spin = QDoubleSpinBox()
+        # Col 2: Qty Sold Input (Auto-sélection de tout le texte au clic pour saisie directe)
+        qty_spin = AutoSelectDoubleSpinBox()
         qty_spin.setRange(0.01, float(batch.get('Quantity_Current') or 999999))
         qty_spin.setDecimals(2)
         qty_spin.setValue(min(qty_spin.maximum(), max(0.01, float(quantity or 1))))
         qty_spin.setAlignment(Qt.AlignCenter)
         qty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        qty_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
         qty_spin.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 2, qty_spin)
         
-        # Col 3: Price Selection Combo (Support 4 prices)
+        # Col 3: Price Selection Combo (Support 4 prices, bords vifs)
         price_combo = QComboBox()
         price_combo.setMinimumWidth(130)
+        price_combo.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
         p1 = float(batch.get('Selling_Price_HT') or 0)
         p2 = float(batch.get('Selling_Price_HT_2') or 0)
         p3 = float(batch.get('Selling_Price_HT_3') or 0)
@@ -1269,7 +1344,7 @@ class PointOfSaleTab(QWidget):
         price_combo.currentIndexChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 3, price_combo)
         
-        # Col 4: Remise (Widget % ou DA)
+        # Col 4: Remise (Widget % ou DA, sélection intégrale au clic)
         remise_widget = RemiseWidget()
         remise_widget.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 4, remise_widget)
@@ -1280,7 +1355,7 @@ class PointOfSaleTab(QWidget):
         total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.cart_table.setItem(row_idx, 5, total_item)
 
-        # Col 6: Barcode badge
+        # Col 6: Barcode badge (Bords vifs)
         bc1 = batch.get('Internal_Barcode')
         bc2 = batch.get('External_Barcode')
         barcode_text = f"{bc1}" if self.is_real_code(bc1) else "---"
@@ -1295,9 +1370,9 @@ class PointOfSaleTab(QWidget):
                 background-color: #edf7ff;
                 color: #0f5f8f;
                 border: 1px solid #c7e4fb;
-                border-radius: 4px;
+                border-radius: 0px;
                 font-weight: 700;
-                padding: 4px 6px;
+                padding: 3px 6px;
                 font-size: 11px;
             }
         """)
@@ -1316,12 +1391,13 @@ class PointOfSaleTab(QWidget):
         lot_item.setTextAlignment(Qt.AlignCenter)
         self.cart_table.setItem(row_idx, 8, lot_item)
         
-        # Col 9: TVA (Priorité faible, en fin de tableau)
-        tva_spin = QDoubleSpinBox()
+        # Col 9: TVA (Priorité faible, auto-sélection intégrale au clic)
+        tva_spin = AutoSelectDoubleSpinBox()
         tva_spin.setRange(0, 100)
         tva_spin.setSuffix(" %")
         tva_spin.setAlignment(Qt.AlignCenter)
         tva_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        tva_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
         tva_spin.setValue(float(batch.get('Selling_TVA_Percent') or batch.get('Tax_Rate_Percent') or 0))
         tva_spin.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 9, tva_spin)

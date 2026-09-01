@@ -164,6 +164,16 @@ DUOTONE_SVGS: Dict[str, str] = {
         <line x1="6" y1="16" x2="20" y2="16" stroke="#00A896" stroke-width="2.5" stroke-linecap="round"/>
         <line x1="6" y1="23" x2="26" y2="23" stroke="#FFB800" stroke-width="2.5" stroke-linecap="round"/>
     </svg>''',
+
+    # Trash / Delete action
+    "trash": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <path d="M7 9H25V26C25 27.1 24.1 28 23 28H9C7.9 28 7 27.1 7 26V9Z" fill="#FEE2E2" stroke="#DC2626" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M4 9H28" stroke="#DC2626" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M11 9V5C11 4.4 11.4 4 12 4H20C20.6 4 21 4.4 21 5V9" fill="#FEE2E2" stroke="#DC2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="12" y1="14" x2="12" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+        <line x1="16" y1="14" x2="16" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+        <line x1="20" y1="14" x2="20" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+    </svg>''',
 }
 
 def get_duotone_icon(name: str, size: int = 64) -> QIcon:
@@ -193,3 +203,7 @@ def get_duotone_icon(name: str, size: int = 64) -> QIcon:
 def get_reclamation_icon() -> QIcon:
     """Compatibility helper for existing reclamation views."""
     return get_duotone_icon("reclamations", 32)
+
+def get_trash_icon(size: int = 24) -> QIcon:
+    """Returns a vector trash / delete icon."""
+    return get_duotone_icon("trash", size)

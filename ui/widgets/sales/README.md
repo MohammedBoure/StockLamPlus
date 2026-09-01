@@ -9,6 +9,7 @@ Composants PySide6 pour le point de vente (POS), l'encaissement et l'historique 
 - `sales_history_tab.py` : Historique des tickets de caisse, remboursements et clôtures de session.
 - `pos_payment_dialog.py` : Dialogue de règlement multi-moyens (espèces, carte, etc.).
 - `dialogs.py` : Dialogues du point de vente (`ClientDialog`, `OpenSessionDialog`, `CloseSessionDialog`, `QuickCashPaymentDialog`).
+- `touch_keypad.py` : Pavé tactile numérique et fonctions POS animé, déplaçable (draggable) avec bords vifs et sélection automatique.
 
 
 

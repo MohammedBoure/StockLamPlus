@@ -17,35 +17,46 @@ from .touch_keypad import TouchKeypadDialog
 from .pos_payment_dialog import PaymentDialog
 from ui.formatting import format_money
 
+def enable_auto_select_all(widget):
+    """Garantit que 100% du texte du champ est sélectionné au clic (press & release) et au focus."""
+    if not widget:
+        return widget
+    target = getattr(widget, 'lineEdit', lambda: None)() or widget
+
+    orig_press = target.mousePressEvent
+    orig_release = target.mouseReleaseEvent
+    orig_focus = target.focusInEvent
+
+    def on_press(e):
+        orig_press(e)
+        QTimer.singleShot(0, widget.selectAll if hasattr(widget, 'selectAll') else target.selectAll)
+
+    def on_release(e):
+        orig_release(e)
+        QTimer.singleShot(0, widget.selectAll if hasattr(widget, 'selectAll') else target.selectAll)
+
+    def on_focus(e):
+        orig_focus(e)
+        QTimer.singleShot(0, widget.selectAll if hasattr(widget, 'selectAll') else target.selectAll)
+
+    target.mousePressEvent = on_press
+    target.mouseReleaseEvent = on_release
+    target.focusInEvent = on_focus
+    return widget
+
+
 class AutoSelectLineEdit(QLineEdit):
     """Champ de texte sélectionnant automatiquement tout son contenu au clic pour une saisie immédiate."""
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        QTimer.singleShot(0, self.selectAll)
-
-    def focusInEvent(self, event):
-        super().focusInEvent(event)
-        QTimer.singleShot(0, self.selectAll)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        enable_auto_select_all(self)
 
 
 class AutoSelectDoubleSpinBox(QDoubleSpinBox):
     """SpinBox numérique dont tout le texte est sélectionné dès la prise de focus ou le clic."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        le = self.lineEdit()
-        if le:
-            self._orig_press = le.mousePressEvent
-            self._orig_focus = le.focusInEvent
-            le.mousePressEvent = self._handle_mouse_press
-            le.focusInEvent = self._handle_focus_in
-
-    def _handle_mouse_press(self, event):
-        self._orig_press(event)
-        QTimer.singleShot(0, self.selectAll)
-
-    def _handle_focus_in(self, event):
-        self._orig_focus(event)
-        QTimer.singleShot(0, self.selectAll)
+        enable_auto_select_all(self)
 
 
 class RemiseWidget(QWidget):
@@ -87,6 +98,10 @@ class RemiseWidget(QWidget):
 class BarcodeLineEdit(AutoSelectLineEdit):
     """Line edit that accepts numeric input from common AZERTY scanner mappings
     and auto-selects all text on click for rapid overwrite."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        enable_auto_select_all(self)
+
     def keyPressEvent(self, event):
         azerty_map = {
             Qt.Key_Ampersand: "1",
@@ -166,28 +181,32 @@ class PointOfSaleTab(QWidget):
 
         # Ligne Unique Compacte : Scanner Code-Barres/Recherche + Client + Nouveau Client + Date
         top_inputs_row = QHBoxLayout()
-        top_inputs_row.setSpacing(5)
+        top_inputs_row.setSpacing(6)
         top_inputs_row.setContentsMargins(0, 0, 0, 0)
 
         self.cb_product_search = BarcodeLineEdit()
         self.cb_product_search.setObjectName("ScanSearchInput")
-        self.cb_product_search.setMinimumHeight(32)
+        self.cb_product_search.setMinimumHeight(38)
+        self.cb_product_search.setMaximumHeight(38)
         self.cb_product_search.setPlaceholderText("🔍 Scanner code-barres ou chercher un produit / référence...")
         self.cb_product_search.setStyleSheet("""
             QLineEdit#ScanSearchInput {
                 background-color: #ffffff;
-                border: 1.5px solid #007572;
+                border: 2px solid #007572;
                 border-radius: 0px;
-                padding: 3px 8px;
-                font-size: 12px;
+                padding: 0px 10px;
+                font-size: 13px;
                 font-weight: 500;
                 color: #1e293b;
+                min-height: 38px;
+                max-height: 38px;
             }
             QLineEdit#ScanSearchInput:focus {
                 border: 2px solid #005a57;
                 background-color: #ffffff;
             }
         """)
+        enable_auto_select_all(self.cb_product_search)
 
         self.product_completer = QCompleter(self)
         self.product_completer.setCaseSensitivity(Qt.CaseInsensitive)
@@ -200,24 +219,35 @@ class PointOfSaleTab(QWidget):
 
         self.cb_client = QComboBox()
         self.cb_client.setPlaceholderText("👤 Client / Comptoir...")
-        self.cb_client.setMinimumHeight(32)
+        self.cb_client.setMinimumHeight(38)
+        self.cb_client.setMaximumHeight(38)
         self.cb_client.setStyleSheet("""
             QComboBox {
                 background-color: #ffffff;
                 border: 1px solid #cbd5e1;
                 border-radius: 0px;
-                padding: 2px 6px;
+                padding: 0px 8px;
                 font-size: 12px;
                 color: #1e293b;
+                min-height: 38px;
+                max-height: 38px;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 24px;
+                border-left: 1px solid #cbd5e1;
             }
         """)
         self.make_combo_searchable(self.cb_client)
+        enable_auto_select_all(self.cb_client)
 
         self.btn_new_client = QPushButton("➕ Client")
         self.btn_new_client.setCursor(Qt.PointingHandCursor)
         self.btn_new_client.setToolTip("Créer rapidement un nouveau client")
-        self.btn_new_client.setFixedWidth(75)
-        self.btn_new_client.setMinimumHeight(32)
+        self.btn_new_client.setFixedWidth(78)
+        self.btn_new_client.setMinimumHeight(38)
+        self.btn_new_client.setMaximumHeight(38)
         self.btn_new_client.setStyleSheet("""
             QPushButton {
                 background-color: #f8fafc;
@@ -226,7 +256,9 @@ class PointOfSaleTab(QWidget):
                 border-radius: 0px;
                 font-weight: bold;
                 font-size: 11px;
-                padding: 2px 4px;
+                padding: 0px 6px;
+                min-height: 38px;
+                max-height: 38px;
             }
             QPushButton:hover {
                 background-color: #e6f4f1;
@@ -238,16 +270,19 @@ class PointOfSaleTab(QWidget):
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setFixedWidth(105)
-        self.date_edit.setMinimumHeight(32)
+        self.date_edit.setFixedWidth(110)
+        self.date_edit.setMinimumHeight(38)
+        self.date_edit.setMaximumHeight(38)
         self.date_edit.setStyleSheet("""
             QDateEdit {
                 background-color: #ffffff;
                 border: 1px solid #cbd5e1;
                 border-radius: 0px;
-                padding: 2px 4px;
+                padding: 0px 6px;
                 font-size: 12px;
                 color: #1e293b;
+                min-height: 38px;
+                max-height: 38px;
             }
         """)
 
@@ -266,12 +301,16 @@ class PointOfSaleTab(QWidget):
         self.cart_table.setHorizontalHeaderLabels(cols)
 
         header = self.cart_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Fixed) # Bouton supprimer prioritaire
-        self.cart_table.setColumnWidth(0, 38)
-        header.setSectionResizeMode(1, QHeaderView.Stretch) # Produit
-        header.setMinimumSectionSize(140)
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.cart_table.setColumnWidth(0, 36)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setMinimumSectionSize(65)
         for i in range(2, 10):
             header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        self.cart_table.setColumnWidth(6, 110)
+        self.cart_table.setColumnWidth(7, 65)
+        self.cart_table.setColumnWidth(8, 85)
+        self.cart_table.setColumnWidth(9, 75)
 
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.cart_table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -935,8 +974,10 @@ class PointOfSaleTab(QWidget):
     def make_combo_searchable(self, combo):
         combo.setEditable(True)
         combo.setInsertPolicy(QComboBox.NoInsert)
-        combo.completer().setFilterMode(Qt.MatchContains)
-        combo.completer().setCaseSensitivity(Qt.CaseInsensitive)
+        if combo.completer():
+            combo.completer().setFilterMode(Qt.MatchContains)
+            combo.completer().setCaseSensitivity(Qt.CaseInsensitive)
+        enable_auto_select_all(combo)
 
     def get_current_user_id(self):
         try:
@@ -1313,14 +1354,15 @@ class PointOfSaleTab(QWidget):
         name_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.cart_table.setItem(row_idx, 1, name_item)
         
-        # Col 2: Qty Sold Input (Auto-sélection de tout le texte au clic pour saisie directe)
+        # Col 2: Qty Sold Input (Auto-sélection intégrale garantie au clic)
         qty_spin = AutoSelectDoubleSpinBox()
+        enable_auto_select_all(qty_spin)
         qty_spin.setRange(0.01, float(batch.get('Quantity_Current') or 999999))
         qty_spin.setDecimals(2)
         qty_spin.setValue(min(qty_spin.maximum(), max(0.01, float(quantity or 1))))
         qty_spin.setAlignment(Qt.AlignCenter)
         qty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        qty_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
+        qty_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px; min-height: 30px;")
         qty_spin.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 2, qty_spin)
         
@@ -1346,6 +1388,7 @@ class PointOfSaleTab(QWidget):
         
         # Col 4: Remise (Widget % ou DA, sélection intégrale au clic)
         remise_widget = RemiseWidget()
+        enable_auto_select_all(remise_widget.value_spin)
         remise_widget.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 4, remise_widget)
         
@@ -1393,11 +1436,12 @@ class PointOfSaleTab(QWidget):
         
         # Col 9: TVA (Priorité faible, auto-sélection intégrale au clic)
         tva_spin = AutoSelectDoubleSpinBox()
+        enable_auto_select_all(tva_spin)
         tva_spin.setRange(0, 100)
         tva_spin.setSuffix(" %")
         tva_spin.setAlignment(Qt.AlignCenter)
         tva_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        tva_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px;")
+        tva_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px; min-height: 30px;")
         tva_spin.setValue(float(batch.get('Selling_TVA_Percent') or batch.get('Tax_Rate_Percent') or 0))
         tva_spin.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row_idx, 9, tva_spin)

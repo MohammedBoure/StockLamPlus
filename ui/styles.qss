@@ -363,14 +363,13 @@ QComboBox::drop-down {
 
 /* --- تصميم السهم نفسه --- */
 QComboBox::down-arrow {
-    image: none; /* إلغاء الصورة الافتراضية */
-    border-left: 2px solid #007572; /* رسم سهم باستخدام الحدود */
-    border-bottom: 2px solid #007572;
-    width: 6px;
-    height: 6px;
-    margin-top: -2px; /* ضبط الموضع عمودياً */
-    transform: rotate(-45deg); /* تدوير المربع ليشكل زاوية السهم (V) */
-    left: 1px;
+    image: none;
+    width: 0px;
+    height: 0px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #007572;
+    margin-right: 2px;
 }
 
 QComboBox::drop-down:hover {
@@ -397,22 +396,20 @@ QAbstractSpinBox::down-button {
 /* --- تصميم الأسهم الداخلية --- */
 QAbstractSpinBox::up-arrow {
     image: none;
-    border-left: 2px solid #007572;
-    border-top: 2px solid #007572;
-    width: 5px;
-    height: 5px;
-    transform: rotate(45deg);
-    margin-top: 2px;
+    width: 0px;
+    height: 0px;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid #007572;
 }
 
 QAbstractSpinBox::down-arrow {
     image: none;
-    border-left: 2px solid #007572;
-    border-bottom: 2px solid #007572;
-    width: 5px;
-    height: 5px;
-    transform: rotate(-45deg);
-    margin-bottom: 2px;
+    width: 0px;
+    height: 0px;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid #007572;
 }
 
 /* تأثير التمرير للأزرار */
@@ -468,10 +465,10 @@ QDateEdit:hover {
 }
 /* توحيد المسافات الداخلية لضمان استواء النص داخل الحقول */
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-    padding: 10px 12px;
+    padding: 4px 8px;
     margin: 0px;
     border: 1px solid #cfd8dc;
-    border-radius: 6px;
+    border-radius: 4px;
 }
 
 /* التأكد من أن التسميات (Labels) في الفورم متمركزة */

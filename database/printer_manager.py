@@ -3,6 +3,7 @@
 import os
 import json
 import logging
+import io
 try:
     import win32print
 except ImportError:

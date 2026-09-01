@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 from ..dialogs import AdjustmentDialog, WasteDialog, BatchDetailsDialog, UnpackTransferDialog
 from ui.widgets.procurement.reception_dialog import ReceptionDialog
 from ..quick_actions import QuickTransferDialog, QuickConsumeDialog
-from ui.formatting import format_quantity, quantity_to_int
+from ui.formatting import format_quantity, quantity_to_int, format_money
 
 
 def get_current_user_id(self):

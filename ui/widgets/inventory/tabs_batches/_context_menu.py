@@ -50,6 +50,7 @@ def show_context_menu(self, pos):
     if role != 'Technician':
         _add_action(menu, "💲 Modifier les prix de vente...", lambda: self.open_modify_sales_prices(batch_data))
         _add_action(menu, "📈 Historique des prix...", lambda: self.open_price_history(batch_data))
+        _add_action(menu, "⭐ Assigner au Groupe de Vente (Liste N°)...", lambda: self.open_assign_pos_group(batch_data))
 
     # --- وصل الاستلام (ليس للتقني) ---
     if batch_data.get('BR_ID') and role != 'Technician':

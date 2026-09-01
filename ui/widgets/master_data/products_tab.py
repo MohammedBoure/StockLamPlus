@@ -55,7 +55,8 @@ class ProductsTab(QWidget):
             "Seuil Min",           # 6
             "Température",         # 7
             "Automate Préféré",    # 8
-            "Alertes (🔔)"        # 9
+            "Alertes (🔔)",       # 9
+            "Groupe Vente"        # 10
         ]
         self.table.setColumnCount(len(columns))
         self.table.setHorizontalHeaderLabels(columns)
@@ -159,6 +160,11 @@ class ProductsTab(QWidget):
                 show_alerts = product.get('Show_In_Alerts', False)
                 alert_text = "🔔 Oui" if show_alerts else "🔕 Non"
                 self.table.setItem(row_idx, 9, self._create_centered_item(alert_text))
+
+                # 10. Groupe Vente (Caisse)
+                pos_grp = product.get('POS_Priority_Group')
+                grp_text = f"⭐ Liste {pos_grp}" if pos_grp else "---"
+                self.table.setItem(row_idx, 10, self._create_centered_item(grp_text))
 
             self.table.setSortingEnabled(True)
             logging.info(f"{len(products)} produits chargés dans le tableau.")

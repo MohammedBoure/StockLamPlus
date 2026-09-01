@@ -1112,6 +1112,7 @@ class InventoryBatchManager:
                         B.Batch_ID,
                         B.Product_ID,
                         P.Is_Billable,
+                        P.POS_Priority_Group,
                         B.Internal_Barcode,
                         B.External_Barcode,
                         P.Product_Name,

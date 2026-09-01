@@ -171,11 +171,19 @@ class ProductDialog(BaseDialog):
         # --- إضافة Checkbox لـ Is_Billable ---
         self.is_billable_cb = QCheckBox("Ce produit est facturable ?")
         self.is_billable_cb.setToolTip("Cochez si ce produit est facturé au patient/client.")
+
+        # --- Groupe Prioritaire de Vente (Caisse) ---
+        self.pos_priority_group_spin = QSpinBox()
+        self.pos_priority_group_spin.setRange(0, 999999)
+        self.pos_priority_group_spin.setSpecialValueText("Aucun (Par défaut)")
+        self.pos_priority_group_spin.setPrefix("Liste N° ")
+        self.pos_priority_group_spin.setToolTip("Groupe / Liste de priorité pour l'interface de vente (1, 2, 3... sans limite. Laissez 0 pour aucun).")
         
         basic_layout.addRow("Nom du Produit * :", self.name_input)
         basic_layout.addRow("Famille * :", self.family_combo)
         basic_layout.addRow("Marque * :", self.manuf_combo)
-        basic_layout.addRow("Facturation :", self.is_billable_cb) # الحقل الجديد
+        basic_layout.addRow("Facturation :", self.is_billable_cb)
+        basic_layout.addRow("Groupe Vente (Liste) :", self.pos_priority_group_spin)
 
         # ---------------------------------------------------------
         # Groupe 2 : Gestion des Unités & Conversion
@@ -327,6 +335,10 @@ class ProductDialog(BaseDialog):
         # تعيين حالة Checkbox (Is_Billable)
         self.is_billable_cb.setChecked(bool(d.get('Is_Billable', False)))
 
+        # تعيين Groupe Vente
+        pos_grp = d.get('POS_Priority_Group')
+        self.pos_priority_group_spin.setValue(int(pos_grp) if pos_grp is not None else 0)
+
         # تعيين الوحدات
         self.order_unit_combo.setCurrentText(str(d.get('Ordering_Unit', '')))
         self.stock_unit_combo.setCurrentText(str(d.get('Stock_Unit', '')))
@@ -367,6 +379,7 @@ class ProductDialog(BaseDialog):
             "Family_ID": self.family_combo.currentData(),
             "Manuf_ID": self.manuf_combo.currentData(),
             "Is_Billable": self.is_billable_cb.isChecked(),  # الحقل الجديد
+            "POS_Priority_Group": self.pos_priority_group_spin.value() if self.pos_priority_group_spin.value() > 0 else None,
             "Show_In_Alerts": self.show_alerts_cb.isChecked(),
             
             "Ordering_Unit": self.order_unit_combo.currentText().strip(),

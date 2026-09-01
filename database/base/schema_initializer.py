@@ -421,6 +421,8 @@ SCHEMA_QUERIES = [
     """ALTER TABLE Inventory_Batches ADD COLUMN External_Barcode VARCHAR(100) NULL;""",
     """ALTER TABLE Inventory_Batches ADD COLUMN Supplier_ID INT UNSIGNED NULL;""",
     """ALTER TABLE Inventory_Batches ADD CONSTRAINT fk_batch_supplier FOREIGN KEY (Supplier_ID) REFERENCES Suppliers(Supplier_ID) ON DELETE SET NULL ON UPDATE CASCADE;""",
+    """ALTER TABLE Products_Master ADD COLUMN POS_Priority_Group INT NULL DEFAULT NULL;""",
+    """ALTER TABLE Products_Master ADD INDEX idx_pos_priority_group (POS_Priority_Group);""",
 
     """CREATE TABLE IF NOT EXISTS Price_Change_Log (
         Log_ID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,

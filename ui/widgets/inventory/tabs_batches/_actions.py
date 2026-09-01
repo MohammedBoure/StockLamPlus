@@ -574,3 +574,61 @@ def open_price_history(self, batch_data=None):
         product_name=batch_data.get('Product_Name', '')
     )
     dialog.exec()
+
+
+def open_assign_pos_group(self, batch_data=None):
+    """Permet à l'utilisateur d'assigner un numéro de groupe prioritaire (Liste N°) au produit pour la caisse."""
+    if not batch_data:
+        selected_rows = set(item.row() for item in self.table.selectedItems())
+        if not selected_rows or len(selected_rows) != 1:
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un (1) lot pour assigner son groupe prioritaire.")
+            return
+        row = list(selected_rows)[0]
+        batch_data = self.table.item(row, 0).data(Qt.UserRole)
+
+    if not batch_data:
+        return
+
+    product_id = batch_data.get('Product_ID')
+    product_name = batch_data.get('Product_Name', 'Produit')
+    current_group = batch_data.get('POS_Priority_Group')
+
+    from PySide6.QtWidgets import QInputDialog, QLineEdit
+    curr_str = str(current_group) if current_group is not None else ""
+    text, ok = QInputDialog.getText(
+        self,
+        "Groupe Prioritaire de Vente",
+        f"Produit : {product_name}\n\n"
+        "Entrez le numéro de liste prioritaire (1, 2, 3... sans limite) pour la caisse :\n"
+        "(Laissez vide ou entrez 0 pour retirer de toute liste prioritaire)",
+        QLineEdit.Normal,
+        curr_str
+    )
+    if not ok:
+        return
+
+    text = text.strip()
+    new_group = None
+    if text and text != "0":
+        try:
+            new_group = int(text)
+            if new_group <= 0:
+                new_group = None
+        except ValueError:
+            QMessageBox.warning(self, "Valeur Invalide", "Veuillez entrer un nombre entier positif (ex: 1, 2, 3...).")
+            return
+
+    mgr = getattr(self, 'manager', None) or getattr(self, 'data_manager', None)
+    if mgr and hasattr(mgr, 'products'):
+        success = mgr.products.set_product_pos_priority_group(product_id, new_group)
+        if success:
+            batch_data['POS_Priority_Group'] = new_group
+            msg = f"Le produit '{product_name}' est désormais affecté à la Liste N° {new_group} dans l'interface de vente !" if new_group else f"Le produit '{product_name}' n'est plus assigné à une liste prioritaire."
+            QMessageBox.information(self, "Groupe Prioritaire Mis à Jour", msg)
+            if hasattr(self, 'load_data'):
+                self.load_data()
+            if hasattr(self, 'data_changed'):
+                self.data_changed.emit()
+        else:
+            QMessageBox.critical(self, "Erreur", "Impossible d'enregistrer le groupe prioritaire.")
+

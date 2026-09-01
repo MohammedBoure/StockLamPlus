@@ -34,8 +34,8 @@ class ProductManager:
                      Usage_Unit, Usage_Qty_Per_Stock_Unit, 
                      Minimum_Stock_Level, Alert_Before_Expiry_Days, 
                      Manuf_ID, Preferred_Automate_ID, Storage_Temp_Req,
-                     Open_Vial_Stability_Days, Is_Billable, Show_In_Alerts)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     Open_Vial_Stability_Days, Is_Billable, Show_In_Alerts, POS_Priority_Group)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 
                 if 'Product_Name' not in product_data or 'Family_ID' not in product_data or 'Manuf_ID' not in product_data:
@@ -60,7 +60,8 @@ class ProductManager:
                     product_data.get('Storage_Temp_Req'),
                     product_data.get('Open_Vial_Stability_Days', 0),
                     product_data.get('Is_Billable', False),
-                    product_data.get('Show_In_Alerts', False)
+                    product_data.get('Show_In_Alerts', False),
+                    product_data.get('POS_Priority_Group')
                 )
                 cursor.execute(query, params)
                 logging.info(f"Produit '{product_data['Product_Name']}' ajouté avec succès.")
@@ -131,7 +132,8 @@ class ProductManager:
                     'Storage_Temp_Req': 'Storage_Temp_Req',
                     'Open_Vial_Stability_Days': 'Open_Vial_Stability_Days',
                     'Is_Billable': 'Is_Billable',
-                    'Show_In_Alerts': 'Show_In_Alerts'
+                    'Show_In_Alerts': 'Show_In_Alerts',
+                    'POS_Priority_Group': 'POS_Priority_Group'
                 }
 
                 for key, col in mapping.items():
@@ -159,7 +161,25 @@ class ProductManager:
         except Exception as e:
             logging.error(f"Erreur inattendue update_product {product_id}: {e}", exc_info=True)
             return False, str(e)
-            
+
+    def set_product_pos_priority_group(self, product_id: int, group_number: Optional[int]) -> bool:
+        """
+        Définit ou efface le groupe/liste de priorité pour la vente en caisse (1, 2, 3... ou None).
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE Products_Master SET POS_Priority_Group = %s WHERE Product_ID = %s",
+                    (group_number, product_id)
+                )
+                conn.commit()
+                logging.info(f"Produit {product_id}: Groupe prioritaire défini à {group_number}")
+                return True
+        except Exception as e:
+            logging.error(f"Erreur set_product_pos_priority_group pour produit {product_id}: {e}", exc_info=True)
+            return False
+
     def get_all_products(self) -> List[Dict]:
         """
         يسترجع جميع المنتجات بما في ذلك الحقل الجديد Is_Billable تلقائياً عبر (p.*).

@@ -620,8 +620,18 @@ class UnpackTransferDialog(BaseDialog):
         }
 
     def init_ui(self):
-        # Appliquer un thème clair, sobre et aéré qui ne casse pas les steppers natifs
+        # Appliquer un thème blanc pur, épuré et moderne à l'ensemble du dialogue
         self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+            }
+            QScrollArea {
+                background-color: #ffffff;
+                border: none;
+            }
+            QScrollArea > QWidget > QWidget {
+                background-color: #ffffff;
+            }
             QGroupBox {
                 font-weight: bold;
                 font-size: 12px;
@@ -631,23 +641,25 @@ class UnpackTransferDialog(BaseDialog):
                 margin-top: 8px;
                 padding-top: 14px;
                 padding-bottom: 8px;
-                padding-left: 8px;
-                padding-right: 8px;
+                padding-left: 10px;
+                padding-right: 10px;
                 background-color: #ffffff;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
                 left: 10px;
-                padding: 0 4px;
+                padding: 0 6px;
                 background-color: #ffffff;
+                color: #007572;
             }
             QLabel {
                 font-size: 12px;
                 color: #2c3e50;
+                background-color: transparent;
             }
             QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                min-height: 32px;
+                min-height: 34px;
                 font-size: 12px;
                 padding: 2px 8px;
                 border: 1px solid #ced4da;
@@ -657,9 +669,16 @@ class UnpackTransferDialog(BaseDialog):
             }
             QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
                 border: 1.5px solid #007572;
-                background-color: #fcfefe;
+                background-color: #ffffff;
+            }
+            QCheckBox {
+                background-color: transparent;
+                font-size: 12px;
+                color: #2c3e50;
             }
         """)
+
+        self.form_widget.setStyleSheet("background-color: #ffffff;")
 
         # Conteneur avec scroll responsive pour s'adapter à toutes les résolutions (HD 1280x720, etc.)
         outer_layout = QVBoxLayout(self.form_widget)
@@ -669,10 +688,13 @@ class UnpackTransferDialog(BaseDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background-color: #ffffff; border: none;")
+        scroll.viewport().setStyleSheet("background-color: #ffffff; border: none;")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         content_widget = QWidget()
+        content_widget.setStyleSheet("background-color: #ffffff;")
         cols_layout = QHBoxLayout(content_widget)
         cols_layout.setSpacing(14)
         cols_layout.setContentsMargins(6, 4, 6, 4)
@@ -681,6 +703,7 @@ class UnpackTransferDialog(BaseDialog):
         # COLONNE GAUCHE : Informations Lot Source & Destination
         # =====================================================================
         left_widget = QWidget()
+        left_widget.setStyleSheet("background-color: #ffffff;")
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
@@ -794,6 +817,7 @@ class UnpackTransferDialog(BaseDialog):
         # COLONNE DROITE : Paramètres de Déconditionnement & Aperçu
         # =====================================================================
         right_widget = QWidget()
+        right_widget.setStyleSheet("background-color: #ffffff;")
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)

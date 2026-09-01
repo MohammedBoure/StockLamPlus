@@ -9,28 +9,79 @@ import logging
 from ui.formatting import format_money
 
 class BaseDialog(QDialog):
-    """Fenêtre de dialogue de base unifiée"""
+    """Fenêtre de dialogue de base unifiée avec thème blanc épuré"""
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+            }
+            QWidget {
+                color: #2c3e50;
+            }
+        """)
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setSpacing(10)
         self.form_widget = QWidget()
+        self.form_widget.setStyleSheet("background-color: #ffffff;")
         self.layout.addWidget(self.form_widget)
         
-        # Boutons Enregistrer et Annuler (traduits une seule fois ici)
+        # Boutons Enregistrer et Annuler (traduits et stylisés au thème de l'application)
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        self.buttons.setStyleSheet("background-color: #ffffff;")
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         self.layout.addWidget(self.buttons)
 
-        # Traduction centralisée des boutons
         save_btn = self.buttons.button(QDialogButtonBox.Save)
         if save_btn:
             save_btn.setText("Enregistrer")
+            save_btn.setCursor(Qt.PointingHandCursor)
+            save_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #007572;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 6px 20px;
+                    font-weight: bold;
+                    min-height: 32px;
+                    min-width: 95px;
+                }
+                QPushButton:hover {
+                    background-color: #005a57;
+                }
+                QPushButton:pressed {
+                    background-color: #004543;
+                }
+            """)
+
         cancel_btn = self.buttons.button(QDialogButtonBox.Cancel)
         if cancel_btn:
             cancel_btn.setText("Annuler")
+            cancel_btn.setCursor(Qt.PointingHandCursor)
+            cancel_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #ffffff;
+                    color: #495057;
+                    border: 1px solid #ced4da;
+                    border-radius: 4px;
+                    padding: 6px 20px;
+                    font-weight: 500;
+                    min-height: 32px;
+                    min-width: 95px;
+                }
+                QPushButton:hover {
+                    background-color: #f8f9fa;
+                    border-color: #adb5bd;
+                }
+                QPushButton:pressed {
+                    background-color: #e9ecef;
+                }
+            """)
 
     def make_combo_searchable(self, combo):
         """Rendre un QComboBox filtrable par recherche"""

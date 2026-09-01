@@ -15,14 +15,80 @@ from ..location_tree_combo import LocationTreeComboBox
 
 
 def build_ui(self):
-    """تهيئة كامل الواجهة وربطها بـ self"""
+    """تهيئة كامل الواجهة بتصميم أبيض ناصع وعصري وربطها بـ self"""
+    self.setStyleSheet("""
+        QWidget#BatchesTabRoot {
+            background-color: #ffffff;
+        }
+        QGroupBox {
+            font-weight: bold;
+            color: #007572;
+            border: 1px solid #dcdfe6;
+            border-radius: 6px;
+            margin-top: 6px;
+            background-color: #ffffff;
+            padding-top: 14px;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 6px;
+            background-color: #ffffff;
+            color: #007572;
+        }
+        QLineEdit, QComboBox, QDateEdit {
+            background-color: #ffffff;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            padding: 2px 8px;
+            min-height: 28px;
+            height: 28px;
+            font-size: 12px;
+            color: #2c3e50;
+        }
+        QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+            border: 1.5px solid #007572;
+            background-color: #ffffff;
+        }
+        QCheckBox {
+            background-color: transparent;
+            font-size: 12px;
+            color: #2c3e50;
+        }
+        QLabel {
+            background-color: transparent;
+            font-size: 12px;
+            color: #2c3e50;
+        }
+        QTableWidget {
+            background-color: #ffffff;
+            border: 1px solid #dcdfe6;
+            gridline-color: #f1f5f9;
+            font-size: 12px;
+            color: #2c3e50;
+            selection-background-color: #e6f4f1;
+            selection-color: #007572;
+        }
+        QHeaderView::section {
+            background-color: #f8fafc;
+            color: #2c3e50;
+            font-weight: bold;
+            font-size: 12px;
+            border: none;
+            border-bottom: 2px solid #007572;
+            border-right: 1px solid #e2e8f0;
+            padding: 5px 8px;
+        }
+    """)
+    self.setObjectName("BatchesTabRoot")
+
     layout = QVBoxLayout(self)
-    layout.setSpacing(5)
-    layout.setContentsMargins(5, 5, 5, 5)
+    layout.setSpacing(6)
+    layout.setContentsMargins(6, 6, 6, 6)
 
     layout.addWidget(_build_filter_group(self))
     layout.addWidget(_build_table(self))
-    layout.addLayout(_build_bottom_bar(self))
+    layout.addWidget(_build_bottom_bar(self))
 
     self.table.doubleClicked.connect(self.show_batch_details)
 
@@ -33,11 +99,6 @@ def build_ui(self):
 
 def _build_filter_group(self):
     filter_group = QGroupBox("🔍 Recherche & Filtres Avancés")
-    filter_group.setStyleSheet("""
-        QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7;
-                    border-radius: 6px; margin-top: 6px; }
-        QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }
-    """)
 
     main_filter_layout = QHBoxLayout(filter_group)
     main_filter_layout.setContentsMargins(10, 15, 10, 10)
@@ -192,15 +253,17 @@ def _build_right_filters(self):
 
     btn_refresh = QPushButton("Actualiser")
     btn_refresh.setFixedWidth(100)
+    btn_refresh.setCursor(Qt.PointingHandCursor)
     btn_refresh.setStyleSheet(
-        "background-color: #2980b9; color: white; border-radius: 3px; padding: 2px;"
+        "background-color: #007572; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; border: none; min-height: 28px;"
     )
     btn_refresh.clicked.connect(self.load_data)
 
     btn_reset = QPushButton("Réinitialiser")
     btn_reset.setFixedWidth(100)
+    btn_reset.setCursor(Qt.PointingHandCursor)
     btn_reset.setStyleSheet(
-        "background-color: #95a5a6; color: white; border-radius: 3px; padding: 2px;"
+        "background-color: #ffffff; color: #495057; border: 1px solid #ced4da; border-radius: 4px; padding: 4px 10px; min-height: 28px;"
     )
     btn_reset.clicked.connect(self.reset_filters)
 
@@ -221,12 +284,13 @@ def _build_table(self):
     self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
     self.table.verticalHeader().setLayoutDirection(Qt.RightToLeft)
 
+    # ترتيب الأعمدة: الأولوية الأولى للمنتج والمخزون وكافة أعمدة الأسعار، تليها بيانات اللوط، ثم التصنيفات
     cols = [
-        "Désignation Produit", "Famille", "Marque", "Automate",
-        "Fournisseur", "Stock (Actuel)", "Date Entrée", "N° Lot",
-        "Date Exp.", "Qté Init.", "Code-Barres", "Code Ext", "Prix U. HT",
-        "Prix U. TTC", "Valeur (DA)", "Prix Vente 1", "Prix Vente 2", "Prix Vente 3", "Prix Vente 4",
-        "Ref PO", "Emplacement", "Réclamation"
+        "Désignation Produit", "Stock (Actuel)", "Prix U. HT", "Prix U. TTC",
+        "Valeur (DA)", "Prix Vente 1", "Prix Vente 2", "Prix Vente 3", "Prix Vente 4",
+        "N° Lot", "Date Exp.", "Qté Init.", "Code-Barres", "Code Ext",
+        "Emplacement", "Famille", "Marque", "Automate", "Fournisseur",
+        "Ref PO", "Date Entrée", "Réclamation"
     ]
     self.table.setColumnCount(len(cols))
     self.table.setHorizontalHeaderLabels(cols)
@@ -241,9 +305,27 @@ def _build_table(self):
     self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
     self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
     self.table.setAlternatingRowColors(True)
-    self.table.setStyleSheet(
-        "QTableWidget { gridline-color: #ecf0f1; font-size: 12px; }"
-    )
+    self.table.setStyleSheet("""
+        QTableWidget {
+            background-color: #ffffff;
+            border: 1px solid #dcdfe6;
+            gridline-color: #f1f5f9;
+            font-size: 12px;
+            color: #2c3e50;
+            selection-background-color: #e6f4f1;
+            selection-color: #007572;
+        }
+        QHeaderView::section {
+            background-color: #f8fafc;
+            color: #2c3e50;
+            font-weight: bold;
+            font-size: 12px;
+            border: none;
+            border-bottom: 2px solid #007572;
+            border-right: 1px solid #e2e8f0;
+            padding: 5px 8px;
+        }
+    """)
     self.table.setContextMenuPolicy(Qt.CustomContextMenu)
     self.table.customContextMenuRequested.connect(self.show_context_menu)
 
@@ -263,15 +345,24 @@ def _build_table(self):
 # ---------------------------------------------------------------------------
 
 def _build_bottom_bar(self):
-    bottom_bar = QHBoxLayout()
-    bottom_bar.setContentsMargins(5, 5, 5, 5)
+    bottom_frame = QFrame()
+    bottom_frame.setStyleSheet("""
+        QFrame {
+            background-color: #ffffff;
+            border-top: 1px solid #e2e8f0;
+            border-radius: 0px;
+        }
+    """)
+    bottom_bar = QHBoxLayout(bottom_frame)
+    bottom_bar.setContentsMargins(6, 6, 6, 6)
+    bottom_bar.setSpacing(8)
 
     self.lbl_total_value = QLabel("Valeur Totale : 0,00 DA")
     self.lbl_total_value.setFont(QFont("Arial", 11, QFont.Bold))
     self.lbl_total_value.setStyleSheet("""
         QLabel {
-            color: #2c3e50; border: 1px solid #95a5a6; border-radius: 4px;
-            padding: 6px; background-color: #ecf0f1;
+            color: #007572; border: 1px solid #a3e4d7; border-radius: 4px;
+            padding: 6px 12px; background-color: #e8f8f5;
         }
     """)
     bottom_bar.addWidget(self.lbl_total_value)
@@ -281,7 +372,7 @@ def _build_bottom_bar(self):
     self.lbl_total_quantity.setStyleSheet("""
         QLabel {
             color: #1e8449; border: 1px solid #82e0aa; border-radius: 4px;
-            padding: 6px; background-color: #eafaf1;
+            padding: 6px 12px; background-color: #eafaf1;
         }
     """)
     bottom_bar.addWidget(self.lbl_total_quantity)
@@ -295,17 +386,18 @@ def _build_bottom_bar(self):
 
     btn_style = (
         "QPushButton { font-weight: bold; border-radius: 4px; "
-        "padding: 6px 12px; font-size: 12px; }"
+        "padding: 6px 14px; font-size: 12px; min-height: 28px; }"
     )
 
     def _btn(label, color, slot):
         b = QPushButton(label)
-        b.setStyleSheet(btn_style + f"background-color: {color}; color: white;")
+        b.setCursor(Qt.PointingHandCursor)
+        b.setStyleSheet(btn_style + f"background-color: {color}; color: white; border: none;")
         b.clicked.connect(slot)
         return b
 
     bottom_bar.addWidget(_btn("➕ Ajout Rapide", "#8e44ad", self.open_quick_add))
-    bottom_bar.addWidget(_btn("📝 Éditer",       "#3498db", self.open_quick_edit))
+    bottom_bar.addWidget(_btn("📝 Éditer",       "#2980b9", self.open_quick_edit))
     bottom_bar.addWidget(_btn("⚡ Sortie",      "#27ae60", self.direct_use_process))
     bottom_bar.addWidget(_btn("✏️ Ajustement",  "#f39c12", self.adjust_stock))
     bottom_bar.addWidget(_btn("🗑️ Rebut",       "#c0392b", self.waste_batch))
@@ -314,9 +406,10 @@ def _build_bottom_bar(self):
     line_sep = QFrame()
     line_sep.setFrameShape(QFrame.VLine)
     line_sep.setFrameShadow(QFrame.Sunken)
+    line_sep.setStyleSheet("color: #e2e8f0;")
     bottom_bar.addWidget(line_sep)
 
     bottom_bar.addWidget(_btn("📗 Excel", "#217346", self.export_to_excel))
     bottom_bar.addWidget(_btn("📕 PDF",   "#e74c3c", self.export_to_pdf))
 
-    return bottom_bar
+    return bottom_frame

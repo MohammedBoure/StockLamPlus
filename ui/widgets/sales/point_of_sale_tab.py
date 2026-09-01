@@ -220,17 +220,18 @@ class PointOfSaleTab(QWidget):
         # Line 3: Cart Table (Dynamic unlimited width/height, touch-friendly scrollbars, full text visible)
         self.cart_table = QTableWidget()
         self.cart_table.setObjectName("POSCartTable")
-        cols = ["Produit", "Lot", "Code-barres", "Stock", "Qté vendue", "Prix HT", "Remise", "TVA", "Total TTC", ""]
+        # Colonnes ordonnées par priorité : Bouton Suppr en tête, Produits et Paramètres de vente d'abord, Stock/Lot/TVA en fin
+        cols = ["", "Produit", "Qté vendue", "Prix HT", "Remise", "Total TTC", "Code-barres", "Stock", "Lot", "TVA"]
         self.cart_table.setColumnCount(len(cols))
         self.cart_table.setHorizontalHeaderLabels(cols)
 
         header = self.cart_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(0, QHeaderView.Fixed) # Bouton supprimer prioritaire
+        self.cart_table.setColumnWidth(0, 38)
+        header.setSectionResizeMode(1, QHeaderView.Stretch) # Produit
         header.setMinimumSectionSize(140)
-        for i in range(1, 9):
+        for i in range(2, 10):
             header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(9, QHeaderView.Fixed)
-        self.cart_table.setColumnWidth(9, 42)
 
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.cart_table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -663,10 +664,10 @@ class PointOfSaleTab(QWidget):
         discount_percent = float(result.get("discount_percent") or 0)
         allowed_products = set(result.get("promotion", {}).get("Product_IDs") or [])
         for row in range(self.cart_table.rowCount()):
-            batch = self.cart_table.item(row, 0).data(Qt.UserRole) or {}
+            batch = self.cart_table.item(row, 1).data(Qt.UserRole) or {}
             if allowed_products and batch.get("Product_ID") not in allowed_products:
                 continue
-            remise = self.cart_table.cellWidget(row, 6)
+            remise = self.cart_table.cellWidget(row, 4)
             remise.type_combo.setCurrentText("%")
             remise.value_spin.setValue(min(100.0, discount_percent))
         self.calculate_totals()
@@ -701,9 +702,9 @@ class PointOfSaleTab(QWidget):
         for row in range(self.cart_table.rowCount()):
             if remaining <= 0:
                 break
-            qty_widget = self.cart_table.cellWidget(row, 4)
-            price_widget = self.cart_table.cellWidget(row, 5)
-            remise = self.cart_table.cellWidget(row, 6)
+            qty_widget = self.cart_table.cellWidget(row, 2)
+            price_widget = self.cart_table.cellWidget(row, 3)
+            remise = self.cart_table.cellWidget(row, 4)
             line_ht = float(qty_widget.value() * (price_widget.currentData() or 0))
             current_discount = (
                 line_ht * remise.get_value() / 100.0
@@ -772,13 +773,13 @@ class PointOfSaleTab(QWidget):
     def _collect_cart_items(self):
         items = []
         for row in range(self.cart_table.rowCount()):
-            batch_item = self.cart_table.item(row, 0)
+            batch_item = self.cart_table.item(row, 1)
             if not batch_item:
                 continue
             batch = batch_item.data(Qt.UserRole) or {}
-            qty = self.cart_table.cellWidget(row, 4).value()
-            price_ht = self.cart_table.cellWidget(row, 5).currentData() or 0.0
-            remise = self.cart_table.cellWidget(row, 6)
+            qty = self.cart_table.cellWidget(row, 2).value()
+            price_ht = self.cart_table.cellWidget(row, 3).currentData() or 0.0
+            remise = self.cart_table.cellWidget(row, 4)
             line_ht = qty * price_ht
             if remise.get_type() == "%":
                 discount_percent = max(0.0, min(100.0, remise.get_value()))
@@ -791,7 +792,7 @@ class PointOfSaleTab(QWidget):
                 "qty_sold": qty,
                 "unit_price_ht": price_ht,
                 "discount_percent": discount_percent,
-                "tva_percent": self.cart_table.cellWidget(row, 7).value(),
+                "tva_percent": self.cart_table.cellWidget(row, 9).value(),
             })
         return items
 
@@ -843,15 +844,15 @@ class PointOfSaleTab(QWidget):
                 continue
             self.add_product_to_cart(batch)
             row = self.cart_table.rowCount() - 1
-            self.cart_table.cellWidget(row, 4).setValue(float(item.get("qty_sold") or 1))
-            price = self.cart_table.cellWidget(row, 5)
+            self.cart_table.cellWidget(row, 2).setValue(float(item.get("qty_sold") or 1))
+            price = self.cart_table.cellWidget(row, 3)
             price_index = price.findData(float(item.get("unit_price_ht") or 0))
             if price_index >= 0:
                 price.setCurrentIndex(price_index)
-            remise = self.cart_table.cellWidget(row, 6)
+            remise = self.cart_table.cellWidget(row, 4)
             remise.type_combo.setCurrentText("%")
             remise.value_spin.setValue(float(item.get("discount_percent") or 0))
-            self.cart_table.cellWidget(row, 7).setValue(float(item.get("tva_percent") or 0))
+            self.cart_table.cellWidget(row, 9).setValue(float(item.get("tva_percent") or 0))
         self.active_draft_id = draft.get("Draft_ID")
         if draft.get("Client_ID"):
             for index in range(self.cb_client.count()):
@@ -1185,12 +1186,13 @@ class PointOfSaleTab(QWidget):
             
         # If the same lot is scanned again, increase the quantity smoothly.
         for row in range(self.cart_table.rowCount()):
-            existing_batch = self.cart_table.item(row, 0).data(Qt.UserRole)
-            if existing_batch and existing_batch['Batch_ID'] == batch['Batch_ID']:
-                qty_widget = self.cart_table.cellWidget(row, 4)
+            existing_item = self.cart_table.item(row, 1)
+            existing_batch = existing_item.data(Qt.UserRole) if existing_item else None
+            if existing_batch and existing_batch.get('Batch_ID') == batch.get('Batch_ID'):
+                qty_widget = self.cart_table.cellWidget(row, 2)
                 if qty_widget and qty_widget.value() < qty_widget.maximum():
                     qty_widget.setValue(min(qty_widget.maximum(), qty_widget.value() + max(0.01, float(quantity or 1))))
-                    self.cart_table.scrollToItem(self.cart_table.item(row, 0))
+                    self.cart_table.scrollToItem(existing_item)
                     self.flash_scan_feedback(True)
                     self.clear_search_input()
                     return
@@ -1200,112 +1202,20 @@ class PointOfSaleTab(QWidget):
 
         row_idx = self.cart_table.rowCount()
         self.cart_table.insertRow(row_idx)
-        self.cart_table.setRowHeight(row_idx, 58)
+        self.cart_table.setRowHeight(row_idx, 48)
         
-        # Product Name
-        name_item = QTableWidgetItem(batch['Product_Name'])
-        name_item.setData(Qt.UserRole, batch)
-        name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
-        name_item.setToolTip(batch['Product_Name'])
-        name_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.cart_table.setItem(row_idx, 0, name_item)
-        
-        # Lot
-        lot_item = QTableWidgetItem(batch.get('Lot_Number', '---'))
-        lot_item.setFlags(lot_item.flags() & ~Qt.ItemIsEditable)
-        lot_item.setToolTip(str(batch.get('Lot_Number', '---')))
-        lot_item.setTextAlignment(Qt.AlignCenter)
-        self.cart_table.setItem(row_idx, 1, lot_item)
-        
-        # Barcode badge
-        bc1 = batch.get('Internal_Barcode')
-        bc2 = batch.get('External_Barcode')
-        barcode_text = f"BR: {bc1}" if self.is_real_code(bc1) else "---"
-        barcode_tip = barcode_text
-        if self.is_real_code(bc2):
-            barcode_tip = f"{barcode_tip}\nExt: {bc2}"
-        barcode_label = QLabel(barcode_text)
-        barcode_label.setToolTip(barcode_tip)
-        barcode_label.setAlignment(Qt.AlignCenter)
-        barcode_label.setStyleSheet("""
-            QLabel {
-                background-color: #edf7ff;
-                color: #0f5f8f;
-                border: 1px solid #c7e4fb;
-                border-radius: 6px;
-                font-weight: 800;
-                padding: 6px 8px;
-            }
-        """)
-        self.cart_table.setCellWidget(row_idx, 2, barcode_label)
-        
-        # Qty Stock
-        stock_item = QTableWidgetItem(str(batch['Quantity_Current']))
-        stock_item.setFlags(stock_item.flags() & ~Qt.ItemIsEditable)
-        stock_item.setTextAlignment(Qt.AlignCenter)
-        self.cart_table.setItem(row_idx, 3, stock_item)
-        
-        # Qty Sold Input
-        qty_spin = QDoubleSpinBox()
-        qty_spin.setRange(0.01, float(batch['Quantity_Current']))
-        qty_spin.setDecimals(2)
-        qty_spin.setValue(min(qty_spin.maximum(), max(0.01, float(quantity or 1))))
-        qty_spin.setAlignment(Qt.AlignCenter)
-        qty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        qty_spin.valueChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row_idx, 4, qty_spin)
-        
-        # Price Selection Combo (Support 4 prices)
-        price_combo = QComboBox()
-        price_combo.setMinimumWidth(150)
-        p1 = float(batch.get('Selling_Price_HT') or 0)
-        p2 = float(batch.get('Selling_Price_HT_2') or 0)
-        p3 = float(batch.get('Selling_Price_HT_3') or 0)
-        p4 = float(batch.get('Selling_Price_HT_4') or 0)
-        
-        if p1 > 0: price_combo.addItem(f"Prix 1 - {format_money(p1)} DA", p1)
-        if p2 > 0: price_combo.addItem(f"Prix 2 - {format_money(p2)} DA", p2)
-        if p3 > 0: price_combo.addItem(f"Prix 3 - {format_money(p3)} DA", p3)
-        if p4 > 0: price_combo.addItem(f"Prix 4 - {format_money(p4)} DA", p4)
-        
-        # If no selling prices defined, fallback to 0.00 (DO NOT SHOW PURCHASE PRICE)
-        if price_combo.count() == 0:
-            price_combo.addItem("Aucun prix défini", 0.0)
-            
-        price_combo.currentIndexChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row_idx, 5, price_combo)
-        
-        # Remise (New custom widget for % or DA, initialized to 0)
-        remise_widget = RemiseWidget()
-        remise_widget.valueChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row_idx, 6, remise_widget)
-        
-        # TVA
-        tva_spin = QDoubleSpinBox()
-        tva_spin.setRange(0, 100)
-        tva_spin.setSuffix(" %")
-        tva_spin.setAlignment(Qt.AlignCenter)
-        tva_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        tva_spin.setValue(float(batch.get('Selling_TVA_Percent') or batch.get('Tax_Rate_Percent') or 0))
-        tva_spin.valueChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row_idx, 7, tva_spin)
-        
-        # Line Total TTC
-        total_item = QTableWidgetItem("0.00")
-        total_item.setFlags(total_item.flags() & ~Qt.ItemIsEditable)
-        total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.cart_table.setItem(row_idx, 8, total_item)
-        
-        # Action Delete
+        # Col 0: Action Delete (Bouton supprimer prioritaire en première colonne)
         btn_del = QPushButton("X")
-        btn_del.setFixedSize(30, 30)
+        btn_del.setFixedSize(28, 28)
+        btn_del.setToolTip("Supprimer cette ligne du panier")
         btn_del.setStyleSheet("""
             QPushButton {
                 color: #e74c3c;
                 border: 1px solid #fecaca;
-                border-radius: 15px;
+                border-radius: 14px;
                 background: #fff7f7;
                 font-weight: 900;
+                font-size: 13px;
             }
             QPushButton:hover {
                 color: #ffffff;
@@ -1320,7 +1230,101 @@ class PointOfSaleTab(QWidget):
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setAlignment(Qt.AlignCenter)
         action_layout.addWidget(btn_del)
-        self.cart_table.setCellWidget(row_idx, 9, action_cell)
+        self.cart_table.setCellWidget(row_idx, 0, action_cell)
+
+        # Col 1: Product Name
+        name_item = QTableWidgetItem(batch.get('Product_Name', 'Produit'))
+        name_item.setData(Qt.UserRole, batch)
+        name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+        name_item.setToolTip(batch.get('Product_Name', 'Produit'))
+        name_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.cart_table.setItem(row_idx, 1, name_item)
+        
+        # Col 2: Qty Sold Input
+        qty_spin = QDoubleSpinBox()
+        qty_spin.setRange(0.01, float(batch.get('Quantity_Current') or 999999))
+        qty_spin.setDecimals(2)
+        qty_spin.setValue(min(qty_spin.maximum(), max(0.01, float(quantity or 1))))
+        qty_spin.setAlignment(Qt.AlignCenter)
+        qty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        qty_spin.valueChanged.connect(self.calculate_totals)
+        self.cart_table.setCellWidget(row_idx, 2, qty_spin)
+        
+        # Col 3: Price Selection Combo (Support 4 prices)
+        price_combo = QComboBox()
+        price_combo.setMinimumWidth(130)
+        p1 = float(batch.get('Selling_Price_HT') or 0)
+        p2 = float(batch.get('Selling_Price_HT_2') or 0)
+        p3 = float(batch.get('Selling_Price_HT_3') or 0)
+        p4 = float(batch.get('Selling_Price_HT_4') or 0)
+        
+        if p1 > 0: price_combo.addItem(f"Prix 1 - {format_money(p1)} DA", p1)
+        if p2 > 0: price_combo.addItem(f"Prix 2 - {format_money(p2)} DA", p2)
+        if p3 > 0: price_combo.addItem(f"Prix 3 - {format_money(p3)} DA", p3)
+        if p4 > 0: price_combo.addItem(f"Prix 4 - {format_money(p4)} DA", p4)
+        
+        if price_combo.count() == 0:
+            price_combo.addItem("0,00 DA", 0.0)
+            
+        price_combo.currentIndexChanged.connect(self.calculate_totals)
+        self.cart_table.setCellWidget(row_idx, 3, price_combo)
+        
+        # Col 4: Remise (Widget % ou DA)
+        remise_widget = RemiseWidget()
+        remise_widget.valueChanged.connect(self.calculate_totals)
+        self.cart_table.setCellWidget(row_idx, 4, remise_widget)
+        
+        # Col 5: Line Total TTC
+        total_item = QTableWidgetItem("0.00")
+        total_item.setFlags(total_item.flags() & ~Qt.ItemIsEditable)
+        total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.cart_table.setItem(row_idx, 5, total_item)
+
+        # Col 6: Barcode badge
+        bc1 = batch.get('Internal_Barcode')
+        bc2 = batch.get('External_Barcode')
+        barcode_text = f"{bc1}" if self.is_real_code(bc1) else "---"
+        barcode_tip = barcode_text
+        if self.is_real_code(bc2):
+            barcode_tip = f"{barcode_tip}\nExt: {bc2}"
+        barcode_label = QLabel(barcode_text)
+        barcode_label.setToolTip(barcode_tip)
+        barcode_label.setAlignment(Qt.AlignCenter)
+        barcode_label.setStyleSheet("""
+            QLabel {
+                background-color: #edf7ff;
+                color: #0f5f8f;
+                border: 1px solid #c7e4fb;
+                border-radius: 4px;
+                font-weight: 700;
+                padding: 4px 6px;
+                font-size: 11px;
+            }
+        """)
+        self.cart_table.setCellWidget(row_idx, 6, barcode_label)
+        
+        # Col 7: Qty Stock (Non prioritaire)
+        stock_item = QTableWidgetItem(str(batch.get('Quantity_Current', 0)))
+        stock_item.setFlags(stock_item.flags() & ~Qt.ItemIsEditable)
+        stock_item.setTextAlignment(Qt.AlignCenter)
+        self.cart_table.setItem(row_idx, 7, stock_item)
+
+        # Col 8: N° Lot (Priorité faible, en fin de tableau)
+        lot_item = QTableWidgetItem(batch.get('Lot_Number', '---'))
+        lot_item.setFlags(lot_item.flags() & ~Qt.ItemIsEditable)
+        lot_item.setToolTip(str(batch.get('Lot_Number', '---')))
+        lot_item.setTextAlignment(Qt.AlignCenter)
+        self.cart_table.setItem(row_idx, 8, lot_item)
+        
+        # Col 9: TVA (Priorité faible, en fin de tableau)
+        tva_spin = QDoubleSpinBox()
+        tva_spin.setRange(0, 100)
+        tva_spin.setSuffix(" %")
+        tva_spin.setAlignment(Qt.AlignCenter)
+        tva_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        tva_spin.setValue(float(batch.get('Selling_TVA_Percent') or batch.get('Tax_Rate_Percent') or 0))
+        tva_spin.valueChanged.connect(self.calculate_totals)
+        self.cart_table.setCellWidget(row_idx, 9, tva_spin)
         
         self.calculate_totals()
         self.cart_table.scrollToBottom()
@@ -1332,7 +1336,7 @@ class PointOfSaleTab(QWidget):
     def remove_cart_row(self, button):
         # Must find the real row dynamically because indexes shift
         for r in range(self.cart_table.rowCount()):
-            widget = self.cart_table.cellWidget(r, 9)
+            widget = self.cart_table.cellWidget(r, 0)
             if widget == button or (widget and widget.findChild(QPushButton) == button):
                 self.cart_table.removeRow(r)
                 break
@@ -1344,11 +1348,11 @@ class PointOfSaleTab(QWidget):
         total_remise = 0.0
         
         for row in range(self.cart_table.rowCount()):
-            qty_widget = self.cart_table.cellWidget(row, 4)
-            price_widget = self.cart_table.cellWidget(row, 5)
-            remise_widget = self.cart_table.cellWidget(row, 6)
-            tva_widget = self.cart_table.cellWidget(row, 7)
-            total_item = self.cart_table.item(row, 8)
+            qty_widget = self.cart_table.cellWidget(row, 2)
+            price_widget = self.cart_table.cellWidget(row, 3)
+            remise_widget = self.cart_table.cellWidget(row, 4)
+            total_item = self.cart_table.item(row, 5)
+            tva_widget = self.cart_table.cellWidget(row, 9)
             
             if not all([qty_widget, price_widget, remise_widget, tva_widget, total_item]):
                 continue
@@ -1425,12 +1429,12 @@ class PointOfSaleTab(QWidget):
         # 2. Add Details
         success = True
         for row in range(self.cart_table.rowCount()):
-            batch = self.cart_table.item(row, 0).data(Qt.UserRole)
-            qty = self.cart_table.cellWidget(row, 4).value()
-            price_ht = self.cart_table.cellWidget(row, 5).currentData() or 0.0
+            batch = self.cart_table.item(row, 1).data(Qt.UserRole)
+            qty = self.cart_table.cellWidget(row, 2).value()
+            price_ht = self.cart_table.cellWidget(row, 3).currentData() or 0.0
             
-            remise_val = self.cart_table.cellWidget(row, 6).get_value()
-            remise_type = self.cart_table.cellWidget(row, 6).get_type()
+            remise_val = self.cart_table.cellWidget(row, 4).get_value()
+            remise_type = self.cart_table.cellWidget(row, 4).get_type()
             
             line_ht = qty * price_ht
             if remise_type == "%":
@@ -1439,7 +1443,7 @@ class PointOfSaleTab(QWidget):
                 remise_amount = max(0.0, min(remise_val, line_ht))
                 remise_pct = (remise_amount / line_ht * 100.0) if line_ht > 0 else 0.0
                 
-            tva_pct = self.cart_table.cellWidget(row, 7).value()
+            tva_pct = self.cart_table.cellWidget(row, 9).value()
             
             detail_id = self.data_manager.sales.add_invoice_detail(
                 invoice_id=invoice_id,
@@ -1591,11 +1595,12 @@ class PointOfSaleTab(QWidget):
 
         cart_items = []
         for row in range(self.cart_table.rowCount()):
-            batch = self.cart_table.item(row, 0).data(Qt.UserRole)
-            qty = self.cart_table.cellWidget(row, 4).value()
-            price_ht = self.cart_table.cellWidget(row, 5).currentData() or 0.0
-            remise_val = self.cart_table.cellWidget(row, 6).get_value()
-            remise_type = self.cart_table.cellWidget(row, 6).get_type()
+            batch_item = self.cart_table.item(row, 1)
+            batch = batch_item.data(Qt.UserRole) if batch_item else {}
+            qty = self.cart_table.cellWidget(row, 2).value()
+            price_ht = self.cart_table.cellWidget(row, 3).currentData() or 0.0
+            remise_val = self.cart_table.cellWidget(row, 4).get_value()
+            remise_type = self.cart_table.cellWidget(row, 4).get_type()
 
             line_ht = qty * price_ht
             if remise_type == "%":
@@ -1605,12 +1610,12 @@ class PointOfSaleTab(QWidget):
                 remise_pct = (remise_amount / line_ht * 100.0) if line_ht > 0 else 0.0
 
             cart_items.append({
-                "product_id": batch['Product_ID'],
-                "batch_id": batch['Batch_ID'],
+                "product_id": batch.get('Product_ID'),
+                "batch_id": batch.get('Batch_ID'),
                 "qty_sold": qty,
                 "unit_price_ht": price_ht,
                 "discount_percent": remise_pct,
-                "tva_percent": self.cart_table.cellWidget(row, 7).value(),
+                "tva_percent": self.cart_table.cellWidget(row, 9).value(),
             })
 
         self.btn_validate.setEnabled(False)

@@ -4,7 +4,7 @@ import logging
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, 
                                QHeaderView, QPushButton, QHBoxLayout, QMessageBox, QLineEdit)
 from PySide6.QtCore import Qt
-from ui.widgets.sales.dialogs import ClientDialog
+from .dialogs import ClientDialog
 
 class ClientsTab(QWidget):
     """

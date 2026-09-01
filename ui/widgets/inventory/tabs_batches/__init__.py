@@ -39,6 +39,7 @@ from ._actions      import (
     show_batch_details, open_quick_transfer, open_quick_consume, unpack_and_transfer_batch,
     go_to_history, open_history_via_barcode, go_to_reception,
     handle_barcode_scan, open_quick_add, open_quick_edit,
+    open_modify_sales_prices, open_price_history,
     edit_reclamation, on_vertical_header_clicked, on_cell_clicked
 )
 from ._export       import (
@@ -131,6 +132,8 @@ class BatchesTab(QWidget):
     handle_barcode_scan     = handle_barcode_scan
     open_quick_add          = open_quick_add
     open_quick_edit         = open_quick_edit
+    open_modify_sales_prices = open_modify_sales_prices
+    open_price_history      = open_price_history
     edit_reclamation        = edit_reclamation
     on_vertical_header_clicked = on_vertical_header_clicked
     on_cell_clicked         = on_cell_clicked

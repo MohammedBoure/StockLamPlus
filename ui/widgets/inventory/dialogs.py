@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor, QFont
 # استيراد BaseDialog
 from ui.widgets.master_data.dialogs import BaseDialog
 from ui.formatting import format_money, format_quantity, quantity_to_int
+from decimal import Decimal
 
 # استيراد LocationTreeComboBox
 try:
@@ -1069,3 +1070,474 @@ class UnpackTransferDialog(BaseDialog):
             'print_label': self.cb_print.isChecked(),
             'print_copies': self.spin_copies.value()
         }
+
+
+# ==============================================================================
+# 9. Price History Dialog
+# ==============================================================================
+
+class PriceHistoryDialog(BaseDialog):
+    """نافذة سجل تتبع تعديلات أسعار البيع للوط أو المنتج"""
+
+    def __init__(self, manager, parent=None, batch_id=None, product_id=None, product_name=""):
+        super().__init__(parent)
+        self.manager = manager
+        self.batch_id = batch_id
+        self.product_id = product_id
+        self.product_name = product_name or "Produit"
+
+        self.setWindowTitle(f"Historique des Prix - {self.product_name}")
+        self.resize(880, 500)
+        self.setStyleSheet("background-color: #ffffff;")
+
+        self.init_ui()
+        self.load_history()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        lbl_title = QLabel(f"📈 Historique des modifications de prix : <b>{self.product_name}</b>")
+        lbl_title.setStyleSheet("font-size: 14px; color: #007572; padding: 4px 0;")
+        layout.addWidget(lbl_title)
+
+        self.table = QTableWidget()
+        self.table.setColumnCount(8)
+        self.table.setHorizontalHeaderLabels([
+            "Date / Heure", "Utilisateur", "N° Lot", "Type de Prix",
+            "Ancien Prix (DA)", "Nouveau Prix (DA)", "Écart (DA)", "Motif de Modification"
+        ])
+        header = self.table.horizontalHeader()
+        for c in range(8):
+            header.setSectionResizeMode(c, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(7, QHeaderView.Stretch)
+
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: #ffffff;
+                border: 1px solid #dcdfe6;
+                gridline-color: #f1f5f9;
+                font-size: 12px;
+                color: #2c3e50;
+            }
+            QHeaderView::section {
+                background-color: #f8fafc;
+                color: #2c3e50;
+                font-weight: bold;
+                font-size: 12px;
+                border: none;
+                border-bottom: 2px solid #007572;
+                border-right: 1px solid #e2e8f0;
+                padding: 6px 8px;
+            }
+        """)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        layout.addWidget(self.table)
+
+        btn_box = QHBoxLayout()
+        btn_box.addStretch()
+        btn_close = QPushButton("Fermer")
+        btn_close.setCursor(Qt.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: #007572;
+                color: #ffffff;
+                font-weight: bold;
+                border-radius: 4px;
+                padding: 6px 20px;
+                min-height: 30px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #005a57;
+            }
+        """)
+        btn_close.clicked.connect(self.accept)
+        btn_box.addWidget(btn_close)
+        layout.addLayout(btn_box)
+
+    def load_history(self):
+        try:
+            logs = self.manager.batches.get_price_change_history(
+                product_id=self.product_id,
+                batch_id=self.batch_id,
+                limit=200
+            )
+            self.table.setRowCount(0)
+            if not logs:
+                self.table.insertRow(0)
+                item = QTableWidgetItem("Aucune modification de prix enregistrée pour ce produit / lot.")
+                item.setTextAlignment(Qt.AlignCenter)
+                item.setForeground(QColor("#7f8c8d"))
+                self.table.setItem(0, 0, item)
+                self.table.setSpan(0, 0, 1, 8)
+                return
+
+            for r, log in enumerate(logs):
+                self.table.insertRow(r)
+                dt_str = str(log.get('Changed_At', ''))[:19]
+                user_str = log.get('Changed_By_Name') or "Système"
+                lot_str = log.get('Lot_Number') or "---"
+                price_type = log.get('Price_Type') or "Prix Vente"
+                old_p = float(log.get('Old_Price') or 0.0)
+                new_p = float(log.get('New_Price') or 0.0)
+                diff = new_p - old_p
+                reason = log.get('Reason') or "---"
+
+                def _item(text, align=Qt.AlignLeft | Qt.AlignVCenter, color=None, bold=False):
+                    it = QTableWidgetItem(str(text))
+                    it.setTextAlignment(align)
+                    if color:
+                        it.setForeground(color)
+                    if bold:
+                        font = it.font()
+                        font.setBold(True)
+                        it.setFont(font)
+                    return it
+
+                self.table.setItem(r, 0, _item(dt_str))
+                self.table.setItem(r, 1, _item(user_str))
+                self.table.setItem(r, 2, _item(lot_str, align=Qt.AlignCenter))
+                self.table.setItem(r, 3, _item(price_type, bold=True))
+                self.table.setItem(r, 4, _item(format_money(old_p), align=Qt.AlignRight | Qt.AlignVCenter))
+                self.table.setItem(r, 5, _item(format_money(new_p), align=Qt.AlignRight | Qt.AlignVCenter, bold=True))
+
+                diff_color = QColor("#27ae60") if diff > 0 else (QColor("#c0392b") if diff < 0 else QColor("#7f8c8d"))
+                diff_sign = "+" if diff > 0 else ""
+                diff_str = f"{diff_sign}{format_money(diff)}"
+                self.table.setItem(r, 6, _item(diff_str, align=Qt.AlignRight | Qt.AlignVCenter, color=diff_color, bold=True))
+                self.table.setItem(r, 7, _item(reason))
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Échec du chargement de l'historique : {e}")
+
+
+# ==============================================================================
+# 10. Modify Sales Prices Dialog
+# ==============================================================================
+
+class ModifySalesPricesDialog(BaseDialog):
+    """حوار تعديل أسعار البيع (Prix Vente 1, 2, 3, 4 et TVA) مع احتساب الهامش والتدقيق"""
+
+    def __init__(self, batch_data, manager, parent=None):
+        super().__init__(parent)
+        self.batch_data = batch_data
+        self.manager = manager
+        self.current_user = getattr(parent, 'current_user', None) if parent else None
+
+        prod_name = batch_data.get('Product_Name', 'Produit')
+        self.setWindowTitle(f"Ajustement des Prix de Vente - {prod_name}")
+        self.resize(650, 520)
+        self.setStyleSheet("background-color: #ffffff;")
+
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(12)
+
+        # 1. Product & Batch Summary Card
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 10px;
+            }
+            QLabel {
+                font-size: 12px;
+                color: #2c3e50;
+            }
+        """)
+        card_layout = QGridLayout(card)
+        card_layout.setContentsMargins(5, 5, 5, 5)
+        card_layout.setSpacing(8)
+
+        prod_name = self.batch_data.get('Product_Name', '---')
+        lot_no = self.batch_data.get('Lot_Number', '---')
+        stock_qty = format_quantity(self.batch_data.get('Quantity_Current', 0))
+        unit_str = self.batch_data.get('Stock_Unit') or "Unité"
+
+        # Coût d'achat pour calcul de marge
+        self.unit_cost_ht = float(self.batch_data.get('Unit_Price_Received', 0.0) or 0.0)
+        disc = float(self.batch_data.get('Discount_Percent', 0.0) or 0.0) / 100.0
+        tax = float(self.batch_data.get('Tax_Rate_Percent', 0.0) or 0.0) / 100.0
+        self.unit_cost_ttc = self.unit_cost_ht * (1 - disc) * (1 + tax)
+
+        card_layout.addWidget(QLabel("<b>Produit :</b>"), 0, 0)
+        card_layout.addWidget(QLabel(f"<b>{prod_name}</b>"), 0, 1, 1, 3)
+
+        card_layout.addWidget(QLabel("<b>Lot :</b>"), 1, 0)
+        card_layout.addWidget(QLabel(lot_no), 1, 1)
+
+        card_layout.addWidget(QLabel("<b>Stock en cours :</b>"), 1, 2)
+        card_layout.addWidget(QLabel(f"<b>{stock_qty} {unit_str}</b>"), 1, 3)
+
+        card_layout.addWidget(QLabel("<b>Coût Achat HT :</b>"), 2, 0)
+        card_layout.addWidget(QLabel(f"{format_money(self.unit_cost_ht)} DA"), 2, 1)
+
+        card_layout.addWidget(QLabel("<b>Coût Achat TTC :</b>"), 2, 2)
+        card_layout.addWidget(QLabel(f"{format_money(self.unit_cost_ttc)} DA"), 2, 3)
+
+        main_layout.addWidget(card)
+
+        # 2. Formulaire des Prix de Vente
+        group_prices = QGroupBox("💲 Tarification et Prix de Vente (DA)")
+        group_prices.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                color: #007572;
+                border: 1px solid #dcdfe6;
+                border-radius: 6px;
+                margin-top: 6px;
+                padding-top: 14px;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 6px;
+                background-color: #ffffff;
+            }
+            QDoubleSpinBox, QComboBox, QLineEdit {
+                background-color: #ffffff;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 4px 8px;
+                min-height: 28px;
+                font-size: 12px;
+                color: #2c3e50;
+            }
+            QDoubleSpinBox:focus, QComboBox:focus, QLineEdit:focus {
+                border: 1.5px solid #007572;
+            }
+        """)
+
+        form_layout = QGridLayout(group_prices)
+        form_layout.setContentsMargins(12, 12, 12, 12)
+        form_layout.setSpacing(10)
+
+        # Prix Vente 1 (Principal)
+        form_layout.addWidget(QLabel("<b>Prix Vente 1 (HT) :</b>"), 0, 0)
+        self.spin_p1 = QDoubleSpinBox()
+        self.spin_p1.setRange(0.0, 99999999.99)
+        self.spin_p1.setDecimals(2)
+        self.spin_p1.setValue(float(self.batch_data.get('Selling_Price_HT', 0.0) or 0.0))
+        self.spin_p1.setSuffix(" DA")
+        self.spin_p1.valueChanged.connect(self._update_margin_label)
+        form_layout.addWidget(self.spin_p1, 0, 1)
+
+        self.lbl_margin = QLabel()
+        self.lbl_margin.setStyleSheet("font-size: 11px; font-weight: bold;")
+        form_layout.addWidget(self.lbl_margin, 0, 2)
+
+        # TVA Vente
+        form_layout.addWidget(QLabel("<b>TVA Vente :</b>"), 1, 0)
+        self.spin_tva = QDoubleSpinBox()
+        self.spin_tva.setRange(0.0, 100.0)
+        self.spin_tva.setDecimals(2)
+        self.spin_tva.setValue(float(self.batch_data.get('Selling_TVA_Percent', 0.0) or 0.0))
+        self.spin_tva.setSuffix(" %")
+        form_layout.addWidget(self.spin_tva, 1, 1)
+
+        # Prix Vente 2
+        form_layout.addWidget(QLabel("Prix Vente 2 (HT) :"), 2, 0)
+        self.spin_p2 = QDoubleSpinBox()
+        self.spin_p2.setRange(0.0, 99999999.99)
+        self.spin_p2.setDecimals(2)
+        self.spin_p2.setValue(float(self.batch_data.get('Selling_Price_HT_2', 0.0) or 0.0))
+        self.spin_p2.setSuffix(" DA")
+        form_layout.addWidget(self.spin_p2, 2, 1)
+
+        # Prix Vente 3
+        form_layout.addWidget(QLabel("Prix Vente 3 (HT) :"), 3, 0)
+        self.spin_p3 = QDoubleSpinBox()
+        self.spin_p3.setRange(0.0, 99999999.99)
+        self.spin_p3.setDecimals(2)
+        self.spin_p3.setValue(float(self.batch_data.get('Selling_Price_HT_3', 0.0) or 0.0))
+        self.spin_p3.setSuffix(" DA")
+        form_layout.addWidget(self.spin_p3, 3, 1)
+
+        # Prix Vente 4
+        form_layout.addWidget(QLabel("Prix Vente 4 (HT) :"), 4, 0)
+        self.spin_p4 = QDoubleSpinBox()
+        self.spin_p4.setRange(0.0, 99999999.99)
+        self.spin_p4.setDecimals(2)
+        self.spin_p4.setValue(float(self.batch_data.get('Selling_Price_HT_4', 0.0) or 0.0))
+        self.spin_p4.setSuffix(" DA")
+        form_layout.addWidget(self.spin_p4, 4, 1)
+
+        main_layout.addWidget(group_prices)
+
+        # 3. Scope & Audit Reason
+        group_audit = QGroupBox("📝 Audit & Portée de la Modification")
+        group_audit.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                color: #2c3e50;
+                border: 1px solid #dcdfe6;
+                border-radius: 6px;
+                margin-top: 6px;
+                padding-top: 14px;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 6px;
+                background-color: #ffffff;
+            }
+        """)
+        audit_layout = QVBoxLayout(group_audit)
+        audit_layout.setContentsMargins(12, 12, 12, 12)
+        audit_layout.setSpacing(8)
+
+        reason_layout = QHBoxLayout()
+        reason_layout.addWidget(QLabel("<b>Motif :</b>"))
+        self.combo_reason = QComboBox()
+        self.combo_reason.setEditable(True)
+        self.combo_reason.addItems([
+            "Ajustement tarifaire périodique",
+            "Hausse des tarifs fournisseur",
+            "Réalignement sur le marché",
+            "Offre promotionnelle",
+            "Correction d'erreur de saisie",
+            "Autre motif"
+        ])
+        reason_layout.addWidget(self.combo_reason, 1)
+        audit_layout.addLayout(reason_layout)
+
+        self.cb_all_batches = QCheckBox("Appliquer également ces nouveaux prix à TOUS les lots actifs de ce produit")
+        self.cb_all_batches.setStyleSheet("font-weight: bold; color: #d35400; padding-top: 4px;")
+        audit_layout.addWidget(self.cb_all_batches)
+
+        main_layout.addWidget(group_audit)
+
+        self._update_margin_label()
+
+        # 4. Action Buttons
+        btn_bar = QHBoxLayout()
+
+        btn_history = QPushButton("🕒 Historique des prix")
+        btn_history.setCursor(Qt.PointingHandCursor)
+        btn_history.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #2c3e50;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 6px 14px;
+                font-size: 12px;
+                min-height: 28px;
+            }
+            QPushButton:hover {
+                background-color: #e2e8f0;
+            }
+        """)
+        btn_history.clicked.connect(self.open_history_view)
+        btn_bar.addWidget(btn_history)
+
+        btn_bar.addStretch()
+
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.setCursor(Qt.PointingHandCursor)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #495057;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 6px 16px;
+                font-size: 12px;
+                min-height: 28px;
+            }
+            QPushButton:hover {
+                background-color: #f8f9fa;
+            }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        btn_bar.addWidget(btn_cancel)
+
+        btn_save = QPushButton("💾 Enregistrer les prix")
+        btn_save.setCursor(Qt.PointingHandCursor)
+        btn_save.setStyleSheet("""
+            QPushButton {
+                background-color: #007572;
+                color: #ffffff;
+                font-weight: bold;
+                border-radius: 4px;
+                padding: 6px 20px;
+                font-size: 12px;
+                min-height: 28px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #005a57;
+            }
+        """)
+        btn_save.clicked.connect(self.save_prices)
+        btn_bar.addWidget(btn_save)
+
+        main_layout.addLayout(btn_bar)
+
+    def _update_margin_label(self):
+        p1 = self.spin_p1.value()
+        if self.unit_cost_ht > 0 and p1 > 0:
+            margin_da = p1 - self.unit_cost_ht
+            margin_pct = (margin_da / self.unit_cost_ht) * 100.0
+            color = "#27ae60" if margin_da >= 0 else "#c0392b"
+            sign = "+" if margin_da >= 0 else ""
+            self.lbl_margin.setText(f"Marge: {sign}{format_money(margin_da)} DA ({sign}{margin_pct:.1f}%)")
+            self.lbl_margin.setStyleSheet(f"font-size: 11px; font-weight: bold; color: {color};")
+        else:
+            self.lbl_margin.setText("")
+
+    def open_history_view(self):
+        dlg = PriceHistoryDialog(
+            manager=self.manager,
+            parent=self,
+            batch_id=self.batch_data.get('Batch_ID'),
+            product_id=self.batch_data.get('Product_ID'),
+            product_name=self.batch_data.get('Product_Name', '')
+        )
+        dlg.exec()
+
+    def save_prices(self):
+        user_id = getattr(self.current_user, 'get', lambda k, d=None: None)('User_ID') if self.current_user else None
+        if not user_id and hasattr(self.parent(), 'window'):
+            win = self.parent().window()
+            if hasattr(win, 'current_user') and isinstance(win.current_user, dict):
+                user_id = win.current_user.get('User_ID')
+
+        new_prices = {
+            'Selling_Price_HT': Decimal(str(self.spin_p1.value())),
+            'Selling_Price_HT_2': Decimal(str(self.spin_p2.value())),
+            'Selling_Price_HT_3': Decimal(str(self.spin_p3.value())),
+            'Selling_Price_HT_4': Decimal(str(self.spin_p4.value())),
+            'Selling_TVA_Percent': Decimal(str(self.spin_tva.value()))
+        }
+
+        update_all = self.cb_all_batches.isChecked()
+        reason = self.combo_reason.currentText().strip()
+
+        success, err, count = self.manager.batches.update_batch_sales_prices(
+            batch_id=self.batch_data['Batch_ID'],
+            new_prices=new_prices,
+            update_all_product_batches=update_all,
+            reason=reason,
+            user_id=user_id
+        )
+
+        if success:
+            msg = f"Prix de vente mis à jour avec succès pour {count} lot(s)."
+            if update_all:
+                msg += "\nLes tarifs du produit dans les Données de Base ont également été synchronisés."
+            QMessageBox.information(self, "Succès", msg)
+            super().accept()
+        else:
+            QMessageBox.critical(self, "Erreur", f"Échec de l'enregistrement des prix :\n{err}")

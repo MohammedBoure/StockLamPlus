@@ -3,7 +3,7 @@
 import mysql.connector
 import logging
 from datetime import date, datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
 from .system_logger import log_methods
@@ -1457,4 +1457,166 @@ class InventoryBatchManager:
         except Exception as e:
             logging.error(f"Critical Error in unpack_and_transfer_batch: {e}", exc_info=True)
             return False, str(e), None
+
+    def update_batch_sales_prices(
+        self,
+        batch_id: int,
+        new_prices: dict,
+        update_all_product_batches: bool = False,
+        reason: str = "",
+        user_id: Optional[int] = None
+    ) -> Tuple[bool, Optional[str], int]:
+        """
+        Met à jour les prix de vente d'un lot et optionnellement de tous les lots actifs du même produit.
+        Enregistre chaque variation de prix dans la table d'audit Price_Change_Log.
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                try:
+                    # 1. Récupérer le lot cible
+                    cursor.execute("""
+                        SELECT b.*, p.Product_Name
+                        FROM Inventory_Batches b
+                        JOIN Products_Master p ON b.Product_ID = p.Product_ID
+                        WHERE b.Batch_ID = %s FOR UPDATE
+                    """, (batch_id,))
+                    batch = cursor.fetchone()
+                    if not batch:
+                        conn.rollback()
+                        return False, "Lot introuvable.", 0
+
+                    product_id = batch['Product_ID']
+                    lot_number = batch['Lot_Number']
+
+                    # 2. Identifier les lots à modifier
+                    if update_all_product_batches:
+                        cursor.execute("""
+                            SELECT Batch_ID, Lot_Number,
+                                   Selling_Price_HT, Selling_Price_HT_2, Selling_Price_HT_3, Selling_Price_HT_4, Selling_TVA_Percent
+                            FROM Inventory_Batches
+                            WHERE Product_ID = %s AND Status != 'Depleted'
+                            FOR UPDATE
+                        """, (product_id,))
+                        target_batches = cursor.fetchall()
+                    else:
+                        target_batches = [batch]
+
+                    price_keys = [
+                        ('Selling_Price_HT', 'Prix Vente 1'),
+                        ('Selling_Price_HT_2', 'Prix Vente 2'),
+                        ('Selling_Price_HT_3', 'Prix Vente 3'),
+                        ('Selling_Price_HT_4', 'Prix Vente 4'),
+                        ('Selling_TVA_Percent', 'TVA Vente %')
+                    ]
+
+                    for tb in target_batches:
+                        tb_id = tb['Batch_ID']
+                        tb_lot = tb.get('Lot_Number') or lot_number
+
+                        # Vérifier chaque prix et enregistrer l'historique si changement
+                        for key, label in price_keys:
+                            if key in new_prices and new_prices[key] is not None:
+                                old_val = Decimal(str(tb.get(key) or 0.0)).quantize(Decimal('0.01'))
+                                new_val = Decimal(str(new_prices[key])).quantize(Decimal('0.01'))
+
+                                if old_val != new_val:
+                                    cursor.execute("""
+                                        INSERT INTO Price_Change_Log
+                                        (Product_ID, Batch_ID, Lot_Number, Price_Type, Old_Price, New_Price, Reason, Changed_By_User_ID, Changed_At)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                                    """, (
+                                        product_id, tb_id, tb_lot, label, old_val, new_val,
+                                        reason.strip() if reason else "Ajustement tarifaire",
+                                        user_id
+                                    ))
+
+                        # Mettre à jour le lot
+                        cursor.execute("""
+                            UPDATE Inventory_Batches
+                            SET Selling_Price_HT = %s,
+                                Selling_Price_HT_2 = %s,
+                                Selling_Price_HT_3 = %s,
+                                Selling_Price_HT_4 = %s,
+                                Selling_TVA_Percent = %s
+                            WHERE Batch_ID = %s
+                        """, (
+                            Decimal(str(new_prices.get('Selling_Price_HT', tb.get('Selling_Price_HT', 0.0)))),
+                            Decimal(str(new_prices.get('Selling_Price_HT_2', tb.get('Selling_Price_HT_2', 0.0)))),
+                            Decimal(str(new_prices.get('Selling_Price_HT_3', tb.get('Selling_Price_HT_3', 0.0)))),
+                            Decimal(str(new_prices.get('Selling_Price_HT_4', tb.get('Selling_Price_HT_4', 0.0)))),
+                            Decimal(str(new_prices.get('Selling_TVA_Percent', tb.get('Selling_TVA_Percent', 0.0)))),
+                            tb_id
+                        ))
+
+                    # 3. Si mise à jour globale, synchroniser également Products_Master
+                    if update_all_product_batches:
+                        cursor.execute("""
+                            UPDATE Products_Master
+                            SET Default_Selling_Price_HT = %s,
+                                Selling_Price_HT_2 = %s,
+                                Selling_Price_HT_3 = %s,
+                                Selling_Price_HT_4 = %s
+                            WHERE Product_ID = %s
+                        """, (
+                            Decimal(str(new_prices.get('Selling_Price_HT', 0.0))),
+                            Decimal(str(new_prices.get('Selling_Price_HT_2', 0.0))),
+                            Decimal(str(new_prices.get('Selling_Price_HT_3', 0.0))),
+                            Decimal(str(new_prices.get('Selling_Price_HT_4', 0.0))),
+                            product_id
+                        ))
+
+                    conn.commit()
+                    return True, None, len(target_batches)
+
+                except Exception as inner_e:
+                    conn.rollback()
+                    logging.error(f"SQL Error in update_batch_sales_prices: {inner_e}", exc_info=True)
+                    return False, str(inner_e), 0
+                finally:
+                    cursor.close()
+
+        except Exception as e:
+            logging.error(f"Critical Error in update_batch_sales_prices: {e}", exc_info=True)
+            return False, str(e), 0
+
+    def get_price_change_history(
+        self,
+        product_id: Optional[int] = None,
+        batch_id: Optional[int] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Récupère l'historique d'audit des modifications de prix de vente.
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                query = """
+                    SELECT pcl.*, p.Product_Name,
+                           COALESCE(u.Full_Name, u.Username, 'Système') AS Changed_By_Name
+                    FROM Price_Change_Log pcl
+                    JOIN Products_Master p ON pcl.Product_ID = p.Product_ID
+                    LEFT JOIN Users u ON pcl.Changed_By_User_ID = u.User_ID
+                    WHERE 1=1
+                """
+                params = []
+                if batch_id:
+                    query += " AND (pcl.Batch_ID = %s OR pcl.Product_ID = (SELECT Product_ID FROM Inventory_Batches WHERE Batch_ID = %s LIMIT 1))"
+                    params.extend([batch_id, batch_id])
+                elif product_id:
+                    query += " AND pcl.Product_ID = %s"
+                    params.append(product_id)
+
+                query += " ORDER BY pcl.Changed_At DESC, pcl.Log_ID DESC LIMIT %s"
+                params.append(limit)
+
+                cursor.execute(query, tuple(params))
+                rows = cursor.fetchall()
+                cursor.close()
+                return rows
+        except Exception as e:
+            logging.error(f"Error fetching price change history: {e}", exc_info=True)
+            return []
+
 

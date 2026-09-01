@@ -46,6 +46,11 @@ def show_context_menu(self, pos):
     _add_action(menu, "🔍 Détails du lot", self.show_batch_details)
     _add_action(menu, "📝 Modifier la réclamation", lambda: self.edit_reclamation(batch_data))
 
+    # --- تعديل أسعار البيع وسجل الأسعار (ليس للتقني) ---
+    if role != 'Technician':
+        _add_action(menu, "💲 Modifier les prix de vente...", lambda: self.open_modify_sales_prices(batch_data))
+        _add_action(menu, "📈 Historique des prix...", lambda: self.open_price_history(batch_data))
+
     # --- وصل الاستلام (ليس للتقني) ---
     if batch_data.get('BR_ID') and role != 'Technician':
         _add_action(

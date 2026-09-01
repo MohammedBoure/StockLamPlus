@@ -9,8 +9,13 @@ from ._table import _can_view_financials
 def apply_role_permissions(self, role=None):
     """إخفاء البيانات المالية تماماً لمن لا يملك الصلاحية"""
 
-    # استخدام الدالة الديناميكية للتحقق من صلاحية "tab_inv_financials"
-    hide_fin = not _can_view_financials(self)
+    if role == 'Technician':
+        hide_fin = True
+    elif role in ('Admin', 'Pharmacist', 'Manager'):
+        hide_fin = False
+    else:
+        # استخدام الدالة الديناميكية للتحقق من صلاحية "tab_inv_financials"
+        hide_fin = not _can_view_financials(self)
 
     for col in (2, 3, 4, 5, 18, 19, 20):
         self.table.setColumnHidden(col, hide_fin)
@@ -22,6 +27,9 @@ def apply_role_permissions(self, role=None):
         else:
             self.lbl_total_value.show()
             self.lbl_total_value.setFixedWidth(250)
+
+    if hasattr(self, 'btn_sales_price'):
+        self.btn_sales_price.setVisible(not hide_fin)
 
     logging.info(
         f"BatchesTab: Visibility set dynamically based on permissions. "

@@ -530,3 +530,47 @@ def open_quick_edit(self):
             self.data_changed.emit()
         else:
             QMessageBox.critical(self, "Erreur", "Échec de la modification du stock.")
+
+
+def open_modify_sales_prices(self, batch_data=None):
+    """Ouvre le dialogue d'ajustement des prix de vente pour le lot sélectionné"""
+    if not batch_data:
+        selected_rows = set(item.row() for item in self.table.selectedItems())
+        if not selected_rows or len(selected_rows) != 1:
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un (1) seul lot pour modifier ses prix de vente.")
+            return
+        row = list(selected_rows)[0]
+        batch_data = self.table.item(row, 0).data(Qt.UserRole)
+
+    if not batch_data:
+        return
+
+    from ui.widgets.inventory.dialogs import ModifySalesPricesDialog
+    dialog = ModifySalesPricesDialog(batch_data, self.manager, parent=self)
+    if dialog.exec():
+        self.load_data()
+        self.data_changed.emit()
+
+
+def open_price_history(self, batch_data=None):
+    """Affiche l'historique d'audit des modifications de prix pour le lot / produit"""
+    if not batch_data:
+        selected_rows = set(item.row() for item in self.table.selectedItems())
+        if not selected_rows or len(selected_rows) != 1:
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un (1) lot pour consulter son historique des prix.")
+            return
+        row = list(selected_rows)[0]
+        batch_data = self.table.item(row, 0).data(Qt.UserRole)
+
+    if not batch_data:
+        return
+
+    from ui.widgets.inventory.dialogs import PriceHistoryDialog
+    dialog = PriceHistoryDialog(
+        manager=self.manager,
+        parent=self,
+        batch_id=batch_data.get('Batch_ID'),
+        product_id=batch_data.get('Product_ID'),
+        product_name=batch_data.get('Product_Name', '')
+    )
+    dialog.exec()

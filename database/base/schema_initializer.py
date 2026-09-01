@@ -422,6 +422,25 @@ SCHEMA_QUERIES = [
     """ALTER TABLE Inventory_Batches ADD COLUMN Supplier_ID INT UNSIGNED NULL;""",
     """ALTER TABLE Inventory_Batches ADD CONSTRAINT fk_batch_supplier FOREIGN KEY (Supplier_ID) REFERENCES Suppliers(Supplier_ID) ON DELETE SET NULL ON UPDATE CASCADE;""",
 
+    """CREATE TABLE IF NOT EXISTS Price_Change_Log (
+        Log_ID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        Product_ID INT UNSIGNED NOT NULL,
+        Batch_ID BIGINT UNSIGNED NULL,
+        Lot_Number VARCHAR(100) NULL,
+        Price_Type VARCHAR(50) NOT NULL,
+        Old_Price DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+        New_Price DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+        Reason VARCHAR(255) NULL,
+        Changed_By_User_ID INT UNSIGNED NULL,
+        Changed_At DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_product_price (Product_ID),
+        INDEX idx_batch_price (Batch_ID),
+        INDEX idx_changed_at (Changed_At),
+        FOREIGN KEY (Product_ID) REFERENCES Products_Master(Product_ID) ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (Batch_ID) REFERENCES Inventory_Batches(Batch_ID) ON DELETE SET NULL ON UPDATE CASCADE,
+        FOREIGN KEY (Changed_By_User_ID) REFERENCES Users(User_ID) ON DELETE SET NULL ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;""",
+
     """CREATE TABLE IF NOT EXISTS Inventory_Count_Sessions (
         Session_ID BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         Session_Name VARCHAR(150) NOT NULL,

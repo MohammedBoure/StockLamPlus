@@ -398,6 +398,8 @@ def _build_bottom_bar(self):
 
     bottom_bar.addWidget(_btn("➕ Ajout Rapide", "#8e44ad", self.open_quick_add))
     bottom_bar.addWidget(_btn("📝 Éditer",       "#2980b9", self.open_quick_edit))
+    self.btn_sales_price = _btn("💲 Prix de Vente", "#16a085", self.open_modify_sales_prices)
+    bottom_bar.addWidget(self.btn_sales_price)
     bottom_bar.addWidget(_btn("⚡ Sortie",      "#27ae60", self.direct_use_process))
     bottom_bar.addWidget(_btn("✏️ Ajustement",  "#f39c12", self.adjust_stock))
     bottom_bar.addWidget(_btn("🗑️ Rebut",       "#c0392b", self.waste_batch))

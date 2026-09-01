@@ -5,11 +5,29 @@ from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve, QEvent,
 from PySide6.QtGui import QKeyEvent, QCursor
 
 
+def is_widget_valid(w):
+    """Vérifie si un objet Qt existe encore en mémoire C++ et n'a pas été détruit."""
+    if w is None:
+        return False
+    try:
+        import shiboken6
+        if not shiboken6.isValid(w):
+            return False
+    except Exception:
+        pass
+    try:
+        w.objectName()
+        return True
+    except RuntimeError:
+        return False
+
+
 class TouchKeypadDialog(QDialog):
     """
     Clavier tactile virtuel flottant agissant exactement comme un clavier physique.
     Ne vole pas le focus (NoFocus) et transmet directement les frappes à l'élément actif.
     Dispose d'une poignée de déplacement ultra-claire et de bords 100% vifs (sharp edges).
+    Sécurisé contre les widgets C++ détruits (ex: lignes supprimées du panier).
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -36,38 +54,55 @@ class TouchKeypadDialog(QDialog):
         self.init_ui()
 
     def _on_app_focus_changed(self, old_widget, new_widget):
-        if new_widget and not self.isAncestorOf(new_widget) and new_widget != self:
-            self.last_target_widget = new_widget
-            self._update_target_indicator()
+        try:
+            if is_widget_valid(new_widget) and not self.isAncestorOf(new_widget) and new_widget != self:
+                self.last_target_widget = new_widget
+                self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
 
     def _get_target_widget(self):
         target = QApplication.focusWidget()
-        if not target or self.isAncestorOf(target) or target == self:
+        if not is_widget_valid(target) or self.isAncestorOf(target) or target == self:
             target = self.last_target_widget
+
+        if not is_widget_valid(target):
+            self.last_target_widget = None
+            target = None
+
         if not target and self.pos_tab and hasattr(self.pos_tab, 'cb_product_search'):
-            target = self.pos_tab.cb_product_search
-        return target
+            if is_widget_valid(self.pos_tab.cb_product_search):
+                target = self.pos_tab.cb_product_search
+
+        return target if is_widget_valid(target) else None
 
     def _update_target_indicator(self):
-        target = self._get_target_widget()
-        if not target:
-            self.lbl_target.setText("Cible : Aucune (Sélectionnez un champ)")
-            return
-        
-        name = target.objectName() or target.__class__.__name__
-        if self.pos_tab:
-            if target == self.pos_tab.cb_product_search:
+        try:
+            target = self._get_target_widget()
+            if not is_widget_valid(target):
                 self.lbl_target.setText("Cible : 🔍 <b>Recherche / Code-barres</b>")
                 return
-            elif hasattr(self.pos_tab, 'cb_client') and (target == self.pos_tab.cb_client or target == self.pos_tab.cb_client.lineEdit()):
-                self.lbl_target.setText("Cible : 👤 <b>Recherche Client</b>")
-                return
-        
-        if isinstance(target.parent(), QDoubleSpinBox) or isinstance(target, QDoubleSpinBox):
-            self.lbl_target.setText("Cible : 🔢 <b>Nombre / Quantité / Prix</b>")
-            return
 
-        self.lbl_target.setText(f"Cible : <b>{name}</b>")
+            if self.pos_tab:
+                if target == self.pos_tab.cb_product_search:
+                    self.lbl_target.setText("Cible : 🔍 <b>Recherche / Code-barres</b>")
+                    return
+                elif hasattr(self.pos_tab, 'cb_client') and (
+                    target == self.pos_tab.cb_client or target == self.pos_tab.cb_client.lineEdit()
+                ):
+                    self.lbl_target.setText("Cible : 👤 <b>Recherche Client</b>")
+                    return
+
+            parent = target.parent() if hasattr(target, 'parent') else None
+            if (parent and isinstance(parent, QDoubleSpinBox)) or isinstance(target, QDoubleSpinBox):
+                self.lbl_target.setText("Cible : 🔢 <b>Nombre / Quantité / Prix</b>")
+                return
+
+            name = target.objectName() or target.__class__.__name__
+            self.lbl_target.setText(f"Cible : <b>{name}</b>")
+        except (RuntimeError, AttributeError):
+            self.last_target_widget = None
+            self.lbl_target.setText("Cible : 🔍 <b>Recherche / Code-barres</b>")
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -295,105 +330,143 @@ class TouchKeypadDialog(QDialog):
 
     # Envoi direct d'événements clavier (Exactement comme un clavier physique)
     def send_key(self, key, text=""):
-        target = self._get_target_widget()
-        if not target:
-            return
+        try:
+            target = self._get_target_widget()
+            if not is_widget_valid(target):
+                return
 
-        # Si la cible est un QDoubleSpinBox, cibler son lineEdit interne
-        if isinstance(target, QDoubleSpinBox):
-            target = target.lineEdit() or target
+            if isinstance(target, QDoubleSpinBox):
+                target = target.lineEdit() or target
 
-        press_ev = QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, text)
-        release_ev = QKeyEvent(QEvent.KeyRelease, key, Qt.NoModifier, text)
-        QApplication.sendEvent(target, press_ev)
-        QApplication.sendEvent(target, release_ev)
-        self._update_target_indicator()
+            if not is_widget_valid(target):
+                return
+
+            press_ev = QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, text)
+            release_ev = QKeyEvent(QEvent.KeyRelease, key, Qt.NoModifier, text)
+            QApplication.sendEvent(target, press_ev)
+            QApplication.sendEvent(target, release_ev)
+            self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
+            self._update_target_indicator()
 
     def send_double_zero(self):
         self.send_key(Qt.Key_0, "0")
         self.send_key(Qt.Key_0, "0")
 
     def clear_target(self):
-        target = self._get_target_widget()
-        if not target:
-            return
-        if hasattr(target, 'clear'):
-            target.clear()
-        elif hasattr(target, 'setValue'):
-            target.setValue(0.0)
-        elif isinstance(target, QDoubleSpinBox):
-            target.setValue(0.0)
+        try:
+            target = self._get_target_widget()
+            if not is_widget_valid(target):
+                return
+            if hasattr(target, 'clear'):
+                target.clear()
+            elif hasattr(target, 'setValue'):
+                target.setValue(0.0)
+            elif isinstance(target, QDoubleSpinBox):
+                target.setValue(0.0)
+        except RuntimeError:
+            self.last_target_widget = None
+            self._update_target_indicator()
 
     # Raccourcis de ciblage rapide avec sélection intégrale
     def focus_search(self):
-        if self.pos_tab and hasattr(self.pos_tab, 'cb_product_search'):
-            w = self.pos_tab.cb_product_search
-            w.setFocus()
-            QTimer.singleShot(0, w.selectAll)
-            self.last_target_widget = w
-            self._update_target_indicator()
+        try:
+            if self.pos_tab and hasattr(self.pos_tab, 'cb_product_search'):
+                w = self.pos_tab.cb_product_search
+                if is_widget_valid(w):
+                    w.setFocus()
+                    QTimer.singleShot(0, w.selectAll)
+                    self.last_target_widget = w
+                    self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
 
     def focus_client(self):
-        if self.pos_tab and hasattr(self.pos_tab, 'cb_client'):
-            w = self.pos_tab.cb_client.lineEdit() or self.pos_tab.cb_client
-            w.setFocus()
-            QTimer.singleShot(0, w.selectAll)
-            self.last_target_widget = w
-            self._update_target_indicator()
+        try:
+            if self.pos_tab and hasattr(self.pos_tab, 'cb_client'):
+                w = self.pos_tab.cb_client.lineEdit() or self.pos_tab.cb_client
+                if is_widget_valid(w):
+                    w.setFocus()
+                    QTimer.singleShot(0, w.selectAll)
+                    self.last_target_widget = w
+                    self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
 
     def _get_active_row(self):
-        if not self.pos_tab or not hasattr(self.pos_tab, 'cart_table'):
+        try:
+            if not self.pos_tab or not hasattr(self.pos_tab, 'cart_table'):
+                return -1
+            table = self.pos_tab.cart_table
+            if not is_widget_valid(table) or table.rowCount() == 0:
+                return -1
+            row = table.currentRow()
+            if row < 0:
+                row = table.rowCount() - 1
+                table.setCurrentCell(row, 1)
+            return row
+        except RuntimeError:
             return -1
-        table = self.pos_tab.cart_table
-        if table.rowCount() == 0:
-            return -1
-        row = table.currentRow()
-        if row < 0:
-            row = table.rowCount() - 1
-            table.setCurrentCell(row, 1)
-        return row
 
     def focus_qty(self):
-        row = self._get_active_row()
-        if row >= 0:
-            qty_spin = self.pos_tab.cart_table.cellWidget(row, 2)
-            if qty_spin:
-                target = qty_spin.lineEdit() or qty_spin
-                target.setFocus()
-                QTimer.singleShot(0, target.selectAll)
-                self.last_target_widget = target
-                self._update_target_indicator()
+        try:
+            row = self._get_active_row()
+            if row >= 0:
+                qty_spin = self.pos_tab.cart_table.cellWidget(row, 2)
+                if is_widget_valid(qty_spin):
+                    target = qty_spin.lineEdit() or qty_spin
+                    if is_widget_valid(target):
+                        target.setFocus()
+                        QTimer.singleShot(0, target.selectAll)
+                        self.last_target_widget = target
+                        self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
 
     def focus_remise(self):
-        row = self._get_active_row()
-        if row >= 0:
-            remise_w = self.pos_tab.cart_table.cellWidget(row, 4)
-            if remise_w and hasattr(remise_w, 'value_spin'):
-                target = remise_w.value_spin.lineEdit() or remise_w.value_spin
-                target.setFocus()
-                QTimer.singleShot(0, target.selectAll)
-                self.last_target_widget = target
-                self._update_target_indicator()
+        try:
+            row = self._get_active_row()
+            if row >= 0:
+                remise_w = self.pos_tab.cart_table.cellWidget(row, 4)
+                if is_widget_valid(remise_w) and hasattr(remise_w, 'value_spin'):
+                    target = remise_w.value_spin.lineEdit() or remise_w.value_spin
+                    if is_widget_valid(target):
+                        target.setFocus()
+                        QTimer.singleShot(0, target.selectAll)
+                        self.last_target_widget = target
+                        self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
 
     def adjust_active_qty(self, delta):
-        row = self._get_active_row()
-        if row >= 0:
-            qty_spin = self.pos_tab.cart_table.cellWidget(row, 2)
-            if qty_spin:
-                new_val = max(0.01, min(qty_spin.maximum(), qty_spin.value() + delta))
-                qty_spin.setValue(new_val)
-                target = qty_spin.lineEdit() or qty_spin
-                target.setFocus()
-                QTimer.singleShot(0, target.selectAll)
-                self.last_target_widget = target
-                self._update_target_indicator()
+        try:
+            row = self._get_active_row()
+            if row >= 0:
+                qty_spin = self.pos_tab.cart_table.cellWidget(row, 2)
+                if is_widget_valid(qty_spin):
+                    new_val = max(0.01, min(qty_spin.maximum(), qty_spin.value() + delta))
+                    qty_spin.setValue(new_val)
+                    target = qty_spin.lineEdit() or qty_spin
+                    if is_widget_valid(target):
+                        target.setFocus()
+                        QTimer.singleShot(0, target.selectAll)
+                        self.last_target_widget = target
+                    self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
+            self._update_target_indicator()
 
     def delete_active_cart_row(self):
+        self.last_target_widget = None
         row = self._get_active_row()
         if row >= 0:
             self.pos_tab.cart_table.removeRow(row)
             self.pos_tab.calculate_totals()
-            self._update_target_indicator()
+        if self.pos_tab and hasattr(self.pos_tab, 'cb_product_search') and is_widget_valid(self.pos_tab.cb_product_search):
+            self.last_target_widget = self.pos_tab.cb_product_search
+            self.pos_tab.cb_product_search.setFocus()
+        self._update_target_indicator()
 
     # Déplacement fluide par glissement
     def mousePressEvent(self, event):

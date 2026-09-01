@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QDateEdit, QFrame, QCompleter, QAbstractItemView, QInputDialog,
                                QScrollArea, QGridLayout, QCheckBox)
 from PySide6.QtCore import Qt, QDate, Signal, QStringListModel, QTimer, QSize, QPoint
-from PySide6.QtGui import QKeySequence, QShortcut, QFont
+from PySide6.QtGui import QKeySequence, QShortcut, QFont, QColor
 from branding import get_logo_path
 from ui.icons import get_trash_icon
 from .dialogs import ClientDialog, OpenSessionDialog, CloseSessionDialog, QuickCashPaymentDialog
@@ -303,14 +303,20 @@ class PointOfSaleTab(QWidget):
         header = self.cart_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
         self.cart_table.setColumnWidth(0, 36)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        # Toutes les colonnes de données sont Interactives et s'étendent sans limite pour afficher l'intégralité des textes
+        for i in range(1, len(cols)):
+            header.setSectionResizeMode(i, QHeaderView.Interactive)
+        header.setStretchLastSection(False)
         header.setMinimumSectionSize(65)
-        for i in range(2, 10):
-            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
-        self.cart_table.setColumnWidth(6, 110)
-        self.cart_table.setColumnWidth(7, 65)
-        self.cart_table.setColumnWidth(8, 85)
-        self.cart_table.setColumnWidth(9, 75)
+        self.cart_table.setColumnWidth(1, 240)
+        self.cart_table.setColumnWidth(2, 90)
+        self.cart_table.setColumnWidth(3, 140)
+        self.cart_table.setColumnWidth(4, 150)
+        self.cart_table.setColumnWidth(5, 110)
+        self.cart_table.setColumnWidth(6, 170)
+        self.cart_table.setColumnWidth(7, 75)
+        self.cart_table.setColumnWidth(8, 110)
+        self.cart_table.setColumnWidth(9, 85)
 
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.cart_table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -1398,28 +1404,28 @@ class PointOfSaleTab(QWidget):
         total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.cart_table.setItem(row_idx, 5, total_item)
 
-        # Col 6: Barcode badge (Bords vifs)
+        # Col 6: Code-barres (Affichage intégral sans coupure de tout code quelle que soit sa longueur)
         bc1 = batch.get('Internal_Barcode')
         bc2 = batch.get('External_Barcode')
-        barcode_text = f"{bc1}" if self.is_real_code(bc1) else "---"
-        barcode_tip = barcode_text
-        if self.is_real_code(bc2):
-            barcode_tip = f"{barcode_tip}\nExt: {bc2}"
-        barcode_label = QLabel(barcode_text)
-        barcode_label.setToolTip(barcode_tip)
-        barcode_label.setAlignment(Qt.AlignCenter)
-        barcode_label.setStyleSheet("""
-            QLabel {
-                background-color: #edf7ff;
-                color: #0f5f8f;
-                border: 1px solid #c7e4fb;
-                border-radius: 0px;
-                font-weight: 700;
-                padding: 3px 6px;
-                font-size: 11px;
-            }
-        """)
-        self.cart_table.setCellWidget(row_idx, 6, barcode_label)
+        bc3 = batch.get('Barcode')
+        codes = []
+        for cand in (bc1, bc2, bc3):
+            if self.is_real_code(cand):
+                c_str = str(cand).strip()
+                if c_str not in codes:
+                    codes.append(c_str)
+        barcode_text = " / ".join(codes) if codes else "---"
+
+        barcode_item = QTableWidgetItem(barcode_text)
+        barcode_item.setFlags(barcode_item.flags() & ~Qt.ItemIsEditable)
+        barcode_item.setTextAlignment(Qt.AlignCenter)
+        barcode_item.setBackground(QColor("#edf7ff"))
+        barcode_item.setForeground(QColor("#0f5f8f"))
+        f_bc = barcode_item.font()
+        f_bc.setBold(True)
+        barcode_item.setFont(f_bc)
+        barcode_item.setToolTip(barcode_text)
+        self.cart_table.setItem(row_idx, 6, barcode_item)
         
         # Col 7: Qty Stock (Non prioritaire)
         stock_item = QTableWidgetItem(str(batch.get('Quantity_Current', 0)))
@@ -1447,6 +1453,17 @@ class PointOfSaleTab(QWidget):
         self.cart_table.setCellWidget(row_idx, 9, tva_spin)
         
         self.calculate_totals()
+        # Ajustement dynamique sans limite pour garantir l'affichage complet de tous les textes
+        self.cart_table.resizeColumnsToContents()
+        self.cart_table.setColumnWidth(0, 36)
+        if self.cart_table.columnWidth(1) < 220:
+            self.cart_table.setColumnWidth(1, 220)
+        # S'assurer que la colonne code-barres dispose d'assez d'espace pour afficher tout le texte
+        fm = self.cart_table.fontMetrics()
+        req_bc_w = fm.horizontalAdvance(barcode_text) + 36
+        if self.cart_table.columnWidth(6) < req_bc_w:
+            self.cart_table.setColumnWidth(6, req_bc_w)
+
         self.cart_table.scrollToBottom()
         self.flash_scan_feedback(True)
         

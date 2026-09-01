@@ -9,7 +9,7 @@ from datetime import datetime, date
 from PySide6.QtWidgets import QMessageBox, QInputDialog
 from PySide6.QtCore import Qt
 
-from ..dialogs import AdjustmentDialog, WasteDialog, BatchDetailsDialog
+from ..dialogs import AdjustmentDialog, WasteDialog, BatchDetailsDialog, UnpackTransferDialog
 from ui.widgets.procurement.reception_dialog import ReceptionDialog
 from ..quick_actions import QuickTransferDialog, QuickConsumeDialog
 from ui.formatting import format_quantity, quantity_to_int
@@ -244,6 +244,62 @@ def open_quick_transfer(self, batch_data):
             QMessageBox.critical(self, "Erreur", "Échec de l'opération dans la base de données.")
     except Exception as e:
         logging.error(f"Quick Transfer Error: {e}")
+        QMessageBox.critical(self, "Erreur", f"Erreur technique : {e}")
+
+
+def unpack_and_transfer_batch(self, batch_data):
+    """فتح نافذة Déconditionner / Transférer en unité détail وتنفيذ العملية"""
+    if not batch_data:
+        QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un lot.")
+        return
+
+    curr_qty = quantity_to_int(batch_data.get('Quantity_Current', 0))
+    if curr_qty <= 0:
+        QMessageBox.warning(self, "Stock Épuisé", "Ce lot est épuisé et ne peut pas être déconditionné.")
+        return
+
+    dialog = UnpackTransferDialog(batch_data, self.manager.locations, self)
+    if not dialog.exec():
+        return
+
+    data = dialog.get_data()
+    try:
+        success, err_msg, res_data = self.manager.batches.unpack_and_transfer_batch(
+            batch_id=batch_data['Batch_ID'],
+            new_location_id=data['dest_id'],
+            qty_to_unpack=data['qty_to_unpack'],
+            conversion_factor=data['conversion_factor'],
+            target_unit=data['target_unit'],
+            custom_barcode=data.get('custom_barcode'),
+            user_id=get_current_user_id(self)
+        )
+
+        if success:
+            if data.get('print_label') and res_data and hasattr(self.manager, 'printer') and self.manager.printer:
+                try:
+                    self.manager.printer.print_label(
+                        res_data['product_name'],
+                        res_data['barcode'],
+                        res_data['lot_number'],
+                        str(res_data['expiry_date'])[:10] if res_data.get('expiry_date') else '---',
+                        res_data['qty']
+                    )
+                except Exception as pe:
+                    logging.warning(f"Erreur impression étiquette après déconditionnement : {pe}")
+
+            self.load_data()
+            self.data_changed.emit()
+
+            info_msg = (
+                f"✅ <b>Déconditionnement réussi !</b><br><br>"
+                f"• Nouveau stock créé : <b>{res_data['qty']} {res_data['unit']}</b><br>"
+                f"• Code-barres assigné : <code>{res_data['barcode']}</code>"
+            )
+            QMessageBox.information(self, "Succès", info_msg)
+        else:
+            QMessageBox.critical(self, "Erreur", err_msg or "Échec de l'opération de déconditionnement.")
+    except Exception as e:
+        logging.error(f"Unpack & Transfer Error: {e}")
         QMessageBox.critical(self, "Erreur", f"Erreur technique : {e}")
 
 

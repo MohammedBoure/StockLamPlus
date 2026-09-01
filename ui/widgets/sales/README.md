@@ -1,11 +1,13 @@
 # UI Widgets - Ventes & Point de Vente (`ui/widgets/sales`)
 
-Module réservé pour la reconstruction future des interfaces de vente et d'historique de caisse.
+Composants PySide6 pour le point de vente (POS), l'encaissement et l'historique des ventes.
 
 ## Fichiers et Rôles
 
-- `__init__.py` : Point d'entrée du package des ventes (en attente de réécriture).
-- `point_of_sale_tab.py` : (Obsolète / En cours de refonte)
-- `sales_history_tab.py` : (Obsolète / En cours de refonte)
-- `pos_payment_dialog.py` : (Obsolète / En cours de refonte)
+- `__init__.py` : Expose les composants de vente (`PointOfSaleTab`, `SalesHistoryTab`).
+- `point_of_sale_tab.py` : Interface de caisse POS tactile avec lecture code-barres et panier.
+- `sales_history_tab.py` : Historique des tickets de caisse, remboursements et clôtures de session.
+- `pos_payment_dialog.py` : Dialogue de règlement multi-moyens (espèces, carte, etc.).
+- `dialogs.py` : Dialogues associés au point de vente.
+
 

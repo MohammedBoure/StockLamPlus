@@ -28,6 +28,8 @@ def show_context_menu(self, pos):
                 lambda: self.open_quick_consume(batch_data))
     _add_action(menu, "🚚 Transfert vers...",
                 lambda: self.open_quick_transfer(batch_data))
+    _add_action(menu, "📦 Déconditionner / Transférer en unité détail",
+                lambda: self.unpack_and_transfer_batch(batch_data))
     menu.addSeparator()
 
     # --- للـ Admin فقط: سجل الباركود ---

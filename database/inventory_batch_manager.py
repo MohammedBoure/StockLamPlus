@@ -1070,6 +1070,10 @@ class InventoryBatchManager:
                         B.Selling_Price_HT_4,
                         B.Selling_TVA_Percent,
                         P.Stock_Unit,
+                        P.Ordering_Unit,
+                        P.Stock_Qty_Per_Order_Unit,
+                        P.Usage_Unit,
+                        P.Usage_Qty_Per_Stock_Unit,
                         P.Barcode,
                         L.Location_Name,
                         B.Location_ID,
@@ -1178,3 +1182,153 @@ class InventoryBatchManager:
             logging.error(f"Error fetching stock levels: {e}")
 
         return stock_map
+
+    def unpack_and_transfer_batch(
+        self,
+        batch_id: int,
+        new_location_id: int,
+        qty_to_unpack: int,
+        conversion_factor: float,
+        target_unit: str = "Unité",
+        custom_barcode: Optional[str] = None,
+        user_id: Optional[int] = None
+    ) -> Tuple[bool, Optional[str], Optional[Dict]]:
+        """
+        Déconditionne une quantité de lot parent (ex: Carton/Boîte) en sous-unités de détail (ex: Pièce/Flacon),
+        l'affecte à un emplacement de destination, recalcule le prix unitaire et journalise le mouvement.
+        """
+        if qty_to_unpack <= 0:
+            return False, "La quantité à déconditionner doit être supérieure à 0.", None
+        if conversion_factor <= 0:
+            return False, "Le facteur de conversion doit être supérieur à 0.", None
+
+        try:
+            with self.db.get_db_connection() as conn:
+                conn.autocommit = False
+                cursor = conn.cursor(dictionary=True)
+
+                try:
+                    # 1. Verrouiller et récupérer le lot parent
+                    cursor.execute("""
+                        SELECT b.*, p.Product_Name, p.Stock_Unit, p.Usage_Unit
+                        FROM Inventory_Batches b
+                        JOIN Products_Master p ON b.Product_ID = p.Product_ID
+                        WHERE b.Batch_ID = %s FOR UPDATE
+                    """, (batch_id,))
+
+                    source = cursor.fetchone()
+                    if not source:
+                        conn.rollback()
+                        return False, "Lot source introuvable.", None
+
+                    curr_stock = float(source.get('Quantity_Current', 0))
+                    if curr_stock < qty_to_unpack:
+                        conn.rollback()
+                        return False, f"Stock insuffisant (Disponible: {curr_stock}, Demandé: {qty_to_unpack}).", None
+
+                    # 2. Calcul des quantités et coûts résultants
+                    target_qty = int(Decimal(str(qty_to_unpack)) * Decimal(str(conversion_factor)))
+                    unit_price_src = Decimal(str(source.get('Unit_Price_Received', 0.0)))
+                    target_unit_price = (unit_price_src / Decimal(str(conversion_factor))).quantize(Decimal('0.01'))
+
+                    source_unit = source.get('Stock_Unit') or 'Boîte'
+
+                    # 3. Déduire du lot source
+                    source_new_qty = Decimal(str(source['Quantity_Current'])) - Decimal(str(qty_to_unpack))
+                    source_status = 'Depleted' if source_new_qty <= 0 else source.get('Status', 'Available')
+                    cursor.execute("""
+                        UPDATE Inventory_Batches
+                        SET Quantity_Current = %s,
+                            Status = %s
+                        WHERE Batch_ID = %s
+                    """, (source_new_qty, source_status, batch_id))
+
+                    # 4. Créer le nouveau lot déconditionné
+                    insert_query = """
+                        INSERT INTO Inventory_Batches
+                        (Product_ID, Location_ID, Lot_Number, Expiry_Date,
+                         Quantity_Initial, Quantity_Current, Status, Created_At,
+                         Unit_Price_Received, Tax_Rate_Percent, Discount_Percent,
+                         Selling_Price_HT, Selling_Price_HT_2, Selling_Price_HT_3, Selling_Price_HT_4,
+                         Selling_TVA_Percent, Reception_Note, Supplier_ID, External_Barcode, Internal_Barcode, PO_ID, BR_ID)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'Available', NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'TMP', %s, %s)
+                    """
+                    decond_note = f"Déconditionné depuis Lot #{source['Lot_Number']} (1 {source_unit} = {conversion_factor} {target_unit})"
+
+                    selling_ht = Decimal(str(source.get('Selling_Price_HT', 0.0)))
+                    target_selling_ht = (selling_ht / Decimal(str(conversion_factor))).quantize(Decimal('0.01')) if selling_ht > 0 else Decimal('0.00')
+
+                    cursor.execute(insert_query, (
+                        source['Product_ID'],
+                        new_location_id,
+                        source['Lot_Number'],
+                        source['Expiry_Date'],
+                        target_qty,
+                        target_qty,
+                        target_unit_price,
+                        source.get('Tax_Rate_Percent', 0.0),
+                        source.get('Discount_Percent', 0.0),
+                        target_selling_ht,
+                        Decimal('0.00'),
+                        Decimal('0.00'),
+                        Decimal('0.00'),
+                        source.get('Selling_TVA_Percent', 0.0),
+                        decond_note,
+                        source.get('Supplier_ID'),
+                        source.get('External_Barcode', ''),
+                        source.get('PO_ID'),
+                        source.get('BR_ID')
+                    ))
+                    new_batch_id = cursor.lastrowid
+
+                    # 5. Définir le code-barres interne
+                    final_barcode = custom_barcode.strip() if custom_barcode and custom_barcode.strip() else self.generate_ean13_for_batch(new_batch_id)
+                    cursor.execute("UPDATE Inventory_Batches SET Internal_Barcode = %s WHERE Batch_ID = %s", (final_barcode, new_batch_id))
+
+                    # 6. Journaliser le mouvement double
+                    # A. Sortie du lot parent
+                    self.stock_movement_log.create_movement_log(
+                        product_id=source['Product_ID'],
+                        movement_type='Transfer',
+                        qty_change=Decimal(str(-abs(qty_to_unpack))),
+                        unit_used=source_unit,
+                        batch_id=batch_id,
+                        user_id=user_id,
+                        notes=f"Déconditionnement -> Loc #{new_location_id} (+{target_qty} {target_unit})",
+                        external_cursor=cursor
+                    )
+
+                    # B. Entrée du lot détail
+                    self.stock_movement_log.create_movement_log(
+                        product_id=source['Product_ID'],
+                        movement_type='Transfer',
+                        qty_change=Decimal(str(target_qty)),
+                        unit_used=target_unit,
+                        batch_id=new_batch_id,
+                        user_id=user_id,
+                        notes=f"Réception déconditionnement <- Lot #{source['Lot_Number']} (-{qty_to_unpack} {source_unit})",
+                        external_cursor=cursor
+                    )
+
+                    conn.commit()
+                    return True, None, {
+                        'batch_id': new_batch_id,
+                        'barcode': final_barcode,
+                        'qty': target_qty,
+                        'product_name': source['Product_Name'],
+                        'lot_number': source['Lot_Number'],
+                        'expiry_date': source['Expiry_Date'],
+                        'unit': target_unit
+                    }
+
+                except Exception as inner_e:
+                    conn.rollback()
+                    logging.error(f"SQL Error in unpack_and_transfer_batch: {inner_e}", exc_info=True)
+                    return False, str(inner_e), None
+                finally:
+                    cursor.close()
+
+        except Exception as e:
+            logging.error(f"Critical Error in unpack_and_transfer_batch: {e}", exc_info=True)
+            return False, str(e), None
+

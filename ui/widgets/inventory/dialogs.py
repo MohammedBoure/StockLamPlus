@@ -5,21 +5,19 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QFormLayout, QLineEdit, QTextEdit, QComboBox, 
     QSpinBox, QHBoxLayout, QPushButton, QLabel, 
     QWidget, QMessageBox, QFrame, QTableWidget, QTableWidgetItem, 
-    QHeaderView, QGroupBox, QAbstractItemView
+    QHeaderView, QGroupBox, QAbstractItemView, QCheckBox
 )
 from PySide6.QtCore import QDate, Qt, QTimer, QSize
 from PySide6.QtGui import QColor, QFont
 
-# استيراد BaseDialog (تأكد من صحة المسار لديك)
+# استيراد BaseDialog
 from ui.widgets.master_data.dialogs import BaseDialog
 from ui.formatting import format_money, format_quantity, quantity_to_int
 
-# استيراد LocationTreeComboBox (تأكد من صحة المسار لديك)
-# إذا كان الملف في نفس المجلد، استخدم: from .location_tree_combo import LocationTreeComboBox
+# استيراد LocationTreeComboBox
 try:
     from .location_tree_combo import LocationTreeComboBox
 except ImportError:
-    # fallback بسيط في حال لم يتم العثور على الملف لتجنب توقف البرنامج
     from PySide6.QtWidgets import QComboBox as LocationTreeComboBox
 
 # ==============================================================================
@@ -357,7 +355,6 @@ class InventoryDispatchDialog(BaseDialog):
         self.dispatch_data = [] 
         
         # --- المؤقت السحري (The Fix) ---
-        # سيتم تشغيل هذا المؤقت عندما يتوقف الماسح الضوئي عن الكتابة
         self.scan_timer = QTimer()
         self.scan_timer.setSingleShot(True)
         self.scan_timer.timeout.connect(self.process_scan_buffer)
@@ -385,10 +382,8 @@ class InventoryDispatchDialog(BaseDialog):
             QLineEdit:focus { border: 2px solid #27ae60; background-color: #e8f8f5; }
         """)
         
-        # ربط الحدث: مع كل حرف يتم كتابته، نعيد ضبط المؤقت
         self.item_search.textChanged.connect(self.on_text_changed)
         
-        # إضافة زر يدوي للطوارئ
         btn_manual = QPushButton("🔎")
         btn_manual.setFixedWidth(50)
         btn_manual.setMinimumHeight(60)
@@ -409,7 +404,7 @@ class InventoryDispatchDialog(BaseDialog):
         header = self.stack_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents) # Quantity Column
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         
         self.stack_table.verticalHeader().setDefaultSectionSize(50)
         self.stack_table.setAlternatingRowColors(True)
@@ -431,53 +426,41 @@ class InventoryDispatchDialog(BaseDialog):
         btn_layout.addWidget(self.btn_process)
         layout.addLayout(btn_layout)
 
-        # التركيز الفوري
         QTimer.singleShot(100, self.item_search.setFocus)
 
     def on_text_changed(self, text):
-        """يتم استدعاء هذه الدالة مع كل حرف يكتبه الماسح الضوئي"""
         if not text: return
-        
-        # هذا هو الرقم السحري: 200 ميلي ثانية
-        # إذا توقف الماسح عن الكتابة لمدة 0.2 ثانية، نعتبر أن الباركود اكتمل
         self.scan_timer.start(200)
 
     def process_scan_buffer(self):
-        """تنفذ تلقائياً عند انتهاء المؤقت"""
         barcode = self.item_search.text().strip().lower()
         if not barcode: return
 
         found_batch = None
         
-        # البحث في القائمة الممررة من المخزون
         for b in self.products:
-            # تنظيف ومقارنة البيانات
             internal = str(b.get('Internal_Barcode', '')).strip().lower()
             manuf = str(b.get('Barcode', '')).strip().lower()
             lot = str(b.get('Lot_Number', '')).strip().lower()
 
-            # التحقق من الباركود (الأولوية القصوى)
             if barcode == internal or barcode == manuf:
                 found_batch = b
                 break
             
-            # التحقق من رقم اللوت (إذا لم نجد باركود)
             if barcode == lot and found_batch is None:
                 found_batch = b
         
         if found_batch:
             self.add_batch_to_table(found_batch)
             self.flash_feedback(True)
-            self.item_search.clear() # مسح الخانة تلقائياً للاستعداد للمنتج التالي
+            self.item_search.clear()
         else:
             self.flash_feedback(False)
-            self.item_search.selectAll() # تظليل النص الخاطئ
+            self.item_search.selectAll()
 
-        # إعادة التركيز دائماً لضمان استمرار العمل
         self.item_search.setFocus()
 
     def add_batch_to_table(self, batch):
-        # 1. التحقق مما إذا كان المنتج موجوداً مسبقاً في الجدول لزيادة الكمية
         for r in range(self.stack_table.rowCount()):
             existing_meta = self.stack_table.item(r, 0).data(Qt.UserRole)
             if existing_meta['Batch_ID'] == batch['Batch_ID']:
@@ -488,11 +471,9 @@ class InventoryDispatchDialog(BaseDialog):
                     self.stack_table.selectRow(r)
                 return
 
-        # 2. إضافة سطر جديد
         row = self.stack_table.rowCount()
         self.stack_table.insertRow(row)
 
-        # تعبئة البيانات
         name_item = QTableWidgetItem(f"{batch['Product_Name']}")
         name_item.setData(Qt.UserRole, batch)
         self.stack_table.setItem(row, 0, name_item)
@@ -502,33 +483,28 @@ class InventoryDispatchDialog(BaseDialog):
         self.stack_table.setItem(row, 2, QTableWidgetItem(str(batch['Lot_Number'])))
         self.stack_table.setItem(row, 3, QTableWidgetItem(batch.get('Location_Name', '---')))
 
-        # Action Selector
         combo_action = QComboBox()
         combo_action.addItems(["Consommation", "Transfert"])
         self.stack_table.setCellWidget(row, 4, combo_action)
 
-        # Destination Picker
         loc_picker = LocationTreeComboBox(self.location_manager)
         loc_picker.setEnabled(False)
         loc_picker.setStyleSheet("border: none; background: transparent; color: transparent;")
         self.stack_table.setCellWidget(row, 5, loc_picker)
 
-        # Toggle Destination Visibility based on Action
         def toggle_loc(idx):
-            is_transfer = (idx == 1) # Transfert index
+            is_transfer = (idx == 1)
             loc_picker.setEnabled(is_transfer)
             loc_picker.setStyleSheet("" if is_transfer else "border: none; background: transparent; color: transparent;")
         
         combo_action.currentIndexChanged.connect(toggle_loc)
 
-        # Quantity SpinBox
         spin_qty = NumericSpinBox()
         max_q = quantity_to_int(batch['Quantity_Current'])
         spin_qty.setRange(1, max_q)
         spin_qty.setValue(1)
         self.stack_table.setCellWidget(row, 6, spin_qty)
 
-        # Delete Button
         btn_del = QPushButton("✖")
         btn_del.setStyleSheet("color: red; border: none; font-weight: bold; font-size: 16px; background: transparent;")
         btn_del.clicked.connect(lambda: self.stack_table.removeRow(self.stack_table.currentRow()))
@@ -538,8 +514,7 @@ class InventoryDispatchDialog(BaseDialog):
         self.stack_table.selectRow(row)
 
     def flash_feedback(self, success=True):
-        """تغيير لون الخلفية لحظياً للإشعار"""
-        color = "#d5f5e3" if success else "#fadbd8" # أخضر فاتح أو أحمر فاتح
+        color = "#d5f5e3" if success else "#fadbd8"
         orig = self.item_search.styleSheet()
         self.item_search.setStyleSheet(orig + f" background-color: {color};")
         QTimer.singleShot(300, lambda: self.item_search.setStyleSheet(orig))
@@ -575,3 +550,162 @@ class InventoryDispatchDialog(BaseDialog):
             return
 
         self.accept()
+
+# ==============================================================================
+# 7. Unpack & Transfer Dialog (Déconditionnement & Transfert en Unité Détail)
+# ==============================================================================
+class UnpackTransferDialog(BaseDialog):
+    """
+    Dialogue de déconditionnement d'un lot en sous-unités de détail avec transfert vers un emplacement magasin/rayon.
+    """
+    def __init__(self, batch_data, location_manager, parent=None):
+        prod_name = batch_data.get('Product_Name', 'Produit')
+        super().__init__(f"Déconditionnement & Transfert - {prod_name}", parent)
+        self.batch = batch_data
+        self.location_manager = location_manager
+        self.resize(600, 580)
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self.form_widget)
+        main_layout.setSpacing(14)
+
+        # 1. Carte d'information du lot source
+        info_group = QGroupBox("📦 Informations du Lot Source (Parent)")
+        info_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 8px; padding-top: 12px; }")
+        info_layout = QFormLayout(info_group)
+        info_layout.setSpacing(8)
+
+        self.lbl_prod = QLabel(f"<b>{self.batch.get('Product_Name', '---')}</b>")
+        self.lbl_lot = QLabel(f"{self.batch.get('Lot_Number', '---')} (Exp: {str(self.batch.get('Expiry_Date', '---'))[:10]})")
+        self.lbl_curr_loc = QLabel(f"📍 {self.batch.get('Location_Name', 'Inconnu')}")
+
+        src_unit = self.batch.get('Stock_Unit') or 'Boîte/Carton'
+        curr_stock = quantity_to_int(self.batch.get('Quantity_Current', 0))
+        self.lbl_stock_avail = QLabel(f"<b style='color: #27ae60; font-size: 14px;'>{format_quantity(curr_stock)} {src_unit}</b>")
+
+        info_layout.addRow("Produit :", self.lbl_prod)
+        info_layout.addRow("N° de Lot :", self.lbl_lot)
+        info_layout.addRow("Emplacement Actuel :", self.lbl_curr_loc)
+        info_layout.addRow("Stock Disponible :", self.lbl_stock_avail)
+        main_layout.addWidget(info_group)
+
+        # 2. Paramètres de déconditionnement
+        decond_group = QGroupBox("⚙️ Paramètres de Déconditionnement")
+        decond_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007572; border: 1px solid #007572; border-radius: 6px; margin-top: 8px; padding-top: 12px; }")
+        decond_layout = QFormLayout(decond_group)
+        decond_layout.setSpacing(10)
+
+        # Quantité à déconditionner
+        self.spin_qty = QSpinBox()
+        max_q = max(1, curr_stock)
+        self.spin_qty.setRange(1, max_q)
+        self.spin_qty.setValue(1)
+        self.spin_qty.setSuffix(f" {src_unit}")
+        self.spin_qty.setMinimumHeight(34)
+        self.spin_qty.setStyleSheet("font-weight: bold; font-size: 13px;")
+        self.spin_qty.valueChanged.connect(self._recalculate_preview)
+
+        # Facteur de conversion
+        self.spin_factor = QSpinBox()
+        self.spin_factor.setRange(1, 100000)
+        default_factor = 10
+        try:
+            val_factor = float(self.batch.get('Usage_Qty_Per_Stock_Unit') or 0)
+            if val_factor > 0:
+                default_factor = int(val_factor)
+        except Exception:
+            pass
+        self.spin_factor.setValue(default_factor)
+        self.spin_factor.setMinimumHeight(34)
+        self.spin_factor.valueChanged.connect(self._recalculate_preview)
+
+        # Unité de détail résultante
+        default_sub_unit = str(self.batch.get('Usage_Unit') or '').strip()
+        if not default_sub_unit or default_sub_unit.lower() in ('none', 'null', 'test'):
+            default_sub_unit = "Pièce"
+
+        self.inp_target_unit = QLineEdit(default_sub_unit)
+        self.inp_target_unit.setPlaceholderText("Ex: Pièce, Flacon, Sachet, Unité...")
+        self.inp_target_unit.setMinimumHeight(34)
+        self.inp_target_unit.textChanged.connect(self._recalculate_preview)
+
+        decond_layout.addRow(f"Quantité à Sortir ({src_unit}) * :", self.spin_qty)
+        decond_layout.addRow("Facteur de Conversion (x Sous-unités) * :", self.spin_factor)
+        decond_layout.addRow("Nom de l'Unité Détail * :", self.inp_target_unit)
+        main_layout.addWidget(decond_group)
+
+        # 3. Carte d'aperçu dynamique du résultat
+        self.preview_card = QFrame()
+        self.preview_card.setStyleSheet("background-color: #e8f8f5; border: 1px solid #a3e4d7; border-radius: 6px; padding: 10px;")
+        prev_layout = QVBoxLayout(self.preview_card)
+        prev_layout.setSpacing(4)
+
+        self.lbl_result_qty = QLabel()
+        self.lbl_result_qty.setStyleSheet("font-size: 14px; font-weight: bold; color: #117a65;")
+        self.lbl_result_price = QLabel()
+        self.lbl_result_price.setStyleSheet("font-size: 12px; color: #16a085;")
+
+        prev_layout.addWidget(self.lbl_result_qty)
+        prev_layout.addWidget(self.lbl_result_price)
+        main_layout.addWidget(self.preview_card)
+
+        # 4. Destination & Options
+        dest_group = QGroupBox("📍 Destination & Code-Barres")
+        dest_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2c3e50; border: 1px solid #bdc3c7; border-radius: 6px; margin-top: 8px; padding-top: 12px; }")
+        dest_layout = QFormLayout(dest_group)
+        dest_layout.setSpacing(10)
+
+        self.dest_combo = LocationTreeComboBox(self.location_manager)
+        self.dest_combo.setMinimumHeight(34)
+
+        self.inp_barcode = QLineEdit()
+        self.inp_barcode.setPlaceholderText("Laisser vide pour génération automatique (EAN-13)")
+        self.inp_barcode.setMinimumHeight(34)
+
+        self.cb_print = QCheckBox("🖨️ Imprimer l'étiquette code-barres après le transfert")
+        self.cb_print.setChecked(True)
+
+        dest_layout.addRow("Emplacement Destination (Magasin/Rayon) * :", self.dest_combo)
+        dest_layout.addRow("Code-Barres Spécifique (Optionnel) :", self.inp_barcode)
+        dest_layout.addRow("", self.cb_print)
+        main_layout.addWidget(dest_group)
+
+        self._recalculate_preview()
+
+    def _recalculate_preview(self):
+        qty_src = self.spin_qty.value()
+        factor = self.spin_factor.value()
+        unit_tgt = self.inp_target_unit.text().strip() or "Unité"
+        src_unit = self.batch.get('Stock_Unit') or 'Boîte'
+
+        target_total_qty = qty_src * factor
+
+        unit_price_src = float(self.batch.get('Unit_Price_Received', 0.0))
+        target_unit_price = unit_price_src / factor if factor > 0 else 0.0
+
+        self.lbl_result_qty.setText(f"🎯 Nouveau Stock Généré : {target_total_qty} {unit_tgt} (depuis {qty_src} {src_unit})")
+        self.lbl_result_price.setText(f"💰 Coût Unitaire Déconditionné : {format_money(target_unit_price, 'DA')} (Prix initial: {format_money(unit_price_src, 'DA')})")
+
+    def accept(self):
+        dest_id = self.dest_combo.get_current_location_id()
+        if not dest_id:
+            QMessageBox.warning(self, "Validation", "Veuillez sélectionner un emplacement de destination.")
+            return
+
+        unit_tgt = self.inp_target_unit.text().strip()
+        if not unit_tgt:
+            QMessageBox.warning(self, "Validation", "Veuillez renseigner le nom de l'unité de détail.")
+            return
+
+        super().accept()
+
+    def get_data(self):
+        return {
+            'qty_to_unpack': self.spin_qty.value(),
+            'conversion_factor': float(self.spin_factor.value()),
+            'target_unit': self.inp_target_unit.text().strip() or "Unité",
+            'dest_id': self.dest_combo.get_current_location_id(),
+            'custom_barcode': self.inp_barcode.text().strip() or None,
+            'print_label': self.cb_print.isChecked()
+        }

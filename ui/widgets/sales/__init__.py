@@ -1,5 +1,5 @@
 # ui/widgets/sales/__init__.py
-"""
-Sales and POS widgets module (cleared for rebuild).
-"""
+from .point_of_sale_tab import PointOfSaleTab
+from .sales_history_tab import SalesHistoryTab
+
 

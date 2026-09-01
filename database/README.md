@@ -16,7 +16,7 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
 - **`credit_note_manager.py`** : Gestion des avoirs fournisseurs suite aux retours de marchandises.
 - **`external_partners_manager.py`** : Gestion des partenaires externes (laboratoires confrères, cliniques partenaires).
 - **`external_transfer_manager.py`** : Gestion des transferts et cessions de réactifs entre établissements.
-- **`inventory_batch_manager.py`** : Gestion des lots en inventaire, réceptions, ajustements, péremptions et changements de statut.
+- **`inventory_batch_manager.py`** : Gestion des lots en inventaire, réceptions, transferts, déconditionnement en sous-unités de détail (`unpack_and_transfer_batch`), ajustements, péremptions et changements de statut.
 - **`inventory_count_manager.py`** : Gestion des sessions de comptage d'inventaire physique et réconciliation d'écarts.
 - **`location_manager.py`** : Gestion des emplacements de stockage (armoires, réfrigérateurs, congélateurs, tiroirs).
 - **`manufacturer_manager.py`** : Gestion des fabricants et marques d'équipements / réactifs.

@@ -201,14 +201,21 @@ def waste_batch(self):
 
 
 def show_batch_details(self):
-    """عرض نافذة تفاصيل اللوط"""
+    """عرض نافذة تفاصيل اللوط أو تعديل مجموعة البيع عند النقر المزدوج على عمود المجموعة"""
     row = self.table.currentRow()
+    col = self.table.currentColumn()
     if row < 0:
         return
     batch_data = self.table.item(row, 0).data(Qt.UserRole)
-    if batch_data:
-        dialog = BatchDetailsDialog(batch_data, self)
-        dialog.exec()
+    if not batch_data:
+        return
+
+    if col == 22:
+        self.open_assign_pos_group(batch_data)
+        return
+
+    dialog = BatchDetailsDialog(batch_data, self)
+    dialog.exec()
 
 
 # ---------------------------------------------------------------------------

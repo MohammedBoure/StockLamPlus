@@ -507,7 +507,7 @@ class PointOfSaleTab(QWidget):
         self.lbl_total_ttc.setStyleSheet(f"font-size: {font_size}px; font-weight: 800; color: #ffffff;")
 
     def _build_favorites_panel(self):
-        """Panneau droit dynamique affichant les listes de produits prioritaires (Liste 1, Liste 2...)."""
+        """Panneau droit contenant les boutons de numéros pour les listes de produits favoris."""
         fav_frame = QFrame()
         fav_frame.setObjectName("FavoritesFrame")
         fav_frame.setFixedWidth(280)
@@ -519,20 +519,37 @@ class PointOfSaleTab(QWidget):
             }
         """)
         fav_layout = QVBoxLayout(fav_frame)
-        fav_layout.setContentsMargins(6, 6, 6, 6)
-        fav_layout.setSpacing(5)
+        fav_layout.setContentsMargins(4, 4, 4, 4)
+        fav_layout.setSpacing(4)
 
-        # En-tête
-        header_fav = QLabel("⭐ <b>PRODUITS PRIORITAIRES (Listes)</b>")
-        header_fav.setStyleSheet("font-size: 11px; color: #007572; padding: 1px 0; font-weight: bold;")
-        fav_layout.addWidget(header_fav)
+        # Barre horizontale défilable de numéros simples (1, 2, 3...) sans aucun texte ni options superflues
+        self.fav_num_scroll = QScrollArea()
+        self.fav_num_scroll.setWidgetResizable(True)
+        self.fav_num_scroll.setFixedHeight(34)
+        self.fav_num_scroll.setFrameShape(QFrame.NoFrame)
+        self.fav_num_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.fav_num_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.fav_num_scroll.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:horizontal {
+                background: #f1f5f9;
+                height: 4px;
+                border-radius: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background: #cbd5e1;
+                border-radius: 0px;
+            }
+        """)
 
-        # Sélecteur dynamique d'onglets de listes (Liste 1, Liste 2, etc.)
         self.fav_tabs_container = QWidget()
+        self.fav_tabs_container.setStyleSheet("background: transparent;")
         self.fav_tabs_layout = QHBoxLayout(self.fav_tabs_container)
         self.fav_tabs_layout.setContentsMargins(0, 0, 0, 0)
-        self.fav_tabs_layout.setSpacing(3)
-        fav_layout.addWidget(self.fav_tabs_container)
+        self.fav_tabs_layout.setSpacing(2)
+        self.fav_tabs_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.fav_num_scroll.setWidget(self.fav_tabs_container)
+        fav_layout.addWidget(self.fav_num_scroll)
 
         self.scroll_fav = QScrollArea()
         self.scroll_fav.setWidgetResizable(True)
@@ -541,7 +558,7 @@ class PointOfSaleTab(QWidget):
             QScrollArea { background: transparent; border: none; }
             QScrollBar:vertical {
                 background: #f1f5f9;
-                width: 10px;
+                width: 8px;
                 border-radius: 0px;
             }
             QScrollBar::handle:vertical {
@@ -562,64 +579,71 @@ class PointOfSaleTab(QWidget):
         return fav_frame
 
     def set_active_fav_group(self, group_num):
-        """Change la liste de priorité active et recharge immédiatement les produits correspondants."""
+        """Change la liste active et actualise immédiatement l'affichage."""
         self.active_pos_group = group_num
         self.refresh_favorites_display()
 
     def refresh_favorites_display(self):
-        """Actualise l'affichage des listes prioritaires (Liste 1, Liste 2, etc.) en fonction des groupes assignés."""
-        # 1. Détecter les groupes disponibles dans le catalogue en stock
-        detected_groups = set()
+        """Actualise les boutons de numéros simples et les produits de la liste sélectionnée."""
+        # 1. Détecter tous les numéros existants dans les lots en stock
+        existing_numbers = set()
         for batch in self.batches_cache:
             grp = batch.get('POS_Priority_Group')
             if grp is not None:
                 try:
                     grp_int = int(grp)
                     if grp_int > 0:
-                        detected_groups.add(grp_int)
+                        existing_numbers.add(grp_int)
                 except (ValueError, TypeError):
                     pass
 
-        # Liste 1 et Liste 2 sont toujours disponibles par défaut, plus tout autre numéro assigné
-        available_groups = sorted(list(set([1, 2]) | detected_groups))
+        try:
+            if hasattr(self.data_manager, 'products') and hasattr(self.data_manager.products, 'get_assigned_pos_priority_groups'):
+                existing_numbers.update(self.data_manager.products.get_assigned_pos_priority_groups())
+        except Exception:
+            pass
 
-        if not hasattr(self, 'active_pos_group') or (self.active_pos_group not in available_groups and self.active_pos_group is not None):
-            self.active_pos_group = 1
+        numbers_list = sorted(list(existing_numbers))
+        if not numbers_list:
+            numbers_list = [1, 2]
 
-        # 2. Rafraîchir la barre de sélection des listes
+        if not hasattr(self, 'active_pos_group') or self.active_pos_group not in numbers_list:
+            self.active_pos_group = numbers_list[0]
+
+        # 2. Rafraîchir les boutons de numéros simples (seulement le numéro, compacts pour en contenir un maximum)
         while self.fav_tabs_layout.count():
             item = self.fav_tabs_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        for g in available_groups:
-            btn_grp = QPushButton(f"⭐ Liste {g}")
-            btn_grp.setCursor(Qt.PointingHandCursor)
-            btn_grp.setFocusPolicy(Qt.NoFocus)
-            btn_grp.setFixedHeight(26)
-            is_active = (self.active_pos_group == g)
+        for num in numbers_list:
+            btn_num = QPushButton(str(num))
+            btn_num.setFocusPolicy(Qt.NoFocus)
+            btn_num.setCursor(Qt.PointingHandCursor)
+            btn_num.setFixedSize(30, 26)
+            is_active = (self.active_pos_group == num)
             if is_active:
-                btn_grp.setStyleSheet("""
+                btn_num.setStyleSheet("""
                     QPushButton {
                         background-color: #007572;
                         color: #ffffff;
                         border: 1px solid #005a57;
                         border-radius: 0px;
                         font-weight: bold;
-                        font-size: 11px;
-                        padding: 2px 6px;
+                        font-size: 12px;
+                        padding: 0px;
                     }
                 """)
             else:
-                btn_grp.setStyleSheet("""
+                btn_num.setStyleSheet("""
                     QPushButton {
                         background-color: #f8fafc;
-                        color: #475569;
+                        color: #1e293b;
                         border: 1px solid #cbd5e1;
                         border-radius: 0px;
-                        font-size: 11px;
                         font-weight: 600;
-                        padding: 2px 6px;
+                        font-size: 12px;
+                        padding: 0px;
                     }
                     QPushButton:hover {
                         background-color: #e2e8f0;
@@ -627,54 +651,16 @@ class PointOfSaleTab(QWidget):
                         border-color: #007572;
                     }
                 """)
-            btn_grp.clicked.connect(lambda _chk=False, grp_val=g: self.set_active_fav_group(grp_val))
-            self.fav_tabs_layout.addWidget(btn_grp)
+            btn_num.clicked.connect(lambda _chk=False, n_val=num: self.set_active_fav_group(n_val))
+            self.fav_tabs_layout.addWidget(btn_num)
 
-        # Bouton "Tous"
-        btn_all = QPushButton("Tous")
-        btn_all.setCursor(Qt.PointingHandCursor)
-        btn_all.setFocusPolicy(Qt.NoFocus)
-        btn_all.setFixedHeight(26)
-        if self.active_pos_group is None:
-            btn_all.setStyleSheet("""
-                QPushButton {
-                    background-color: #007572;
-                    color: #ffffff;
-                    border: 1px solid #005a57;
-                    border-radius: 0px;
-                    font-weight: bold;
-                    font-size: 11px;
-                    padding: 2px 6px;
-                }
-            """)
-        else:
-            btn_all.setStyleSheet("""
-                QPushButton {
-                    background-color: #f8fafc;
-                    color: #475569;
-                    border: 1px solid #cbd5e1;
-                    border-radius: 0px;
-                    font-size: 11px;
-                    font-weight: 600;
-                    padding: 2px 6px;
-                }
-                QPushButton:hover {
-                    background-color: #e2e8f0;
-                    color: #007572;
-                    border-color: #007572;
-                }
-            """)
-        btn_all.clicked.connect(lambda: self.set_active_fav_group(None))
-        self.fav_tabs_layout.addWidget(btn_all)
-
-        # 3. Rafraîchir les produits affichés dans la liste active
+        # 3. Rafraîchir les produits de la liste active
         while self.fav_grid.count():
             item = self.fav_grid.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-        # Filtrer selon le groupe sélectionné
         matching_batches = []
         seen_products = set()
         for batch in self.batches_cache:
@@ -688,23 +674,17 @@ class PointOfSaleTab(QWidget):
             except (ValueError, TypeError):
                 grp_val = None
 
-            if self.active_pos_group is None or grp_val == self.active_pos_group:
+            if grp_val == self.active_pos_group:
                 seen_products.add(p_id)
                 matching_batches.append(batch)
 
         if not matching_batches:
-            if self.active_pos_group is not None:
-                lbl_empty = QLabel(
-                    f"⭐ <b>Liste N° {self.active_pos_group} vide</b><br><br>"
-                    "Pour affecter un produit à cette liste :<br>"
-                    "1. Allez dans <b>Lots en Stock</b><br>"
-                    "2. Clic-droit sur le lot du produit<br>"
-                    "3. <i>⭐ Assigner au Groupe de Vente...</i><br>"
-                    f"4. Saisissez le chiffre <b>{self.active_pos_group}</b>"
-                )
-            else:
-                lbl_empty = QLabel("⭐ Aucun produit disponible en stock.")
-
+            lbl_empty = QLabel(
+                f"<b>Liste {self.active_pos_group} vide</b><br><br>"
+                "Pour affecter un produit :<br>"
+                "Inventaire > Clic-droit sur le lot > "
+                f"<i>⭐ Assigner au Groupe (N° {self.active_pos_group})</i>"
+            )
             lbl_empty.setAlignment(Qt.AlignCenter)
             lbl_empty.setWordWrap(True)
             lbl_empty.setStyleSheet("color: #64748b; font-size: 11px; padding: 20px 8px; background: #f8fafc; border: 1px dashed #cbd5e1; line-height: 140%;")

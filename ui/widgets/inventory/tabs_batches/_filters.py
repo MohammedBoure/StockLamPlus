@@ -33,6 +33,8 @@ def load_data(self):
         self.all_data = self.manager.batches.get_all_batches_with_details(
             include_zero_stock=fetch_zero
         )
+        if hasattr(self, 'populate_priority_groups'):
+            self.populate_priority_groups()
         apply_filters_local(self)
         self._last_load_monotonic = time.monotonic()
 
@@ -65,6 +67,7 @@ def apply_filters_local(self):
         automate_id  = self.combo_automate.currentData()
         supplier_id  = self.combo_supplier.currentData() if hasattr(self, 'combo_supplier') else None
         status_idx   = self.combo_status.currentIndex()
+        priority_group = self.combo_priority_group.currentData() if hasattr(self, 'combo_priority_group') else None
 
         use_exp_date  = self.chk_date_filter.isChecked()
         exp_from      = self.date_from.date().toPython()
@@ -111,6 +114,24 @@ def apply_filters_local(self):
             if manuf_id    and row.get('Manuf_ID')               != manuf_id:    continue
             if automate_id and row.get('Preferred_Automate_ID')  != automate_id: continue
             if supplier_id and row.get('Supplier_ID')            != supplier_id: continue
+
+            # --- فلتر المنتجات المفضلة / المجموعات ذات الأولوية ---
+            if priority_group == "ALL_PRIORITY":
+                grp_val = row.get('POS_Priority_Group')
+                if grp_val is None:
+                    continue
+                try:
+                    if int(grp_val) <= 0:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            elif priority_group is not None:
+                grp_val = row.get('POS_Priority_Group')
+                try:
+                    if grp_val is None or int(grp_val) != int(priority_group):
+                        continue
+                except (ValueError, TypeError):
+                    continue
 
             # --- فلتر الحالة المتقدمة (Seuil / Périmés / Bientôt Exp.) ---
             min_threshold = float(row.get('Minimum_Stock_Level') or 5)
@@ -262,4 +283,6 @@ def reset_filters(self):
     toggle_entry_filter(self, 0)
     if hasattr(self, 'chk_reclamation'):
         self.chk_reclamation.setChecked(False)
+    if hasattr(self, 'combo_priority_group'):
+        self.combo_priority_group.setCurrentIndex(0)
     load_data(self)

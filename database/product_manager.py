@@ -180,6 +180,23 @@ class ProductManager:
             logging.error(f"Erreur set_product_pos_priority_group pour produit {product_id}: {e}", exc_info=True)
             return False
 
+    def get_assigned_pos_priority_groups(self) -> List[int]:
+        """
+        Retourne la liste triée de tous les numéros de groupes prioritaires actuellement assignés.
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT DISTINCT POS_Priority_Group FROM Products_Master "
+                    "WHERE POS_Priority_Group IS NOT NULL AND POS_Priority_Group > 0 AND Deleted_At IS NULL "
+                    "ORDER BY POS_Priority_Group"
+                )
+                return [int(r[0]) for r in cursor.fetchall() if r[0] is not None]
+        except Exception as e:
+            logging.error(f"Erreur get_assigned_pos_priority_groups: {e}")
+            return []
+
     def get_all_products(self) -> List[Dict]:
         """
         يسترجع جميع المنتجات بما في ذلك الحقل الجديد Is_Billable تلقائياً عبر (p.*).

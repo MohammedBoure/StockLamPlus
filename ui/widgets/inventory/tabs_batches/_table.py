@@ -256,6 +256,15 @@ def _fill_row(table, r, b, hide_fin):
         rec_item.setIcon(get_reclamation_icon())
     table.setItem(r, 21, rec_item)
 
+    # 22. Groupe Vente (Priorité Caisse)
+    pos_grp = b.get('POS_Priority_Group')
+    grp_str = f"⭐ {pos_grp}" if pos_grp else "---"
+    grp_item = _make_item(grp_str, align=Qt.AlignCenter, bg_color=bg_color)
+    if pos_grp:
+        grp_item.setForeground(QColor("#007572"))
+        grp_item.setFont(QFont("", -1, QFont.Bold))
+    table.setItem(r, 22, grp_item)
+
     # تعيين الهيدر العمودي (رقم الصف وأيقونة الشكوى الدائرية إذا وجدت)
     v_header_item = QTableWidgetItem(str(r+1))
     if reclamation:

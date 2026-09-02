@@ -175,11 +175,17 @@ def _build_left_filters(self):
     self.combo_status.setCurrentIndex(1)
     self.combo_status.currentIndexChanged.connect(self.load_data)
 
+    self.combo_priority_group = QComboBox()
+    self.combo_priority_group.addItem("⭐ Groupes Vente", None)
+    self.combo_priority_group.setFixedWidth(135)
+    self.combo_priority_group.currentIndexChanged.connect(self.apply_filters_local)
+
     row2.addWidget(self.combo_family)
     row2.addWidget(self.combo_manuf)
     row2.addWidget(self.combo_automate)
     row2.addWidget(self.combo_supplier)
     row2.addWidget(self.combo_status)
+    row2.addWidget(self.combo_priority_group)
     left_layout.addLayout(row2)
 
     return left_layout
@@ -290,7 +296,8 @@ def _build_table(self):
         "Valeur (DA)", "Prix Vente 1", "N° Lot", "Date Exp.", "Qté Init.",
         "Code-Barres", "Code Ext", "Emplacement", "Famille", "Marque",
         "Automate", "Fournisseur", "Ref PO", "Date Entrée",
-        "Prix Vente 2", "Prix Vente 3", "Prix Vente 4", "Réclamation"
+        "Prix Vente 2", "Prix Vente 3", "Prix Vente 4", "Réclamation",
+        "Groupe Vente"
     ]
     self.table.setColumnCount(len(cols))
     self.table.setHorizontalHeaderLabels(cols)

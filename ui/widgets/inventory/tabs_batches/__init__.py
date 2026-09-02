@@ -45,7 +45,10 @@ from ._actions      import (
 from ._export       import (
     print_batch_label, export_to_excel, export_to_pdf, get_table_data,
 )
-from ._combos       import populate_families, populate_manufacturers, populate_automates, populate_suppliers
+from ._combos       import (
+    populate_families, populate_manufacturers, populate_automates,
+    populate_suppliers, populate_priority_groups
+)
 from ._context_menu import show_context_menu
 from ._permissions  import apply_role_permissions
 
@@ -150,6 +153,7 @@ class BatchesTab(QWidget):
     populate_manufacturers = populate_manufacturers
     populate_automates     = populate_automates
     populate_suppliers     = populate_suppliers
+    populate_priority_groups = populate_priority_groups
 
     # قائمة السياق
     show_context_menu = show_context_menu

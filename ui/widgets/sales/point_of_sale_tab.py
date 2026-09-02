@@ -492,6 +492,30 @@ class PointOfSaleTab(QWidget):
 
         top_layout.addStretch(1)
 
+        # 2b. Bouton Actualiser dans l'espace vide disponible (sans prendre de place supplémentaire)
+        self.btn_refresh = QPushButton("🔄 Actualiser")
+        self.btn_refresh.setCursor(Qt.PointingHandCursor)
+        self.btn_refresh.setToolTip("Actualiser les données de caisse, produits, stock et favoris (F5)")
+        self.btn_refresh.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #007572;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 4px 10px;
+                font-weight: bold;
+                font-size: 12px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QPushButton:hover {
+                background-color: #e6f4f1;
+                border-color: #007572;
+            }
+        """)
+        self.btn_refresh.clicked.connect(self.load_initial_data)
+        top_layout.addWidget(self.btn_refresh)
+
         # 3. Prix Final Net à Payer (Bords vifs, sans rognage de texte)
         self.frame_net_total = QFrame()
         self.frame_net_total.setObjectName("NetTotalFrame")
@@ -550,21 +574,21 @@ class PointOfSaleTab(QWidget):
         fav_layout.setContentsMargins(4, 4, 4, 4)
         fav_layout.setSpacing(4)
 
-        # Barre horizontale défilable de numéros simples (1, 2, 3...) sans aucun texte ni options superflues
+        # Zone de numéros simples (1, 2, 3...) organisés en lignes/barres : dès qu'une ligne est pleine (8 boutons), une nouvelle ligne/barre commence
         self.fav_num_scroll = QScrollArea()
         self.fav_num_scroll.setWidgetResizable(True)
         self.fav_num_scroll.setFixedHeight(34)
         self.fav_num_scroll.setFrameShape(QFrame.NoFrame)
-        self.fav_num_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.fav_num_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.fav_num_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.fav_num_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.fav_num_scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
-            QScrollBar:horizontal {
+            QScrollBar:vertical {
                 background: #f1f5f9;
-                height: 4px;
+                width: 6px;
                 border-radius: 0px;
             }
-            QScrollBar::handle:horizontal {
+            QScrollBar::handle:vertical {
                 background: #cbd5e1;
                 border-radius: 0px;
             }
@@ -572,10 +596,11 @@ class PointOfSaleTab(QWidget):
 
         self.fav_tabs_container = QWidget()
         self.fav_tabs_container.setStyleSheet("background: transparent;")
-        self.fav_tabs_layout = QHBoxLayout(self.fav_tabs_container)
+        from PySide6.QtWidgets import QGridLayout
+        self.fav_tabs_layout = QGridLayout(self.fav_tabs_container)
         self.fav_tabs_layout.setContentsMargins(0, 0, 0, 0)
         self.fav_tabs_layout.setSpacing(2)
-        self.fav_tabs_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.fav_tabs_layout.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.fav_num_scroll.setWidget(self.fav_tabs_container)
         fav_layout.addWidget(self.fav_num_scroll)
 
@@ -638,13 +663,17 @@ class PointOfSaleTab(QWidget):
         if not hasattr(self, 'active_pos_group') or self.active_pos_group not in numbers_list:
             self.active_pos_group = numbers_list[0]
 
-        # 2. Rafraîchir les boutons de numéros simples (seulement le numéro, compacts pour en contenir un maximum)
+        # 2. Rafraîchir les boutons de numéros simples organisés en lignes/barres (8 par ligne)
         while self.fav_tabs_layout.count():
             item = self.fav_tabs_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
-        for num in numbers_list:
+        BUTTONS_PER_ROW = 8
+        for idx, num in enumerate(numbers_list):
+            r = idx // BUTTONS_PER_ROW
+            c = idx % BUTTONS_PER_ROW
+
             btn_num = QPushButton(str(num))
             btn_num.setFocusPolicy(Qt.NoFocus)
             btn_num.setCursor(Qt.PointingHandCursor)
@@ -680,7 +709,12 @@ class PointOfSaleTab(QWidget):
                     }
                 """)
             btn_num.clicked.connect(lambda _chk=False, n_val=num: self.set_active_fav_group(n_val))
-            self.fav_tabs_layout.addWidget(btn_num)
+            self.fav_tabs_layout.addWidget(btn_num, r, c)
+
+        # Dès qu'une ligne est pleine (8 boutons), une nouvelle ligne/barre est créée et la hauteur s'adapte
+        num_rows = ((len(numbers_list) - 1) // BUTTONS_PER_ROW) + 1 if numbers_list else 1
+        calculated_h = min(96, num_rows * 28 + (num_rows - 1) * 2 + 4)
+        self.fav_num_scroll.setFixedHeight(calculated_h)
 
         # 3. Rafraîchir les produits de la liste active
         while self.fav_grid.count():
@@ -931,6 +965,8 @@ class PointOfSaleTab(QWidget):
         self._shortcut_resume.activated.connect(self.resume_draft)
         self._shortcut_session = QShortcut(QKeySequence("F6"), self)
         self._shortcut_session.activated.connect(self.manage_cash_session)
+        self._shortcut_refresh = QShortcut(QKeySequence("F5"), self)
+        self._shortcut_refresh.activated.connect(self.load_initial_data)
 
     def apply_promotion_code(self):
         if not self._has_permission("act_pos_discount"):

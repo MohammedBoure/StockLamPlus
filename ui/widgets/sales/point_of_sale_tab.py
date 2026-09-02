@@ -291,13 +291,39 @@ class PointOfSaleTab(QWidget):
         top_inputs_row.addWidget(self.cb_client, stretch=3)
         top_inputs_row.addWidget(self.btn_new_client)
         top_inputs_row.addWidget(self.date_edit)
+
+        # Filtre d'emplacement (lieu de retrait)
+        self.combo_location_filter = QComboBox()
+        self.combo_location_filter.addItem("📍 Tous Lieux", None)
+        self.combo_location_filter.setFixedWidth(135)
+        self.combo_location_filter.setMinimumHeight(38)
+        self.combo_location_filter.setMaximumHeight(38)
+        self.combo_location_filter.setStyleSheet("""
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 0px 6px;
+                font-size: 12px;
+                color: #007572;
+                font-weight: bold;
+                min-height: 38px;
+                max-height: 38px;
+            }
+            QComboBox::drop-down {
+                border-left: 1px solid #cbd5e1;
+            }
+        """)
+        self.combo_location_filter.currentIndexChanged.connect(self.on_location_filter_changed)
+        top_inputs_row.addWidget(self.combo_location_filter)
+
         left_layout.addLayout(top_inputs_row)
 
         # Line 3: Cart Table (Dynamic unlimited width/height, touch-friendly scrollbars, full text visible)
         self.cart_table = QTableWidget()
         self.cart_table.setObjectName("POSCartTable")
         # Colonnes ordonnées par priorité : Bouton Suppr en tête, Produits et Paramètres de vente d'abord, Stock/Lot/TVA en fin
-        cols = ["", "Produit", "Qté vendue", "Prix HT", "Remise", "Total TTC", "Code-barres", "Stock", "Lot", "TVA"]
+        cols = ["", "Produit", "Qté vendue", "Prix HT", "Remise", "Total TTC", "Code-barres", "Emplacement (Lieu)", "Stock", "Lot", "TVA"]
         self.cart_table.setColumnCount(len(cols))
         self.cart_table.setHorizontalHeaderLabels(cols)
 
@@ -309,15 +335,16 @@ class PointOfSaleTab(QWidget):
             header.setSectionResizeMode(i, QHeaderView.Interactive)
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(65)
-        self.cart_table.setColumnWidth(1, 240)
+        self.cart_table.setColumnWidth(1, 230)
         self.cart_table.setColumnWidth(2, 90)
-        self.cart_table.setColumnWidth(3, 140)
-        self.cart_table.setColumnWidth(4, 150)
+        self.cart_table.setColumnWidth(3, 135)
+        self.cart_table.setColumnWidth(4, 145)
         self.cart_table.setColumnWidth(5, 110)
-        self.cart_table.setColumnWidth(6, 170)
-        self.cart_table.setColumnWidth(7, 75)
-        self.cart_table.setColumnWidth(8, 110)
-        self.cart_table.setColumnWidth(9, 85)
+        self.cart_table.setColumnWidth(6, 160)
+        self.cart_table.setColumnWidth(7, 165)
+        self.cart_table.setColumnWidth(8, 75)
+        self.cart_table.setColumnWidth(9, 110)
+        self.cart_table.setColumnWidth(10, 85)
 
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.cart_table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -1048,7 +1075,7 @@ class PointOfSaleTab(QWidget):
                 "qty_sold": qty,
                 "unit_price_ht": price_ht,
                 "discount_percent": discount_percent,
-                "tva_percent": self.cart_table.cellWidget(row, 9).value(),
+                "tva_percent": self.cart_table.cellWidget(row, 10).value(),
             })
         return items
 
@@ -1108,7 +1135,7 @@ class PointOfSaleTab(QWidget):
             remise = self.cart_table.cellWidget(row, 4)
             remise.type_combo.setCurrentText("%")
             remise.value_spin.setValue(float(item.get("discount_percent") or 0))
-            self.cart_table.cellWidget(row, 9).setValue(float(item.get("tva_percent") or 0))
+            self.cart_table.cellWidget(row, 10).setValue(float(item.get("tva_percent") or 0))
         self.active_draft_id = draft.get("Draft_ID")
         if draft.get("Client_ID"):
             for index in range(self.cb_client.count()):
@@ -1339,6 +1366,7 @@ class PointOfSaleTab(QWidget):
             self.product_completer.setModel(QStringListModel(suggestions))
             if hasattr(self, 'fav_grid'):
                 self.refresh_favorites_display()
+            self.populate_pos_locations()
         except Exception as e:
             logging.error(f"Error loading batches for POS: {e}")
 
@@ -1579,20 +1607,69 @@ class PointOfSaleTab(QWidget):
         barcode_item.setToolTip(f"{barcode_text}\n(Double-clic pour saisir/associer un code-barres)")
         self.cart_table.setItem(row_idx, 6, barcode_item)
         
-        # Col 7: Qty Stock (Non prioritaire)
+        # Col 7: Emplacement (Lieu de retrait interactif si plusieurs lieux disponibles)
+        p_id = batch.get('Product_ID')
+        available_batches = [
+            b for b in self.batches_cache
+            if b.get('Product_ID') == p_id and float(b.get('Quantity_Current') or 0) > 0
+        ]
+        if len(available_batches) <= 1:
+            loc_name = batch.get('Location_Name') or "Par défaut"
+            loc_item = QTableWidgetItem(f"📍 {loc_name}")
+            loc_item.setFlags(loc_item.flags() & ~Qt.ItemIsEditable)
+            loc_item.setTextAlignment(Qt.AlignCenter)
+            loc_item.setFont(QFont("", -1, QFont.Bold))
+            loc_item.setForeground(QColor("#007572"))
+            loc_item.setToolTip(f"Emplacement de retrait : {loc_name}")
+            self.cart_table.setItem(row_idx, 7, loc_item)
+        else:
+            loc_combo = QComboBox()
+            loc_combo.setStyleSheet("""
+                QComboBox {
+                    background-color: #f0fdf4;
+                    border: 1px solid #86efac;
+                    border-radius: 0px;
+                    padding: 2px 4px;
+                    color: #166534;
+                    font-weight: bold;
+                    font-size: 11px;
+                    min-height: 28px;
+                }
+                QComboBox::drop-down { border-left: 1px solid #86efac; }
+            """)
+            for b_opt in available_batches:
+                l_name = b_opt.get('Location_Name') or "Lieu inconnu"
+                s_qty = b_opt.get('Quantity_Current') or 0
+                l_num = b_opt.get('Lot_Number') or ""
+                label = f"📍 {l_name} ({s_qty})"
+                if l_num and l_num != "---":
+                    label += f" | {l_num}"
+                loc_combo.addItem(label, b_opt)
+
+            for i in range(loc_combo.count()):
+                if loc_combo.itemData(i).get('Batch_ID') == batch.get('Batch_ID'):
+                    loc_combo.setCurrentIndex(i)
+                    break
+
+            loc_combo.currentIndexChanged.connect(
+                lambda _idx, cb=loc_combo: self.on_cart_location_changed(cb)
+            )
+            self.cart_table.setCellWidget(row_idx, 7, loc_combo)
+
+        # Col 8: Qty Stock
         stock_item = QTableWidgetItem(str(batch.get('Quantity_Current', 0)))
         stock_item.setFlags(stock_item.flags() & ~Qt.ItemIsEditable)
         stock_item.setTextAlignment(Qt.AlignCenter)
-        self.cart_table.setItem(row_idx, 7, stock_item)
+        self.cart_table.setItem(row_idx, 8, stock_item)
 
-        # Col 8: N° Lot (Priorité faible, en fin de tableau)
+        # Col 9: N° Lot
         lot_item = QTableWidgetItem(batch.get('Lot_Number', '---'))
         lot_item.setFlags(lot_item.flags() & ~Qt.ItemIsEditable)
         lot_item.setToolTip(str(batch.get('Lot_Number', '---')))
         lot_item.setTextAlignment(Qt.AlignCenter)
-        self.cart_table.setItem(row_idx, 8, lot_item)
+        self.cart_table.setItem(row_idx, 9, lot_item)
         
-        # Col 9: TVA (Priorité faible, auto-sélection intégrale au clic)
+        # Col 10: TVA
         tva_spin = AutoSelectDoubleSpinBox()
         enable_auto_select_all(tva_spin)
         tva_spin.setRange(0, 100)
@@ -1602,7 +1679,7 @@ class PointOfSaleTab(QWidget):
         tva_spin.setStyleSheet("border-radius: 0px; padding: 2px 4px; min-height: 30px;")
         tva_spin.setValue(float(batch.get('Selling_TVA_Percent') or batch.get('Tax_Rate_Percent') or 0))
         tva_spin.valueChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row_idx, 9, tva_spin)
+        self.cart_table.setCellWidget(row_idx, 10, tva_spin)
         
         self.calculate_totals()
         # Ajustement dynamique sans limite pour garantir l'affichage complet de tous les textes
@@ -1641,7 +1718,7 @@ class PointOfSaleTab(QWidget):
             price_widget = self.cart_table.cellWidget(row, 3)
             remise_widget = self.cart_table.cellWidget(row, 4)
             total_item = self.cart_table.item(row, 5)
-            tva_widget = self.cart_table.cellWidget(row, 9)
+            tva_widget = self.cart_table.cellWidget(row, 10)
             
             if not all([qty_widget, price_widget, remise_widget, tva_widget, total_item]):
                 continue
@@ -1732,7 +1809,7 @@ class PointOfSaleTab(QWidget):
                 remise_amount = max(0.0, min(remise_val, line_ht))
                 remise_pct = (remise_amount / line_ht * 100.0) if line_ht > 0 else 0.0
                 
-            tva_pct = self.cart_table.cellWidget(row, 9).value()
+            tva_pct = self.cart_table.cellWidget(row, 10).value()
             
             detail_id = self.data_manager.sales.add_invoice_detail(
                 invoice_id=invoice_id,
@@ -1904,7 +1981,7 @@ class PointOfSaleTab(QWidget):
                 "qty_sold": qty,
                 "unit_price_ht": price_ht,
                 "discount_percent": remise_pct,
-                "tva_percent": self.cart_table.cellWidget(row, 9).value(),
+                "tva_percent": self.cart_table.cellWidget(row, 10).value(),
             })
 
         self.btn_validate.setEnabled(False)
@@ -1960,19 +2037,26 @@ class PointOfSaleTab(QWidget):
         self.refresh_cash_session_context()
 
     def handle_favorite_product_clicked(self, batch):
-        """Gère la sélection d'un produit favori : gère les codes-barres/lots multiples disponibles."""
+        """Gère la sélection d'un produit favori : permet de choisir l'emplacement (lieu) si présent dans plusieurs endroits."""
         p_id = batch.get('Product_ID')
+        loc_filter = self.combo_location_filter.currentData() if hasattr(self, 'combo_location_filter') else None
+
         matching_batches = [
             b for b in self.batches_cache
             if b.get('Product_ID') == p_id and float(b.get('Quantity_Current') or 0) > 0
         ]
+
+        if loc_filter is not None:
+            filtered_by_loc = [b for b in matching_batches if b.get('Location_ID') == loc_filter]
+            if filtered_by_loc:
+                matching_batches = filtered_by_loc
 
         if len(matching_batches) <= 1:
             target = matching_batches[0] if matching_batches else batch
             self.add_product_to_cart(target, quantity=1.0)
             return
 
-        # Plusieurs lots ou codes-barres disponibles : dialogue tactile de sélection
+        # Présent dans plusieurs emplacements ou lots : dialogue tactile de choix du lieu de retrait
         from ui.widgets.sales.dialogs import SelectBatchBarcodeDialog
         dlg = SelectBatchBarcodeDialog(matching_batches, parent=self)
         if dlg.exec():
@@ -2073,3 +2157,64 @@ class PointOfSaleTab(QWidget):
         btn_box.addWidget(btn_ok)
         l.addLayout(btn_box)
         dlg.exec()
+
+    def populate_pos_locations(self):
+        """Charge la liste des emplacements disponibles dans le filtre de caisse."""
+        if not hasattr(self, 'combo_location_filter'):
+            return
+        curr = self.combo_location_filter.currentData()
+        self.combo_location_filter.blockSignals(True)
+        self.combo_location_filter.clear()
+        self.combo_location_filter.addItem("📍 Tous Lieux", None)
+        try:
+            if hasattr(self.data_manager, 'locations'):
+                locs = self.data_manager.locations.get_all_locations()
+                for loc in locs:
+                    self.combo_location_filter.addItem(f"📍 {loc.get('Location_Name')}", loc.get('Location_ID'))
+        except Exception as e:
+            logging.error(f"Erreur populate_pos_locations: {e}")
+        idx = self.combo_location_filter.findData(curr)
+        if idx >= 0:
+            self.combo_location_filter.setCurrentIndex(idx)
+        else:
+            self.combo_location_filter.setCurrentIndex(0)
+        self.combo_location_filter.blockSignals(False)
+
+    def on_location_filter_changed(self):
+        """Actualise les produits favoris et la recherche lorsque l'emplacement sélectionné change."""
+        self.refresh_favorites_display()
+
+    def on_cart_location_changed(self, combo):
+        """Change le lot/emplacement de retrait pour la ligne du panier correspondante."""
+        for r in range(self.cart_table.rowCount()):
+            if self.cart_table.cellWidget(r, 7) == combo:
+                new_batch = combo.currentData()
+                if not new_batch:
+                    return
+                # Mettre à jour l'objet batch dans la cellule produit
+                name_item = self.cart_table.item(r, 1)
+                if name_item:
+                    name_item.setData(Qt.UserRole, new_batch)
+                # Mettre à jour la cellule de stock (Col 8)
+                stock_item = self.cart_table.item(r, 8)
+                if stock_item:
+                    stock_item.setText(str(new_batch.get('Quantity_Current', 0)))
+                # Mettre à jour le N° Lot (Col 9)
+                lot_item = self.cart_table.item(r, 9)
+                if lot_item:
+                    lot_num = new_batch.get('Lot_Number', '---')
+                    lot_item.setText(lot_num)
+                    lot_item.setToolTip(str(lot_num))
+                # Mettre à jour le code-barres (Col 6)
+                codes = self.parse_all_barcodes(new_batch)
+                bc_text = " / ".join(codes) if codes else "---"
+                bc_item = self.cart_table.item(r, 6)
+                if bc_item:
+                    bc_item.setText(bc_text)
+                    bc_item.setToolTip(f"{bc_text}\n(Double-clic pour saisir/associer un code-barres)")
+                # Mettre à jour le maximum autorisé pour la quantité
+                qty_spin = self.cart_table.cellWidget(r, 2)
+                if qty_spin:
+                    qty_spin.setRange(0.01, float(new_batch.get('Quantity_Current') or 999999))
+                self.calculate_totals()
+                break

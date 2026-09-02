@@ -431,13 +431,13 @@ class QuickCashPaymentDialog(QDialog):
 
 
 class SelectBatchBarcodeDialog(QDialog):
-    """Dialogue tactile permettant de choisir parmi plusieurs lots/codes-barres disponibles pour un produit."""
+    """Dialogue tactile permettant de choisir l'emplacement (lieu de retrait) et le lot pour un produit."""
     def __init__(self, batches, parent=None):
         super().__init__(parent)
         self.batches = batches or []
         self.selected_batch = None
-        self.setWindowTitle("🏷️ Sélection du Code-Barres / Lot")
-        self.setMinimumSize(620, 380)
+        self.setWindowTitle("📍 Choix de l'Emplacement (Lieu de Retrait) / Lot")
+        self.setMinimumSize(680, 420)
         self.setStyleSheet("""
             QDialog {
                 background-color: #ffffff;
@@ -446,14 +446,14 @@ class SelectBatchBarcodeDialog(QDialog):
             QLabel {
                 color: #1e293b;
             }
-            QLineEdit {
+            QLineEdit, QComboBox {
                 background-color: #f8fafc;
                 border: 1px solid #cbd5e1;
                 border-radius: 0px;
                 padding: 6px 10px;
                 font-size: 13px;
             }
-            QLineEdit:focus {
+            QLineEdit:focus, QComboBox:focus {
                 border: 2px solid #007572;
                 background-color: #ffffff;
             }
@@ -473,24 +473,46 @@ class SelectBatchBarcodeDialog(QDialog):
 
         p_name = self.batches[0].get('Product_Name', 'Produit') if self.batches else 'Produit'
         header = QLabel(f"<b>{p_name}</b>")
-        header.setStyleSheet("font-size: 15px; color: #007572; font-weight: bold;")
+        header.setStyleSheet("font-size: 16px; color: #007572; font-weight: bold;")
         layout.addWidget(header)
 
-        sub = QLabel("Ce produit dispose de plusieurs lots/codes-barres en stock.<br>Scannez ou saisissez un code-barres pour sélectionner automatiquement le lot, ou cliquez ci-dessous :")
-        sub.setStyleSheet("font-size: 11px; color: #64748b;")
+        sub = QLabel("Ce produit est disponible dans <b>plusieurs emplacements ou lots</b>.<br>Choisissez le <b>lieu de retrait</b> souhaité ou scannez le code-barres :")
+        sub.setStyleSheet("font-size: 12px; color: #475569; line-height: 140%;")
         layout.addWidget(sub)
 
+        # Barre de filtres (Recherche code/lot + Filtre par Emplacement)
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(8)
+
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔎 Scannez ou saisissez le code-barres...")
-        self.search_input.textChanged.connect(self._on_search_changed)
+        self.search_input.setPlaceholderText("🔎 Scannez un code-barres ou recherchez un lot...")
+        self.search_input.textChanged.connect(self._apply_local_filter)
         self.search_input.returnPressed.connect(self._on_return_pressed)
-        layout.addWidget(self.search_input)
+        filter_layout.addWidget(self.search_input, stretch=3)
+
+        self.combo_loc = QComboBox()
+        self.combo_loc.addItem("📍 Tous les Lieux", None)
+        # Extraire les emplacements uniques disponibles
+        seen_locs = set()
+        for b in self.batches:
+            l_id = b.get('Location_ID')
+            l_name = b.get('Location_Name') or "Emplacement non spécifié"
+            if l_id and l_id not in seen_locs:
+                seen_locs.add(l_id)
+                self.combo_loc.addItem(f"📍 {l_name}", l_id)
+        self.combo_loc.currentIndexChanged.connect(self._apply_local_filter)
+        filter_layout.addWidget(self.combo_loc, stretch=2)
+
+        layout.addLayout(filter_layout)
 
         from PySide6.QtWidgets import QTableWidget, QHeaderView, QAbstractItemView
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Code-Barres", "N° Lot", "Stock Dispo", "Date Exp.", "Prix TTC"])
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels([
+            "Emplacement (Lieu de Retrait)", "Stock Dispo", "Code-Barres", "N° Lot", "Date Exp.", "Prix TTC"
+        ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -527,8 +549,8 @@ class SelectBatchBarcodeDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(self.btn_cancel)
 
-        self.btn_select = QPushButton("Sélectionner ce Lot")
-        self.btn_select.setStyleSheet("background-color: #007572; color: #ffffff; border: 1px solid #005a57;")
+        self.btn_select = QPushButton("Valider le Retrait depuis cet Emplacement")
+        self.btn_select.setStyleSheet("background-color: #007572; color: #ffffff; border: 1px solid #005a57; font-weight: bold;")
         self.btn_select.clicked.connect(self._on_select)
         btn_layout.addWidget(self.btn_select)
 
@@ -540,7 +562,7 @@ class SelectBatchBarcodeDialog(QDialog):
             val = str(b.get(key) or '').strip()
             if val and val.lower() not in ('none', 'null', '---'):
                 import re
-                for p in re.split(r'[,;/|\n]+', val):
+                for p in re.split(r'[,;/|\r\n]+', val):
                     pc = p.strip()
                     if pc and pc not in codes:
                         codes.append(pc)
@@ -551,6 +573,7 @@ class SelectBatchBarcodeDialog(QDialog):
         from PySide6.QtGui import QColor, QFont
         self.table.setRowCount(len(batches))
         for r, b in enumerate(batches):
+            loc_str = f"📍 {b.get('Location_Name') or 'Lieu non spécifié'}"
             codes = self._get_batch_codes(b)
             code_str = " / ".join(codes) if codes else "---"
             lot_str = str(b.get('Lot_Number') or '---')
@@ -561,45 +584,61 @@ class SelectBatchBarcodeDialog(QDialog):
             price_ttc = price_ht * (1 + tva / 100.0)
             price_str = f"{format_money(price_ttc)} DA"
 
+            # 0. Emplacement
+            loc_item = QTableWidgetItem(loc_str)
+            loc_item.setData(Qt.UserRole, b)
+            loc_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            loc_item.setFont(QFont("", -1, QFont.Bold))
+            loc_item.setForeground(QColor("#007572"))
+
+            # 1. Stock Dispo
+            s_item = QTableWidgetItem(stock_str)
+            s_item.setTextAlignment(Qt.AlignCenter)
+            s_item.setFont(QFont("", -1, QFont.Bold))
+
+            # 2. Code-Barres
             c_item = QTableWidgetItem(code_str)
-            c_item.setData(Qt.UserRole, b)
             c_item.setTextAlignment(Qt.AlignCenter)
-            c_item.setFont(QFont("", -1, QFont.Bold))
             c_item.setForeground(QColor("#0f5f8f"))
 
+            # 3. N° Lot
             l_item = QTableWidgetItem(lot_str)
             l_item.setTextAlignment(Qt.AlignCenter)
 
-            s_item = QTableWidgetItem(stock_str)
-            s_item.setTextAlignment(Qt.AlignCenter)
-
+            # 4. Date Exp.
             e_item = QTableWidgetItem(exp_str)
             e_item.setTextAlignment(Qt.AlignCenter)
 
+            # 5. Prix TTC
             p_item = QTableWidgetItem(price_str)
             p_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             p_item.setFont(QFont("", -1, QFont.Bold))
 
-            self.table.setItem(r, 0, c_item)
-            self.table.setItem(r, 1, l_item)
-            self.table.setItem(r, 2, s_item)
-            self.table.setItem(r, 3, e_item)
-            self.table.setItem(r, 4, p_item)
+            self.table.setItem(r, 0, loc_item)
+            self.table.setItem(r, 1, s_item)
+            self.table.setItem(r, 2, c_item)
+            self.table.setItem(r, 3, l_item)
+            self.table.setItem(r, 4, e_item)
+            self.table.setItem(r, 5, p_item)
 
         if len(batches) > 0:
             self.table.selectRow(0)
 
-    def _on_search_changed(self, text):
-        clean = text.strip().lower()
-        if not clean:
-            filtered = self.batches
-        else:
-            filtered = []
-            for b in self.batches:
+    def _apply_local_filter(self):
+        clean = self.search_input.text().strip().lower()
+        loc_id = self.combo_loc.currentData()
+
+        filtered = []
+        for b in self.batches:
+            if loc_id is not None and b.get('Location_ID') != loc_id:
+                continue
+            if clean:
                 codes = [c.lower() for c in self._get_batch_codes(b)]
                 lot = str(b.get('Lot_Number') or '').lower()
-                if any(clean in c for c in codes) or clean in lot:
-                    filtered.append(b)
+                loc = str(b.get('Location_Name') or '').lower()
+                if not (any(clean in c for c in codes) or clean in lot or clean in loc):
+                    continue
+            filtered.append(b)
         self._populate_table(filtered)
 
     def _on_return_pressed(self):

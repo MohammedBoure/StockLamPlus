@@ -290,9 +290,9 @@ def _build_table(self):
     self.table.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
     self.table.verticalHeader().setLayoutDirection(Qt.RightToLeft)
 
-    # ترتيب الأعمدة: الأولوية الأولى للمنتج والمخزون والأسعار الأساسية (HT, TTC, Valeur, Vente 1)، تليها بيانات اللوط والتصنيفات، ثم أسعار البيع 2 و 3 و 4 قبل الشكاوى
+    # ترتيب الأعمدة: الأولوية الأولى للمنتج والمخزون والوحدة والأسعار الأساسية (HT, TTC, Valeur, Vente 1)، تليها بيانات اللوط والتصنيفات، ثم أسعار البيع 2 و 3 و 4 قبل الشكاوى
     cols = [
-        "Désignation Produit", "Stock (Actuel)", "Prix U. HT", "Prix U. TTC",
+        "Désignation Produit", "Stock (Actuel)", "Unité", "Prix U. HT", "Prix U. TTC",
         "Valeur (DA)", "Prix Vente 1", "N° Lot", "Date Exp.", "Qté Init.",
         "Code-Barres", "Code Ext", "Emplacement", "Famille", "Marque",
         "Automate", "Fournisseur", "Ref PO", "Date Entrée",
@@ -312,6 +312,10 @@ def _build_table(self):
     self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
     self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
     self.table.setAlternatingRowColors(True)
+    self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    self.table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+    self.table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
     self.table.setStyleSheet("""
         QTableWidget {
             background-color: #ffffff;
@@ -331,6 +335,68 @@ def _build_table(self):
             border-bottom: 2px solid #007572;
             border-right: 1px solid #e2e8f0;
             padding: 5px 8px;
+        }
+        QScrollBar:horizontal {
+            border: 1px solid #cbd5e1;
+            background: #f1f5f9;
+            height: 18px;
+            margin: 0px 22px 0px 22px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #007572;
+            min-width: 40px;
+            border-radius: 0px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: #005a57;
+        }
+        QScrollBar::handle:horizontal:pressed {
+            background: #003d3a;
+        }
+        QScrollBar::add-line:horizontal {
+            border: 1px solid #cbd5e1;
+            background: #e2e8f0;
+            width: 22px;
+            subcontrol-position: right;
+            subcontrol-origin: margin;
+        }
+        QScrollBar::sub-line:horizontal {
+            border: 1px solid #cbd5e1;
+            background: #e2e8f0;
+            width: 22px;
+            subcontrol-position: left;
+            subcontrol-origin: margin;
+        }
+        QScrollBar::add-line:horizontal:hover, QScrollBar::sub-line:horizontal:hover {
+            background: #cbd5e1;
+        }
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+            background: #f8fafc;
+        }
+        QScrollBar:vertical {
+            border: 1px solid #cbd5e1;
+            background: #f1f5f9;
+            width: 16px;
+            margin: 20px 0px 20px 0px;
+        }
+        QScrollBar::handle:vertical {
+            background: #007572;
+            min-height: 35px;
+            border-radius: 0px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: #005a57;
+        }
+        QScrollBar::handle:vertical:pressed {
+            background: #003d3a;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            border: 1px solid #cbd5e1;
+            background: #e2e8f0;
+            height: 20px;
+        }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: #f8fafc;
         }
     """)
     self.table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -353,10 +419,11 @@ def _build_table(self):
 
 def _build_bottom_bar(self):
     bottom_frame = QFrame()
+    self.bottom_frame = bottom_frame
     bottom_frame.setStyleSheet("""
         QFrame {
-            background-color: #ffffff;
-            border-top: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+            border-top: 2px solid #cbd5e1;
             border-radius: 0px;
         }
     """)

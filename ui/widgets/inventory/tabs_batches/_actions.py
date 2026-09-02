@@ -210,7 +210,8 @@ def show_batch_details(self):
     if not batch_data:
         return
 
-    if col == 22:
+    header_text = self.table.horizontalHeaderItem(col).text() if self.table.horizontalHeaderItem(col) else ""
+    if col == 23 or header_text == "Groupe Vente":
         self.open_assign_pos_group(batch_data)
         return
 

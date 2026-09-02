@@ -112,7 +112,7 @@ def _append_rows(self, chunk):
         self.table.insertRow(r)
         _fill_row(self.table, r, b, hide_fin)
 
-    for col in (2, 3, 4, 5, 18, 19, 20):
+    for col in (3, 4, 5, 6, 19, 20, 21):
         self.table.setColumnHidden(col, hide_fin)
 
 
@@ -146,7 +146,7 @@ def populate_table(self, data):
         _fill_row(self.table, r, b, hide_fin)
 
     self.table.setSortingEnabled(False)
-    for col in (2, 3, 4, 5, 18, 19, 20):
+    for col in (3, 4, 5, 6, 19, 20, 21):
         self.table.setColumnHidden(col, hide_fin)
 
     if hide_fin:
@@ -178,14 +178,34 @@ def _fill_row(table, r, b, hide_fin):
     table.setItem(r, 0, prod_item)
 
     # 1. Stock (Actuel)
-    table.setItem(r, 1, _make_item(
-        format_quantity(qty),
+    stock_unit = b.get('Stock_Unit') or ''
+    stock_text = format_quantity(qty)
+    stock_item = _make_item(
+        stock_text,
         color=QColor("#27ae60"),
         font=QFont("", -1, QFont.Bold),
         bg_color=bg_color
-    ))
+    )
+    if stock_unit:
+        stock_item.setToolTip(f"{stock_text} {stock_unit}")
+    table.setItem(r, 1, stock_item)
 
-    # تطبيق الفلتر المالي على الأسعار الرئيسية ذات الأولوية الأولى (2 إلى 5)
+    # 2. Unité (Unité de Stock du Produit)
+    unit_str = b.get('Stock_Unit') or '---'
+    unit_item = _make_item(unit_str, align=Qt.AlignCenter, bg_color=bg_color)
+    unit_item.setForeground(QColor("#007572"))
+    unit_item.setFont(QFont("", -1, QFont.Bold))
+    usage_u = b.get('Usage_Unit')
+    order_u = b.get('Ordering_Unit')
+    tip_parts = [f"Unité de stock : {unit_str}"]
+    if usage_u and usage_u != unit_str:
+        tip_parts.append(f"Unité d'usage : {usage_u}")
+    if order_u and order_u != unit_str:
+        tip_parts.append(f"Unité de commande : {order_u}")
+    unit_item.setToolTip("\n".join(tip_parts))
+    table.setItem(r, 2, unit_item)
+
+    # تطبيق الفلتر المالي على الأسعار الرئيسية ذات الأولوية الأولى (3 إلى 6)
     if not hide_fin:
         p  = float(b.get('Unit_Price_Received', 0) or 0)
         d  = float(b.get('Discount_Percent', 0) or 0) / 100.0
@@ -194,76 +214,76 @@ def _fill_row(table, r, b, hide_fin):
         lv = qty * p_ttc
         sv1 = float(b.get('Selling_Price_HT') or 0)
 
-        # 2. Prix U. HT
-        table.setItem(r, 2, _make_item(format_money(p), bg_color=bg_color))
-        # 3. Prix U. TTC
-        table.setItem(r, 3, _make_item(format_money(p_ttc), bg_color=bg_color))
-        # 4. Valeur (DA)
-        table.setItem(r, 4, _make_item(format_money(lv), bg_color=bg_color))
-        # 5. Prix Vente 1
-        table.setItem(r, 5, _make_item(format_money(sv1), bg_color=bg_color))
+        # 3. Prix U. HT
+        table.setItem(r, 3, _make_item(format_money(p), bg_color=bg_color))
+        # 4. Prix U. TTC
+        table.setItem(r, 4, _make_item(format_money(p_ttc), bg_color=bg_color))
+        # 5. Valeur (DA)
+        table.setItem(r, 5, _make_item(format_money(lv), bg_color=bg_color))
+        # 6. Prix Vente 1
+        table.setItem(r, 6, _make_item(format_money(sv1), bg_color=bg_color))
     else:
-        for col in range(2, 6):
+        for col in range(3, 7):
             table.setItem(r, col, _make_item('', bg_color=bg_color))
 
-    # 6. N° Lot
-    table.setItem(r, 6,  _make_item(b.get('Lot_Number', '---'), bg_color=bg_color))
-    # 7. Date Exp.
-    table.setItem(r, 7,  _make_item(str(b.get('Expiry_Date', ''))[:10], bg_color=bg_color))
-    # 8. Qté Init.
-    table.setItem(r, 8,  _make_item(format_quantity(b.get('Quantity_Initial', 0)), bg_color=bg_color))
-    # 9. Code-Barres
-    table.setItem(r, 9,  _make_item(
+    # 7. N° Lot
+    table.setItem(r, 7,  _make_item(b.get('Lot_Number', '---'), bg_color=bg_color))
+    # 8. Date Exp.
+    table.setItem(r, 8,  _make_item(str(b.get('Expiry_Date', ''))[:10], bg_color=bg_color))
+    # 9. Qté Init.
+    table.setItem(r, 9,  _make_item(format_quantity(b.get('Quantity_Initial', 0)), bg_color=bg_color))
+    # 10. Code-Barres
+    table.setItem(r, 10,  _make_item(
         b.get('Internal_Barcode') or b.get('Barcode'),
         bg_color=bg_color
     ))
-    # 10. Code Ext
-    table.setItem(r, 10, _make_item(b.get('External_Barcode') or '---', bg_color=bg_color))
-    # 11. Emplacement
-    table.setItem(r, 11, _make_item(b.get('Location_Name', '---'), bg_color=bg_color))
+    # 11. Code Ext
+    table.setItem(r, 11, _make_item(b.get('External_Barcode') or '---', bg_color=bg_color))
+    # 12. Emplacement
+    table.setItem(r, 12, _make_item(b.get('Location_Name', '---'), bg_color=bg_color))
 
-    # 12. Famille
-    table.setItem(r, 12, _make_item(b.get('Family_Name', '---'), bg_color=bg_color))
-    # 13. Marque
-    table.setItem(r, 13, _make_item(b.get('Manuf_Name', '---'), bg_color=bg_color))
-    # 14. Automate
-    table.setItem(r, 14, _make_item(b.get('Automate_Name', '---'), bg_color=bg_color))
-    # 15. Fournisseur
-    table.setItem(r, 15, _make_item(b.get('Supplier_Name', '---'), bg_color=bg_color))
-    # 16. Ref PO
-    table.setItem(r, 16, _make_item(str(b.get('PO_ID') or '---'), bg_color=bg_color))
-    # 17. Date Entrée
-    table.setItem(r, 17, _make_item(
+    # 13. Famille
+    table.setItem(r, 13, _make_item(b.get('Family_Name', '---'), bg_color=bg_color))
+    # 14. Marque
+    table.setItem(r, 14, _make_item(b.get('Manuf_Name', '---'), bg_color=bg_color))
+    # 15. Automate
+    table.setItem(r, 15, _make_item(b.get('Automate_Name', '---'), bg_color=bg_color))
+    # 16. Fournisseur
+    table.setItem(r, 16, _make_item(b.get('Supplier_Name', '---'), bg_color=bg_color))
+    # 17. Ref PO
+    table.setItem(r, 17, _make_item(str(b.get('PO_ID') or '---'), bg_color=bg_color))
+    # 18. Date Entrée
+    table.setItem(r, 18, _make_item(
         str(b.get('Date_Received') or b.get('Created_At', ''))[:10],
         bg_color=bg_color
     ))
 
-    # 18-20. Prix Vente 2, 3, 4 (في نهاية الجدول قبل الشكاوى)
+    # 19-21. Prix Vente 2, 3, 4 (في نهاية الجدول قبل الشكاوى)
     if not hide_fin:
         sv2 = float(b.get('Selling_Price_HT_2') or 0)
         sv3 = float(b.get('Selling_Price_HT_3') or 0)
         sv4 = float(b.get('Selling_Price_HT_4') or 0)
-        table.setItem(r, 18, _make_item(format_money(sv2), bg_color=bg_color))
-        table.setItem(r, 19, _make_item(format_money(sv3), bg_color=bg_color))
-        table.setItem(r, 20, _make_item(format_money(sv4), bg_color=bg_color))
+        table.setItem(r, 19, _make_item(format_money(sv2), bg_color=bg_color))
+        table.setItem(r, 20, _make_item(format_money(sv3), bg_color=bg_color))
+        table.setItem(r, 21, _make_item(format_money(sv4), bg_color=bg_color))
     else:
-        for col in (18, 19, 20):
+        for col in (19, 20, 21):
             table.setItem(r, col, _make_item('', bg_color=bg_color))
 
-    # 21. Réclamation
+    # 22. Réclamation
     rec_item = _make_item(reclamation, bg_color=bg_color)
     if reclamation:
         rec_item.setIcon(get_reclamation_icon())
-    table.setItem(r, 21, rec_item)
+    table.setItem(r, 22, rec_item)
 
-    # 22. Groupe Vente (Priorité Caisse)
+    # 23. Groupe Vente (Priorité Caisse)
     pos_grp = b.get('POS_Priority_Group')
     grp_str = f"⭐ {pos_grp}" if pos_grp else "---"
     grp_item = _make_item(grp_str, align=Qt.AlignCenter, bg_color=bg_color)
     if pos_grp:
         grp_item.setForeground(QColor("#007572"))
         grp_item.setFont(QFont("", -1, QFont.Bold))
-    table.setItem(r, 22, grp_item)
+    table.setItem(r, 23, grp_item)
 
     # تعيين الهيدر العمودي (رقم الصف وأيقونة الشكوى الدائرية إذا وجدت)
     v_header_item = QTableWidgetItem(str(r+1))
@@ -282,24 +302,25 @@ def _fill_row(table, r, b, hide_fin):
 
 COL_MAP = {
     0: 'Product_Name',          1: 'Quantity_Current',
-    2: 'Unit_Price_Received',   3: 'Unit_Price_Received_TTC',
-    4: 'Total_Value',           5: 'Selling_Price_HT',
-    6: 'Lot_Number',            7: 'Expiry_Date',
-    8: 'Quantity_Initial',      9: 'Internal_Barcode',
-    10: 'External_Barcode',     11: 'Location_Name',
-    12: 'Family_Name',          13: 'Manuf_Name',
-    14: 'Automate_Name',        15: 'Supplier_Name',
-    16: 'PO_ID',                17: 'Date_Received',
-    18: 'Selling_Price_HT_2',   19: 'Selling_Price_HT_3',
-    20: 'Selling_Price_HT_4',   21: 'Reception_Note'
+    2: 'Stock_Unit',            3: 'Unit_Price_Received',
+    4: 'Unit_Price_Received_TTC', 5: 'Total_Value',
+    6: 'Selling_Price_HT',      7: 'Lot_Number',
+    8: 'Expiry_Date',           9: 'Quantity_Initial',
+    10: 'Internal_Barcode',     11: 'External_Barcode',
+    12: 'Location_Name',        13: 'Family_Name',
+    14: 'Manuf_Name',           15: 'Automate_Name',
+    16: 'Supplier_Name',        17: 'PO_ID',
+    18: 'Date_Received',        19: 'Selling_Price_HT_2',
+    20: 'Selling_Price_HT_3',   21: 'Selling_Price_HT_4',
+    22: 'Reception_Note',       23: 'POS_Priority_Group'
 }
 
-NUMERIC_COLS = {1, 2, 3, 4, 5, 8, 18, 19, 20}
-DATE_COLS    = {7, 17}
+NUMERIC_COLS = {1, 3, 4, 5, 6, 9, 19, 20, 21}
+DATE_COLS    = {8, 18}
 
 
 def _sort_key(col_index, item):
-    if col_index == 4:
+    if col_index == 5:
         try:
             qty = float(item.get('Quantity_Current', 0))
             p  = float(item.get('Unit_Price_Received', 0))
@@ -308,7 +329,7 @@ def _sort_key(col_index, item):
             return qty * p * (1 - d) * (1 + t)
         except Exception:
             return 0.0
-    elif col_index == 3:
+    elif col_index == 4:
         try:
             p  = float(item.get('Unit_Price_Received', 0))
             d  = float(item.get('Discount_Percent', 0)) / 100.0
@@ -369,7 +390,7 @@ def apply_sorting(self):
         )
 
         key_name = COL_MAP.get(col)
-        if not key_name and col not in (3, 4):
+        if not key_name and col not in (4, 5):
             return
 
         self.filtered_data.sort(

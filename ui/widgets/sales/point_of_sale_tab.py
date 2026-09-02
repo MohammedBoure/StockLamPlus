@@ -320,8 +320,9 @@ class PointOfSaleTab(QWidget):
         self.cart_table.setColumnWidth(9, 85)
 
         self.cart_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.cart_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.cart_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.cart_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.cart_table.cellDoubleClicked.connect(self.on_cart_cell_double_clicked)
         self.cart_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.cart_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.cart_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
@@ -733,7 +734,9 @@ class PointOfSaleTab(QWidget):
             btn_layout.addWidget(lbl_n, stretch=1)
             btn_layout.addWidget(lbl_p)
 
-            btn.clicked.connect(lambda _chk=False, b=batch: self.add_product_to_cart(b, quantity=1.0))
+            btn.clicked.connect(lambda _chk=False, b=batch: self.handle_favorite_product_clicked(b))
+            btn.setContextMenuPolicy(Qt.CustomContextMenu)
+            btn.customContextMenuRequested.connect(lambda pos, b=batch: self.show_favorite_product_context_menu(b, pos))
             self.fav_grid.addWidget(btn)
 
             count += 1
@@ -786,6 +789,25 @@ class PointOfSaleTab(QWidget):
         """)
         self.btn_keypad.clicked.connect(self.toggle_touch_keypad)
         bottom_layout.addWidget(self.btn_keypad)
+
+        # 2b. Saisie / Association de Code-Barres
+        self.btn_enter_barcode = QPushButton("🏷️ Saisie Code-Barres")
+        self.btn_enter_barcode.setCursor(Qt.PointingHandCursor)
+        self.btn_enter_barcode.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #0f5f8f;
+                font-weight: bold;
+                font-size: 12px;
+                border: 1px solid #93c5fd;
+                border-radius: 0px;
+                padding: 6px 12px;
+                min-height: 36px;
+            }
+            QPushButton:hover { background-color: #eff6ff; }
+        """)
+        self.btn_enter_barcode.clicked.connect(self.on_btn_enter_barcode_clicked)
+        bottom_layout.addWidget(self.btn_enter_barcode)
 
         # 3. Suspendre
         self.btn_hold_sale = QPushButton("⏸️ Suspendre (F8)")
@@ -1327,22 +1349,42 @@ class PointOfSaleTab(QWidget):
         code = str(value or "").strip()
         return bool(code) and code.lower() not in {"none", "null", "---"}
 
-    def register_barcodes(self, batch):
-        for key in ("Internal_Barcode", "External_Barcode", "Barcode"):
-            value = batch.get(key)
-            if not self.is_real_code(value):
+    def parse_all_barcodes(self, batch_or_text):
+        """Extrait et nettoie tous les codes-barres distincts (supporte codes multiples séparés par virgule, slash, etc.)."""
+        if isinstance(batch_or_text, dict):
+            raw_codes = [
+                batch_or_text.get("Internal_Barcode"),
+                batch_or_text.get("External_Barcode"),
+                batch_or_text.get("Barcode")
+            ]
+        else:
+            raw_codes = [batch_or_text]
+
+        results = []
+        for raw in raw_codes:
+            if not self.is_real_code(raw):
                 continue
-            normalized = self.normalize_code(value)
+            import re
+            parts = re.split(r'[,;/|\r\n]+', str(raw))
+            for p in parts:
+                p_clean = p.strip()
+                if self.is_real_code(p_clean) and p_clean not in results:
+                    results.append(p_clean)
+        return results
+
+    def register_barcodes(self, batch):
+        codes = self.parse_all_barcodes(batch)
+        for code in codes:
+            normalized = self.normalize_code(code)
             if normalized:
                 self.barcode_map[normalized] = batch
 
     def format_product_suggestion(self, batch):
-        internal = batch.get("Internal_Barcode") or "-"
-        external = batch.get("External_Barcode")
-        ext_text = f" | Ext: {external}" if self.is_real_code(external) else ""
+        codes = self.parse_all_barcodes(batch)
+        code_str = " / ".join(codes) if codes else "-"
         lot = batch.get("Lot_Number") or "---"
         qty = batch.get("Quantity_Current") or 0
-        return f"[{internal}{ext_text}] {batch.get('Product_Name', '')} | Lot: {lot} | Stock: {qty}"
+        return f"[{code_str}] {batch.get('Product_Name', '')} | Lot: {lot} | Stock: {qty}"
 
     def on_product_selected(self, text):
         batch = self.search_map.get(text)
@@ -1522,16 +1564,8 @@ class PointOfSaleTab(QWidget):
         total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.cart_table.setItem(row_idx, 5, total_item)
 
-        # Col 6: Code-barres (Affichage intégral sans coupure de tout code quelle que soit sa longueur)
-        bc1 = batch.get('Internal_Barcode')
-        bc2 = batch.get('External_Barcode')
-        bc3 = batch.get('Barcode')
-        codes = []
-        for cand in (bc1, bc2, bc3):
-            if self.is_real_code(cand):
-                c_str = str(cand).strip()
-                if c_str not in codes:
-                    codes.append(c_str)
+        # Col 6: Code-barres (Affichage intégral sans coupure et support double-clic pour saisie/association)
+        codes = self.parse_all_barcodes(batch)
         barcode_text = " / ".join(codes) if codes else "---"
 
         barcode_item = QTableWidgetItem(barcode_text)
@@ -1542,7 +1576,7 @@ class PointOfSaleTab(QWidget):
         f_bc = barcode_item.font()
         f_bc.setBold(True)
         barcode_item.setFont(f_bc)
-        barcode_item.setToolTip(barcode_text)
+        barcode_item.setToolTip(f"{barcode_text}\n(Double-clic pour saisir/associer un code-barres)")
         self.cart_table.setItem(row_idx, 6, barcode_item)
         
         # Col 7: Qty Stock (Non prioritaire)
@@ -1924,3 +1958,118 @@ class PointOfSaleTab(QWidget):
             )
             self.load_initial_data()
         self.refresh_cash_session_context()
+
+    def handle_favorite_product_clicked(self, batch):
+        """Gère la sélection d'un produit favori : gère les codes-barres/lots multiples disponibles."""
+        p_id = batch.get('Product_ID')
+        matching_batches = [
+            b for b in self.batches_cache
+            if b.get('Product_ID') == p_id and float(b.get('Quantity_Current') or 0) > 0
+        ]
+
+        if len(matching_batches) <= 1:
+            target = matching_batches[0] if matching_batches else batch
+            self.add_product_to_cart(target, quantity=1.0)
+            return
+
+        # Plusieurs lots ou codes-barres disponibles : dialogue tactile de sélection
+        from ui.widgets.sales.dialogs import SelectBatchBarcodeDialog
+        dlg = SelectBatchBarcodeDialog(matching_batches, parent=self)
+        if dlg.exec():
+            selected = dlg.get_selected_batch()
+            if selected:
+                self.add_product_to_cart(selected, quantity=1.0)
+
+    def show_favorite_product_context_menu(self, batch, pos):
+        """Menu contextuel pour gérer les codes-barres d'un produit depuis la liste des favoris."""
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QCursor
+        menu = QMenu(self)
+        action_barcode = menu.addAction("🏷️ Saisir / Associer un Code-Barres...")
+        action = menu.exec(QCursor.pos())
+        if action == action_barcode:
+            self.open_enter_barcode_dialog(batch)
+
+    def on_cart_cell_double_clicked(self, row, col):
+        """Ouvre le dialogue de saisie de code-barres lors du double-clic sur la colonne Code-barres."""
+        if col == 6:  # Colonne Code-barres
+            item = self.cart_table.item(row, 1)
+            if item:
+                batch = item.data(Qt.UserRole)
+                if batch:
+                    self.open_enter_barcode_dialog(batch, row_idx=row)
+
+    def on_btn_enter_barcode_clicked(self):
+        """Action du bouton Saisie Code-Barres dans la barre inférieure."""
+        row = self.cart_table.currentRow()
+        if row >= 0:
+            item = self.cart_table.item(row, 1)
+            if item:
+                batch = item.data(Qt.UserRole)
+                if batch:
+                    self.open_enter_barcode_dialog(batch, row_idx=row)
+                    return
+
+        # Si aucune ligne n'est sélectionnée, demander à scanner ou sélectionner
+        from PySide6.QtWidgets import QInputDialog
+        code, ok = QInputDialog.getText(
+            self, "Saisie Code-Barres",
+            "Scannez ou saisissez le code-barres à associer :"
+        )
+        if ok and code.strip():
+            self.open_associate_unknown_barcode_dialog(code.strip())
+
+    def open_enter_barcode_dialog(self, batch, row_idx=None):
+        """Ouvre le dialogue de saisie de code-barres pour un produit/lot."""
+        from ui.widgets.sales.dialogs import EnterProductBarcodeDialog
+        dlg = EnterProductBarcodeDialog(self.data_manager, batch, parent=self)
+        if dlg.exec():
+            # Ré-enregistrer les codes-barres dans la table
+            self.register_barcodes(batch)
+            if row_idx is not None and row_idx < self.cart_table.rowCount():
+                codes = self.parse_all_barcodes(batch)
+                b_text = " / ".join(codes) if codes else "---"
+                item = self.cart_table.item(row_idx, 6)
+                if item:
+                    item.setText(b_text)
+                    item.setToolTip(f"{b_text}\n(Double-clic pour saisir/associer un code-barres)")
+            self.load_active_batches()
+
+    def open_associate_unknown_barcode_dialog(self, barcode):
+        """Permet d'associer un code-barres scanné inconnu à un produit du catalogue."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QHBoxLayout, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🏷️ Associer Code-Barres Inconnu")
+        dlg.setMinimumSize(450, 200)
+        l = QVBoxLayout(dlg)
+        l.addWidget(QLabel(f"Code-barres scanné : <b>{barcode}</b>"))
+        l.addWidget(QLabel("Sélectionnez le produit auquel associer ce code-barres :"))
+        combo = QComboBox()
+        combo.setEditable(True)
+        products = self.data_manager.products.get_all_products()
+        for p in products:
+            combo.addItem(p.get('Product_Name', 'Produit'), p.get('Product_ID'))
+        l.addWidget(combo)
+
+        btn_box = QHBoxLayout()
+        btn_box.addStretch()
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.clicked.connect(dlg.reject)
+        btn_box.addWidget(btn_cancel)
+
+        btn_ok = QPushButton("Associer")
+        btn_ok.setStyleSheet("background-color: #007572; color: white;")
+        def _do_assoc():
+            p_id = combo.currentData()
+            if p_id:
+                success, msg = self.data_manager.products.add_product_barcode(p_id, barcode)
+                if success:
+                    QMessageBox.information(dlg, "Succès", f"Code-barres '{barcode}' associé avec succès !")
+                    dlg.accept()
+                    self.load_active_batches()
+                else:
+                    QMessageBox.critical(dlg, "Erreur", f"Échec : {msg}")
+        btn_ok.clicked.connect(_do_assoc)
+        btn_box.addWidget(btn_ok)
+        l.addLayout(btn_box)
+        dlg.exec()

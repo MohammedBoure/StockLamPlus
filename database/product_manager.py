@@ -197,6 +197,43 @@ class ProductManager:
             logging.error(f"Erreur get_assigned_pos_priority_groups: {e}")
             return []
 
+    def add_product_barcode(self, product_id: int, new_barcode: str) -> Tuple[bool, str]:
+        """
+        Ajoute un nouveau code-barres aux codes-barres multiples du produit (séparés par virgule).
+        """
+        import re
+        new_barcode = str(new_barcode or "").strip()
+        if not new_barcode:
+            return False, "Code-barres vide."
+
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT Barcode FROM Products_Master WHERE Product_ID = %s", (product_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return False, "Produit non trouvé."
+
+                curr = str(row.get('Barcode') or "").strip()
+                existing_parts = [p.strip() for p in re.split(r'[,;/|\n]+', curr) if p.strip()]
+
+                if new_barcode in existing_parts:
+                    return True, curr
+
+                existing_parts.append(new_barcode)
+                updated_str = ", ".join(existing_parts)
+
+                cursor.execute(
+                    "UPDATE Products_Master SET Barcode = %s WHERE Product_ID = %s",
+                    (updated_str, product_id)
+                )
+                conn.commit()
+                logging.info(f"Produit {product_id}: Code-barres '{new_barcode}' ajouté. Nouveaux codes: {updated_str}")
+                return True, updated_str
+        except Exception as e:
+            logging.error(f"Erreur add_product_barcode pour produit {product_id}: {e}", exc_info=True)
+            return False, str(e)
+
     def get_all_products(self) -> List[Dict]:
         """
         يسترجع جميع المنتجات بما في ذلك الحقل الجديد Is_Billable تلقائياً عبر (p.*).

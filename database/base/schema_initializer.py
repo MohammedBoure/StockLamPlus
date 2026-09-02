@@ -789,7 +789,11 @@ SCHEMA_QUERIES = [
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY idx_type_name (template_type, name)
-    );"""
+    );""",
+
+    # [Migration]: Expand Barcode columns for multiple barcodes support
+    """ALTER TABLE Products_Master MODIFY COLUMN Barcode VARCHAR(255) NULL;""",
+    """ALTER TABLE Inventory_Batches MODIFY COLUMN External_Barcode VARCHAR(255) NULL;"""
 ]
 
 INDEX_QUERIES = [

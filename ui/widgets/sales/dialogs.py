@@ -429,3 +429,337 @@ class QuickCashPaymentDialog(QDialog):
             'print_receipt': self.chk_print.isChecked()
         }
 
+
+class SelectBatchBarcodeDialog(QDialog):
+    """Dialogue tactile permettant de choisir parmi plusieurs lots/codes-barres disponibles pour un produit."""
+    def __init__(self, batches, parent=None):
+        super().__init__(parent)
+        self.batches = batches or []
+        self.selected_batch = None
+        self.setWindowTitle("🏷️ Sélection du Code-Barres / Lot")
+        self.setMinimumSize(620, 380)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+            }
+            QLabel {
+                color: #1e293b;
+            }
+            QLineEdit {
+                background-color: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 6px 10px;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #007572;
+                background-color: #ffffff;
+            }
+            QPushButton {
+                border-radius: 0px;
+                padding: 6px 14px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+        """)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        p_name = self.batches[0].get('Product_Name', 'Produit') if self.batches else 'Produit'
+        header = QLabel(f"<b>{p_name}</b>")
+        header.setStyleSheet("font-size: 15px; color: #007572; font-weight: bold;")
+        layout.addWidget(header)
+
+        sub = QLabel("Ce produit dispose de plusieurs lots/codes-barres en stock.<br>Scannez ou saisissez un code-barres pour sélectionner automatiquement le lot, ou cliquez ci-dessous :")
+        sub.setStyleSheet("font-size: 11px; color: #64748b;")
+        layout.addWidget(sub)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔎 Scannez ou saisissez le code-barres...")
+        self.search_input.textChanged.connect(self._on_search_changed)
+        self.search_input.returnPressed.connect(self._on_return_pressed)
+        layout.addWidget(self.search_input)
+
+        from PySide6.QtWidgets import QTableWidget, QHeaderView, QAbstractItemView
+        self.table = QTableWidget()
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["Code-Barres", "N° Lot", "Stock Dispo", "Date Exp.", "Prix TTC"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                gridline-color: #f1f5f9;
+            }
+            QTableWidget::item:selected {
+                background-color: #007572;
+                color: #ffffff;
+            }
+            QHeaderView::section {
+                background-color: #f8fafc;
+                color: #475569;
+                font-weight: bold;
+                border: none;
+                border-bottom: 1px solid #cbd5e1;
+                padding: 6px;
+            }
+        """)
+        self.table.doubleClicked.connect(self._on_select)
+        layout.addWidget(self.table)
+
+        self._populate_table(self.batches)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self.btn_cancel = QPushButton("Annuler")
+        self.btn_cancel.setStyleSheet("background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;")
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(self.btn_cancel)
+
+        self.btn_select = QPushButton("Sélectionner ce Lot")
+        self.btn_select.setStyleSheet("background-color: #007572; color: #ffffff; border: 1px solid #005a57;")
+        self.btn_select.clicked.connect(self._on_select)
+        btn_layout.addWidget(self.btn_select)
+
+        layout.addLayout(btn_layout)
+
+    def _get_batch_codes(self, b):
+        codes = []
+        for key in ('Internal_Barcode', 'External_Barcode', 'Barcode'):
+            val = str(b.get(key) or '').strip()
+            if val and val.lower() not in ('none', 'null', '---'):
+                import re
+                for p in re.split(r'[,;/|\n]+', val):
+                    pc = p.strip()
+                    if pc and pc not in codes:
+                        codes.append(pc)
+        return codes
+
+    def _populate_table(self, batches):
+        from PySide6.QtWidgets import QTableWidgetItem
+        from PySide6.QtGui import QColor, QFont
+        self.table.setRowCount(len(batches))
+        for r, b in enumerate(batches):
+            codes = self._get_batch_codes(b)
+            code_str = " / ".join(codes) if codes else "---"
+            lot_str = str(b.get('Lot_Number') or '---')
+            stock_str = str(b.get('Quantity_Current') or 0)
+            exp_str = str(b.get('Expiry_Date') or '---')[:10]
+            price_ht = float(b.get('Selling_Price_HT') or 0)
+            tva = float(b.get('Selling_TVA_Percent') or b.get('Tax_Rate_Percent') or 0)
+            price_ttc = price_ht * (1 + tva / 100.0)
+            price_str = f"{format_money(price_ttc)} DA"
+
+            c_item = QTableWidgetItem(code_str)
+            c_item.setData(Qt.UserRole, b)
+            c_item.setTextAlignment(Qt.AlignCenter)
+            c_item.setFont(QFont("", -1, QFont.Bold))
+            c_item.setForeground(QColor("#0f5f8f"))
+
+            l_item = QTableWidgetItem(lot_str)
+            l_item.setTextAlignment(Qt.AlignCenter)
+
+            s_item = QTableWidgetItem(stock_str)
+            s_item.setTextAlignment(Qt.AlignCenter)
+
+            e_item = QTableWidgetItem(exp_str)
+            e_item.setTextAlignment(Qt.AlignCenter)
+
+            p_item = QTableWidgetItem(price_str)
+            p_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            p_item.setFont(QFont("", -1, QFont.Bold))
+
+            self.table.setItem(r, 0, c_item)
+            self.table.setItem(r, 1, l_item)
+            self.table.setItem(r, 2, s_item)
+            self.table.setItem(r, 3, e_item)
+            self.table.setItem(r, 4, p_item)
+
+        if len(batches) > 0:
+            self.table.selectRow(0)
+
+    def _on_search_changed(self, text):
+        clean = text.strip().lower()
+        if not clean:
+            filtered = self.batches
+        else:
+            filtered = []
+            for b in self.batches:
+                codes = [c.lower() for c in self._get_batch_codes(b)]
+                lot = str(b.get('Lot_Number') or '').lower()
+                if any(clean in c for c in codes) or clean in lot:
+                    filtered.append(b)
+        self._populate_table(filtered)
+
+    def _on_return_pressed(self):
+        clean = self.search_input.text().strip().lower()
+        for b in self.batches:
+            codes = [c.lower() for c in self._get_batch_codes(b)]
+            if clean in codes:
+                self.selected_batch = b
+                self.accept()
+                return
+        self._on_select()
+
+    def _on_select(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            item = self.table.item(row, 0)
+            if item:
+                self.selected_batch = item.data(Qt.UserRole)
+                self.accept()
+                return
+        QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un lot.")
+
+    def get_selected_batch(self):
+        return self.selected_batch
+
+
+class EnterProductBarcodeDialog(QDialog):
+    """Dialogue permettant de saisir ou d'associer un code-barres directement depuis la caisse."""
+    def __init__(self, data_manager, batch, parent=None):
+        super().__init__(parent)
+        self.data_manager = data_manager
+        self.batch = batch or {}
+        self.setWindowTitle("🏷️ Saisie / Association de Code-Barres")
+        self.setMinimumSize(500, 340)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+            }
+            QLabel {
+                color: #1e293b;
+            }
+            QLineEdit {
+                background-color: #f8fafc;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 6px 10px;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #007572;
+                background-color: #ffffff;
+            }
+            QPushButton {
+                border-radius: 0px;
+                padding: 7px 16px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QRadioButton {
+                color: #334155;
+                font-size: 12px;
+            }
+        """)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        p_name = self.batch.get('Product_Name', 'Produit')
+        header = QLabel(f"<b>{p_name}</b>")
+        header.setStyleSheet("font-size: 15px; color: #007572; font-weight: bold;")
+        layout.addWidget(header)
+
+        # Informations actuelles
+        info_frame = QFrame()
+        info_frame.setStyleSheet("background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0px; padding: 6px;")
+        info_layout = QGridLayout(info_frame)
+        info_layout.setSpacing(4)
+
+        info_layout.addWidget(QLabel("<b>N° Lot :</b>"), 0, 0)
+        info_layout.addWidget(QLabel(str(self.batch.get('Lot_Number') or '---')), 0, 1)
+
+        info_layout.addWidget(QLabel("<b>Code Interne :</b>"), 1, 0)
+        info_layout.addWidget(QLabel(str(self.batch.get('Internal_Barcode') or '---')), 1, 1)
+
+        info_layout.addWidget(QLabel("<b>Code Externe :</b>"), 2, 0)
+        self.lbl_ext_barcode = QLabel(str(self.batch.get('External_Barcode') or '---'))
+        info_layout.addWidget(self.lbl_ext_barcode, 2, 1)
+
+        info_layout.addWidget(QLabel("<b>Codes Multiples :</b>"), 3, 0)
+        self.lbl_prod_barcode = QLabel(str(self.batch.get('Barcode') or '---'))
+        info_layout.addWidget(self.lbl_prod_barcode, 3, 1)
+
+        layout.addWidget(info_frame)
+
+        layout.addWidget(QLabel("<b>Nouveau code-barres à saisir ou scanner :</b>"))
+        self.barcode_input = QLineEdit()
+        self.barcode_input.setPlaceholderText("Ex: 6131234567890 (douchette ou clavier)")
+        self.barcode_input.returnPressed.connect(self._on_save)
+        layout.addWidget(self.barcode_input)
+
+        from PySide6.QtWidgets import QRadioButton, QButtonGroup
+        self.bg = QButtonGroup(self)
+        self.rb_product = QRadioButton("Ajouter aux codes-barres multiples du produit (recommandé)")
+        self.rb_product.setChecked(True)
+        self.rb_batch = QRadioButton("Définir comme code-barres externe de ce lot spécifique")
+        self.bg.addButton(self.rb_product)
+        self.bg.addButton(self.rb_batch)
+
+        layout.addWidget(self.rb_product)
+        layout.addWidget(self.rb_batch)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self.btn_cancel = QPushButton("Annuler")
+        self.btn_cancel.setStyleSheet("background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;")
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(self.btn_cancel)
+
+        self.btn_save = QPushButton("Enregistrer le Code-Barres")
+        self.btn_save.setStyleSheet("background-color: #007572; color: #ffffff; border: 1px solid #005a57;")
+        self.btn_save.clicked.connect(self._on_save)
+        btn_layout.addWidget(self.btn_save)
+
+        layout.addLayout(btn_layout)
+
+    def _on_save(self):
+        new_code = self.barcode_input.text().strip()
+        if not new_code:
+            QMessageBox.warning(self, "Champ vide", "Veuillez scanner ou saisir un code-barres.")
+            return
+
+        p_id = self.batch.get('Product_ID')
+        b_id = self.batch.get('Batch_ID')
+
+        try:
+            if self.rb_product.isChecked():
+                success, msg = self.data_manager.products.add_product_barcode(p_id, new_code)
+                if success:
+                    self.batch['Barcode'] = msg
+                    QMessageBox.information(self, "Succès", f"Code-barres '{new_code}' associé avec succès au produit !")
+                    self.accept()
+                else:
+                    QMessageBox.critical(self, "Erreur", f"Échec de l'association : {msg}")
+            else:
+                success, msg = self.data_manager.batches.update_batch_external_barcode(b_id, new_code)
+                if success:
+                    self.batch['External_Barcode'] = new_code
+                    QMessageBox.information(self, "Succès", f"Code-barres externe '{new_code}' associé avec succès à ce lot !")
+                    self.accept()
+                else:
+                    QMessageBox.critical(self, "Erreur", f"Échec de la mise à jour : {msg}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Une exception s'est produite : {e}")
+
+    def get_entered_barcode(self):
+        return self.barcode_input.text().strip()
+
+

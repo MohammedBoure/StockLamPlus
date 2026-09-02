@@ -1620,4 +1620,22 @@ class InventoryBatchManager:
             logging.error(f"Error fetching price change history: {e}", exc_info=True)
             return []
 
+    def update_batch_external_barcode(self, batch_id: int, external_barcode: str) -> Tuple[bool, str]:
+        """Met à jour le code-barres externe d'un lot d'inventaire."""
+        external_barcode = str(external_barcode or "").strip()
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE Inventory_Batches SET External_Barcode = %s WHERE Batch_ID = %s",
+                    (external_barcode if external_barcode else None, batch_id)
+                )
+                conn.commit()
+                logging.info(f"Lot {batch_id}: Code-barres externe mis à jour: '{external_barcode}'")
+                return True, external_barcode
+        except Exception as e:
+            logging.error(f"Erreur update_batch_external_barcode: {e}", exc_info=True)
+            return False, str(e)
+
+
 

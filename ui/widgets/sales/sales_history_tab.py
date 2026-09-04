@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableWidget, QHeaderView, QPushButton,
     QHBoxLayout, QLabel, QComboBox, QDateEdit, QDialog, QFormLayout, 
     QGroupBox, QAbstractItemView, QStyle, QTableWidgetItem, QSpinBox, QMessageBox,
-    QFileDialog, QInputDialog
+    QFileDialog, QInputDialog, QFrame, QSizePolicy
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor, QBrush, QFont
@@ -609,80 +609,181 @@ class SalesHistoryTab(QWidget):
         layout.setSpacing(10)
         layout.setContentsMargins(5, 5, 5, 5)
         
-        # --- 1. Filter Section ---
-        filter_layout = QHBoxLayout()
-        filter_layout.setSpacing(5)
-        
+        # --- 1. Filter Section (Responsive 2-Tier Container) ---
+        filter_frame = QFrame()
+        filter_frame.setObjectName("SalesHistoryFilterFrame")
+        filter_frame.setStyleSheet("""
+            QFrame#SalesHistoryFilterFrame {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 6px 10px;
+            }
+            QLabel {
+                color: #334155;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QComboBox, QDateEdit {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 2px 6px;
+                font-size: 12px;
+                min-height: 28px;
+            }
+            QComboBox:focus, QDateEdit:focus {
+                border-color: #007572;
+            }
+        """)
+        filter_vbox = QVBoxLayout(filter_frame)
+        filter_vbox.setContentsMargins(4, 4, 4, 4)
+        filter_vbox.setSpacing(8)
+
+        # Tier 1: Period & Primary Filters
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(8)
+        row1_layout.setContentsMargins(0, 0, 0, 0)
+
+        lbl_from = QLabel("📅 Du :")
         self.date_from = QDateEdit(QDate.currentDate().addDays(-30))
         self.date_from.setCalendarPopup(True)
         self.date_from.setDisplayFormat("yyyy-MM-dd")
-        self.date_from.setFixedWidth(120)
+        self.date_from.setFixedWidth(105)
         self.date_from.dateChanged.connect(self.apply_filter_local)
-        
+
+        lbl_to = QLabel("au :")
         self.date_to = QDateEdit(QDate.currentDate())
         self.date_to.setCalendarPopup(True)
         self.date_to.setDisplayFormat("yyyy-MM-dd")
-        self.date_to.setFixedWidth(120)
+        self.date_to.setFixedWidth(105)
         self.date_to.dateChanged.connect(self.apply_filter_local)
-        
+
+        lbl_caisse = QLabel("🏦 Caisse :")
+        self.cb_caisse = QComboBox()
+        self.cb_caisse.addItem("Toutes les Caisses", None)
+        self.cb_caisse.setMinimumWidth(130)
+        self.cb_caisse.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.cb_caisse.currentIndexChanged.connect(self.apply_filter_local)
+
+        lbl_client = QLabel("👤 Client :")
         self.cb_client = QComboBox()
-        self.cb_client.setMinimumWidth(200)
+        self.cb_client.setMinimumWidth(150)
+        self.cb_client.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.cb_client.addItem("Tous les Clients", None)
         self.cb_client.currentIndexChanged.connect(self.load_sales_data)
 
+        lbl_status = QLabel("Statut :")
         self.cb_status = QComboBox()
         self.cb_status.addItem("Tous les statuts", None)
         for status in ("Validated", "Paid", "Cancelled"):
             self.cb_status.addItem(status, status)
+        self.cb_status.setMinimumWidth(110)
         self.cb_status.currentIndexChanged.connect(self.apply_filter_local)
 
+        lbl_payment = QLabel("Paiement :")
         self.cb_payment = QComboBox()
         self.cb_payment.addItem("Tous les paiements", None)
-        for method, label in (("Cash", "Especes"), ("Card", "Carte"), ("Transfer", "Virement"), ("Versement", "Versement"), ("Other", "Autre"), ("Credit", "Credit")):
+        for method, label in (("Cash", "Espèces"), ("Card", "Carte"), ("Transfer", "Virement"), ("Versement", "Versement"), ("Other", "Autre"), ("Credit", "Crédit")):
             self.cb_payment.addItem(label, method)
+        self.cb_payment.setMinimumWidth(110)
         self.cb_payment.currentIndexChanged.connect(self.apply_filter_local)
 
-        self.cb_caisse = QComboBox()
-        self.cb_caisse.addItem("Toutes les Caisses", None)
-        self.cb_caisse.currentIndexChanged.connect(self.apply_filter_local)
-        self.search_input = BarcodeLineEdit()
-        self.search_input.setPlaceholderText("Rechercher par ID, Client, Caisse ou Utilisateur...")
-        self.search_input.textChanged.connect(self.apply_filter_local)
-        
-        btn_refresh = QPushButton()
-        btn_refresh.setIcon(self.style().standardIcon(QStyle.SP_BrowserReload))
-        btn_refresh.setFixedSize(30, 30)
+        btn_refresh = QPushButton("🔄 Actualiser")
+        btn_refresh.setCursor(Qt.PointingHandCursor)
+        btn_refresh.setToolTip("Actualiser les données de vente (F5)")
+        btn_refresh.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc; color: #007572; border: 1px solid #cbd5e1;
+                border-radius: 4px; padding: 4px 12px; min-height: 28px; font-weight: bold; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e6f4f1; border-color: #007572; }
+        """)
         btn_refresh.clicked.connect(self.load_sales_data)
-        
+
+        row1_layout.addWidget(lbl_from)
+        row1_layout.addWidget(self.date_from)
+        row1_layout.addWidget(lbl_to)
+        row1_layout.addWidget(self.date_to)
+        row1_layout.addWidget(lbl_caisse)
+        row1_layout.addWidget(self.cb_caisse)
+        row1_layout.addWidget(lbl_client)
+        row1_layout.addWidget(self.cb_client)
+        row1_layout.addWidget(lbl_status)
+        row1_layout.addWidget(self.cb_status)
+        row1_layout.addWidget(lbl_payment)
+        row1_layout.addWidget(self.cb_payment)
+        row1_layout.addStretch(1)
+        row1_layout.addWidget(btn_refresh)
+
+        filter_vbox.addLayout(row1_layout)
+
+        # Tier 2: Search Input (Flexible width) & Action Buttons
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(8)
+        row2_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.search_input = BarcodeLineEdit()
+        self.search_input.setPlaceholderText("🔍 Rechercher par ID, N° Facture, Client, Caisse ou Utilisateur...")
+        self.search_input.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+                padding: 4px 10px;
+                font-size: 12px;
+                min-height: 30px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #007572;
+            }
+        """)
+        self.search_input.textChanged.connect(self.apply_filter_local)
+        row2_layout.addWidget(self.search_input, stretch=1)
+
         self.btn_print_selected = QPushButton("🖨️ Imprimer Facture")
         self.btn_print_selected.setEnabled(False)
-        self.btn_print_selected.setStyleSheet("background-color: #3498db; color: white; font-weight: bold; padding: 5px 15px;")
+        self.btn_print_selected.setCursor(Qt.PointingHandCursor)
+        self.btn_print_selected.setStyleSheet("""
+            QPushButton {
+                background-color: #007572; color: white; font-weight: bold;
+                border-radius: 4px; padding: 4px 14px; min-height: 30px; border: none; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #005a57; }
+            QPushButton:disabled { background-color: #cbd5e1; color: #94a3b8; }
+        """)
         self.btn_print_selected.clicked.connect(self.print_selected_invoice)
 
-        self.btn_export = QPushButton("Exporter CSV")
+        self.btn_no_invoice_return = QPushButton("↩️ Retour sans facture")
+        self.btn_no_invoice_return.setCursor(Qt.PointingHandCursor)
+        self.btn_no_invoice_return.setStyleSheet("""
+            QPushButton {
+                background-color: #fff7ed; color: #c2410c; border: 1px solid #fdba74;
+                border-radius: 4px; padding: 4px 14px; min-height: 30px; font-weight: 600; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #ffedd5; border-color: #ea580c; }
+        """)
+        self.btn_no_invoice_return.clicked.connect(self.create_no_invoice_return)
+
+        self.btn_export = QPushButton("📥 Exporter CSV")
+        self.btn_export.setCursor(Qt.PointingHandCursor)
+        self.btn_export.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc; color: #334155; border: 1px solid #cbd5e1;
+                border-radius: 4px; padding: 4px 14px; min-height: 30px; font-weight: 600; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e2e8f0; }
+        """)
         self.btn_export.clicked.connect(self.export_filtered_csv)
 
-        self.btn_no_invoice_return = QPushButton("Retour sans facture")
-        self.btn_no_invoice_return.clicked.connect(self.create_no_invoice_return)
-        filter_layout.addWidget(QLabel("Du:"))
-        filter_layout.addWidget(self.date_from)
-        filter_layout.addWidget(QLabel("Au:"))
-        filter_layout.addWidget(self.date_to)
-        filter_layout.addWidget(QLabel("Client:"))
-        filter_layout.addWidget(self.cb_client)
-        filter_layout.addWidget(QLabel("Statut:"))
-        filter_layout.addWidget(self.cb_status)
-        filter_layout.addWidget(QLabel("Paiement:"))
-        filter_layout.addWidget(self.cb_payment)
-        filter_layout.addWidget(QLabel("Caisse:"))
-        filter_layout.addWidget(self.cb_caisse)
-        filter_layout.addWidget(self.search_input)
-        filter_layout.addWidget(self.btn_print_selected)
-        filter_layout.addWidget(self.btn_export)
-        filter_layout.addWidget(self.btn_no_invoice_return)
-        filter_layout.addWidget(btn_refresh)
-        
-        layout.addLayout(filter_layout)
+        row2_layout.addWidget(self.btn_print_selected)
+        row2_layout.addWidget(self.btn_no_invoice_return)
+        row2_layout.addWidget(self.btn_export)
+
+        filter_vbox.addLayout(row2_layout)
+
+        layout.addWidget(filter_frame)
         
         # --- 2. Table Section ---
         self.table = QTableWidget()

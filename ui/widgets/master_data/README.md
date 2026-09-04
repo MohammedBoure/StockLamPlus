@@ -16,4 +16,5 @@ Ce dossier regroupe les interfaces de gestion des référentiels de données du 
 - `waste_reasons_tab.py` : Gestion des motifs de mise au rebut / perte.
 - `external_partners_tab.py` : Gestion des partenaires et sous-traitants externes.
 - `clients_tab.py` : Gestion des clients pour le point de vente.
-- `dialogs.py` : Boîtes de dialogue d'ajout et de modification pour chaque type de donnée de base (incluant l'assignation de groupe prioritaire POS sans limite).
+- `caisses_tab.py` : Gestion et contrôle des caisses (Terminaux POS), statut actif/inactif et suivi du nombre de sessions.
+- `dialogs.py` : Boîtes de dialogue d'ajout et de modification pour chaque type de donnée de base (incluant l'assignation de groupe prioritaire POS sans limite et la création/édition de caisse via `CaisseDialog`).

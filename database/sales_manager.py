@@ -8,6 +8,7 @@ from decimal import Decimal
 from .system_logger import active_user_id, log_methods
 from .stock_movement_log_manager import StockMovementLogManager
 from .pos_feature_manager import money, PAYMENT_METHODS, POSFeatureManager
+from ui.formatting import format_money
 
 @log_methods()
 class SalesManager:
@@ -1090,12 +1091,13 @@ class SalesManager:
                 rows.append({
                     'Row_Type': 'Cash_Open',
                     'Operation_ID': f"OPEN-{session['Cash_Session_ID']}",
+                    'Cash_Session_ID': session['Cash_Session_ID'],
                     'Invoice_No': session.get('Session_No'),
                     'Invoice_ID': None,
                     'Invoice_Date': session.get('Opened_At'),
                     'Event_Date': session.get('Opened_At'),
                     'Operation_Label': 'Ouverture caisse',
-                    'Client_Name': f"Session {session.get('Session_No')}",
+                    'Client_Name': f"Fond Initial: {format_money(session.get('Opening_Amount') or 0)} DA",
                     'Status': 'Open',
                     'Total_Amount_HT': 0,
                     'Total_Amount_TTC': 0,
@@ -1112,17 +1114,20 @@ class SalesManager:
                 })
             if event_in_range(session.get('Closed_At')):
                 expected_total = session.get('Expected_Total') or 0
+                diff = float(session.get('Cash_Difference') or 0)
+                diff_sign = "+" if diff > 0 else ""
+                diff_txt = f"Écart: {diff_sign}{format_money(diff)} DA"
                 rows.append({
                     'Row_Type': 'Cash_Close',
                     'Operation_ID': f"CLOSE-{session['Cash_Session_ID']}",
+                    'Cash_Session_ID': session['Cash_Session_ID'],
                     'Invoice_No': session.get('Session_No'),
                     'Invoice_ID': None,
                     'Invoice_Date': session.get('Closed_At'),
                     'Event_Date': session.get('Closed_At'),
                     'Operation_Label': 'Cloture caisse',
                     'Client_Name': (
-                        f"Comptage cash: {session.get('Counted_Cash') or 0} | "
-                        f"Ecart: {session.get('Cash_Difference') or 0}"
+                        f"Sortie/Compté: {format_money(session.get('Counted_Cash') or 0)} DA | {diff_txt}"
                     ),
                     'Status': 'Closed',
                     'Total_Amount_HT': 0,

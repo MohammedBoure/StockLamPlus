@@ -3,9 +3,11 @@
 from PySide6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QWidget, QMessageBox,
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QDoubleSpinBox,
-    QPushButton, QFrame, QGridLayout, QCheckBox
+    QPushButton, QFrame, QGridLayout, QCheckBox, QTableWidget,
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QTabWidget
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QColor, QBrush
 from ui.formatting import format_money
 from ui.widgets.master_data.dialogs import BaseDialog
 
@@ -289,6 +291,210 @@ class CloseSessionDialog(QDialog):
             'cash_difference': counted - self.theoretical_cash,
             'notes': self.inp_notes.text().strip()
         }
+
+
+class CashSessionDetailsDialog(QDialog):
+    """Fiche détaillée d'une session de caisse : Caisse, Ouverture, Clôture, Écarts et Ventes associées."""
+
+    def __init__(self, data_manager, session_id: int, parent=None):
+        super().__init__(parent)
+        self.data_manager = data_manager
+        self.session_id = session_id
+        self.session_data = self.data_manager.cash_sessions.get_session_details_full(session_id) or {}
+        
+        caisse_name = self.session_data.get('Terminal_Name') or self.session_data.get('Terminal_Code') or "Caisse"
+        session_no = self.session_data.get('Session_No') or f"#{session_id}"
+        
+        self.setWindowTitle(f"📋 Détails de la Session : {session_no} - {caisse_name}")
+        self.resize(850, 620)
+        self.setStyleSheet("""
+            QDialog { background-color: #ffffff; }
+            QLabel { font-size: 13px; color: #2c3e50; }
+        """)
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # --- En-tête Caisse & Session ---
+        header_frame = QFrame()
+        header_frame.setStyleSheet("background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;")
+        h_layout = QHBoxLayout(header_frame)
+        h_layout.setContentsMargins(8, 4, 8, 4)
+
+        caisse_name = self.session_data.get('Terminal_Name') or "Caisse"
+        caisse_code = self.session_data.get('Terminal_Code') or "-"
+        session_no = self.session_data.get('Session_No') or f"#{self.session_id}"
+        status = self.session_data.get('Status', 'Open')
+        is_open = (status == 'Open')
+
+        lbl_caisse = QLabel(f"🏦 <b>{caisse_name}</b> <span style='color: #64748b;'>({caisse_code})</span><br>"
+                            f"<span style='font-size: 15px; font-weight: bold; color: #007572;'>Session N° {session_no}</span>")
+        h_layout.addWidget(lbl_caisse)
+        h_layout.addStretch()
+
+        status_text = "🟢 SESSION OUVERTE (En cours)" if is_open else "🔒 SESSION CLÔTURÉE"
+        status_bg = "#e8f8f5" if is_open else "#fdf2f1"
+        status_color = "#007572" if is_open else "#c0392b"
+        status_border = "#a3e4d7" if is_open else "#fecaca"
+
+        lbl_status = QLabel(status_text)
+        lbl_status.setStyleSheet(f"background: {status_bg}; color: {status_color}; border: 1px solid {status_border};"
+                                 f"font-weight: bold; font-size: 12px; padding: 6px 14px; border-radius: 4px;")
+        h_layout.addWidget(lbl_status)
+
+        layout.addWidget(header_frame)
+
+        # --- Cartes Comparatives : Ouverture vs Clôture ---
+        cards_layout = QHBoxLayout()
+        cards_layout.setSpacing(12)
+
+        # 1. Carte Ouverture
+        card_open = QFrame()
+        card_open.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;")
+        l_open = QVBoxLayout(card_open)
+        l_open.setSpacing(6)
+
+        title_open = QLabel("🟢 <b>Détails de l'Ouverture</b>")
+        title_open.setStyleSheet("color: #007572; font-size: 14px; border-bottom: 2px solid #007572; padding-bottom: 4px;")
+        l_open.addWidget(title_open)
+
+        opened_by = self.session_data.get('Opened_By_Name') or "-"
+        opened_at = str(self.session_data.get('Opened_At', '---'))[:19]
+        opening_amt = float(self.session_data.get('Opening_Amount') or 0.0)
+
+        l_open.addWidget(QLabel(f"<b>Ouvert par :</b> {opened_by}"))
+        l_open.addWidget(QLabel(f"<b>Date & Heure :</b> {opened_at}"))
+        
+        lbl_open_money = QLabel(f"<b>Fond Initial Présent :</b><br>"
+                                f"<span style='font-size: 18px; font-weight: bold; color: #27ae60;'>{format_money(opening_amt)} DA</span>")
+        l_open.addWidget(lbl_open_money)
+        l_open.addStretch()
+        cards_layout.addWidget(card_open, stretch=1)
+
+        # 2. Carte Clôture / Sortie
+        card_close = QFrame()
+        card_close.setStyleSheet("background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px;")
+        l_close = QVBoxLayout(card_close)
+        l_close.setSpacing(6)
+
+        title_close = QLabel("🔒 <b>Détails de la Sortie / Clôture</b>")
+        title_close.setStyleSheet("color: #c0392b; font-size: 14px; border-bottom: 2px solid #c0392b; padding-bottom: 4px;")
+        l_close.addWidget(title_close)
+
+        if not is_open:
+            closed_by = self.session_data.get('Closed_By_Name') or "-"
+            closed_at = str(self.session_data.get('Closed_At', '---'))[:19]
+            counted_cash = float(self.session_data.get('Counted_Cash') or 0.0)
+            diff = float(self.session_data.get('Cash_Difference') or 0.0)
+            diff_color = "#27ae60" if abs(diff) < 0.01 else ("#2980b9" if diff > 0 else "#c0392b")
+            diff_status = "Équilibrée" if abs(diff) < 0.01 else ("Excédent (+)" if diff > 0 else "Déficit (-)")
+            diff_sign = "+" if diff > 0 else ""
+
+            l_close.addWidget(QLabel(f"<b>Clôturé par :</b> {closed_by}"))
+            l_close.addWidget(QLabel(f"<b>Date & Heure :</b> {closed_at}"))
+            l_close.addWidget(QLabel(f"<b>Montant Réel à la Sortie :</b><br>"
+                                     f"<span style='font-size: 18px; font-weight: bold; color: #2c3e50;'>{format_money(counted_cash)} DA</span>"))
+            
+            lbl_diff = QLabel(f"<b>Écart de caisse constaté :</b> "
+                              f"<span style='color: {diff_color}; font-weight: bold;'>{diff_sign}{format_money(diff)} DA ({diff_status})</span>")
+            l_close.addWidget(lbl_diff)
+        else:
+            summary = self.session_data.get('summary', {})
+            exp_cash = float(summary.get('Expected_Cash') or 0.0)
+            theo_total = opening_amt + exp_cash
+            l_close.addWidget(QLabel("<i>La session est actuellement active.</i>"))
+            l_close.addWidget(QLabel(f"<b>Montant Espèces théorique actuel :</b><br>"
+                                     f"<span style='font-size: 16px; font-weight: bold; color: #007572;'>{format_money(theo_total)} DA</span>"))
+            l_close.addWidget(QLabel("<span style='font-size: 12px; color: #64748b;'>(Fond initial + Encaissements espèces)</span>"))
+
+        l_close.addStretch()
+        cards_layout.addWidget(card_close, stretch=1)
+
+        layout.addLayout(cards_layout)
+
+        # --- Récapitulatif par mode de paiement et tableau des transactions ---
+        lbl_table_title = QLabel("🧾 <b>Transactions et Ventes Réalisées Durant la Session :</b>")
+        lbl_table_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #1e293b; margin-top: 4px;")
+        layout.addWidget(lbl_table_title)
+
+        table_invoices = QTableWidget()
+        cols = ["N° Facture", "Date", "Client", "Statut", "Mode Règlement", "Total TTC"]
+        table_invoices.setColumnCount(len(cols))
+        table_invoices.setHorizontalHeaderLabels(cols)
+        table_invoices.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table_invoices.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        table_invoices.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        table_invoices.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        table_invoices.setAlternatingRowColors(True)
+        table_invoices.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table_invoices.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+        invoices = self.session_data.get('invoices', [])
+        table_invoices.setRowCount(len(invoices))
+        total_session_sales = 0.0
+
+        for r, inv in enumerate(invoices):
+            ref = str(inv.get('Invoice_No') or f"#{inv.get('Invoice_ID')}")
+            dt = str(inv.get('Invoice_Date') or '---')
+            cl = str(inv.get('Client_Name') or 'Vente comptoir')
+            st = str(inv.get('Status') or '-')
+            pm = str(inv.get('Payment_Method') or '-')
+            amt = float(inv.get('Total_Amount_TTC') or 0.0)
+
+            if st != 'Cancelled':
+                total_session_sales += amt
+
+            table_invoices.setItem(r, 0, QTableWidgetItem(ref))
+            table_invoices.setItem(r, 1, QTableWidgetItem(dt))
+            table_invoices.setItem(r, 2, QTableWidgetItem(cl))
+            
+            st_item = QTableWidgetItem(st)
+            if st == 'Cancelled':
+                st_item.setForeground(QBrush(QColor("#c0392b")))
+            table_invoices.setItem(r, 3, st_item)
+
+            table_invoices.setItem(r, 4, QTableWidgetItem(pm))
+            
+            amt_item = QTableWidgetItem(f"{format_money(amt)} DA")
+            amt_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            amt_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            table_invoices.setItem(r, 5, amt_item)
+
+        layout.addWidget(table_invoices)
+
+        # --- Total Ventes et Remarques ---
+        bottom_row = QHBoxLayout()
+        notes = self.session_data.get('Notes')
+        notes_text = f"<b>Remarques :</b> {notes}" if notes else "<i>Aucune remarque particulière.</i>"
+        lbl_notes = QLabel(notes_text)
+        lbl_notes.setStyleSheet("color: #64748b; font-size: 12px;")
+        bottom_row.addWidget(lbl_notes)
+        bottom_row.addStretch()
+
+        lbl_total_sales = QLabel(f"<b>Total Ventes Session ({len(invoices)} tickets) : </b>"
+                                 f"<span style='font-size: 15px; font-weight: bold; color: #007572;'>{format_money(total_session_sales)} DA</span>")
+        bottom_row.addWidget(lbl_total_sales)
+        layout.addLayout(bottom_row)
+
+        # Bouton Fermer
+        btn_box = QHBoxLayout()
+        btn_box.addStretch()
+        btn_close_dlg = QPushButton("Fermer")
+        btn_close_dlg.setCursor(Qt.PointingHandCursor)
+        btn_close_dlg.setStyleSheet("""
+            QPushButton {
+                background: #007572; color: white; font-weight: bold;
+                border-radius: 4px; padding: 6px 24px; min-height: 32px; border: none;
+            }
+            QPushButton:hover { background: #005a57; }
+        """)
+        btn_close_dlg.clicked.connect(self.accept)
+        btn_box.addWidget(btn_close_dlg)
+        layout.addLayout(btn_box)
+
 
 
 class QuickCashPaymentDialog(QDialog):

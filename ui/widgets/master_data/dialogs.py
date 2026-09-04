@@ -1245,4 +1245,53 @@ class ClientDialog(BaseDialog):
             'city': self.city_input.text().strip(),
             'tax_id': self.tax_id_input.text().strip(),
             'commercial_reg': self.commercial_reg_input.text().strip()
-        }
+        }
+
+
+class CaisseDialog(BaseDialog):
+    """Fenêtre pour ajouter ou modifier une caisse / terminal de vente."""
+
+    def __init__(self, parent=None, data=None):
+        title = "Modifier la Caisse" if data else "Ajouter une Caisse"
+        super().__init__(title, parent)
+        self.resize(460, 260)
+        self.data = data
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QFormLayout(self.form_widget)
+        layout.setSpacing(12)
+
+        self.code_input = QLineEdit()
+        self.code_input.setPlaceholderText("Ex: CAISSE-01, CAISSE-ETAGE...")
+        self.code_input.setMinimumHeight(35)
+
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Ex: Caisse Principale, Caisse Secondaire...")
+        self.name_input.setMinimumHeight(35)
+
+        self.active_cb = QCheckBox("Caisse active pour les ventes")
+        self.active_cb.setChecked(True)
+
+        layout.addRow("Code Caisse * :", self.code_input)
+        layout.addRow("Nom / Désignation * :", self.name_input)
+        layout.addRow("Statut :", self.active_cb)
+
+        if self.data:
+            self.code_input.setText(str(self.data.get('Terminal_Code', '')))
+            self.name_input.setText(str(self.data.get('Terminal_Name', '')))
+            self.active_cb.setChecked(bool(self.data.get('Is_Active', True)))
+
+    def get_data(self):
+        code = self.code_input.text().strip().upper()
+        name = self.name_input.text().strip()
+        if not code or not name:
+            QMessageBox.warning(self, "Champs obligatoires", "Le code et le nom de la caisse sont obligatoires.")
+            return None
+
+        return {
+            'terminal_code': code,
+            'terminal_name': name,
+            'is_active': self.active_cb.isChecked()
+        }
+

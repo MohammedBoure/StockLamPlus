@@ -161,6 +161,22 @@ class CashSessionManager:
                 count_row = cursor.fetchone() or {}
                 seq = int(count_row.get("Cnt") or 0) + 1
                 session_no = f"CS-{int(terminal_id):02d}-{today}-{seq:02d}"
+
+                if not user_id:
+                    try:
+                        from database.system_logger import active_user_id
+                        user_id = active_user_id.get()
+                    except Exception:
+                        pass
+                if not user_id:
+                    try:
+                        cursor.execute("SELECT User_ID FROM Users ORDER BY User_ID ASC LIMIT 1")
+                        first_user = cursor.fetchone()
+                        if first_user:
+                            user_id = first_user.get("User_ID")
+                    except Exception:
+                        pass
+
                 cursor.execute(
                     """
                     INSERT INTO POS_Cash_Sessions
@@ -262,6 +278,15 @@ class CashSessionManager:
                 other_difference = counted_other - expected_other
                 credit_difference = counted_credit - expected_credit
 
+                if not user_id:
+                    try:
+                        from database.system_logger import active_user_id
+                        user_id = active_user_id.get()
+                    except Exception:
+                        pass
+                if not user_id:
+                    user_id = session.get("Opened_By")
+
                 cursor.execute(
                     """
                     UPDATE POS_Cash_Sessions
@@ -320,3 +345,95 @@ class CashSessionManager:
             except Exception:
                 pass
             return False, {"message": str(e)}
+
+    def get_session_details_full(self, cash_session_id: int) -> Optional[Dict]:
+        """Retourne les informations complètes d'une session : caisse, ouvertures, fermetures, écarts, et factures associées."""
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute(
+                    """
+                    SELECT s.*, 
+                           t.Terminal_Code, t.Terminal_Name,
+                           COALESCE(u_open.Full_Name, u_open.Username) AS Opened_By_Name,
+                           COALESCE(u_close.Full_Name, u_close.Username) AS Closed_By_Name
+                    FROM POS_Cash_Sessions s
+                    JOIN POS_Terminals t ON s.Terminal_ID = t.Terminal_ID
+                    LEFT JOIN Users u_open ON s.Opened_By = u_open.User_ID
+                    LEFT JOIN Users u_close ON s.Closed_By = u_close.User_ID
+                    WHERE s.Cash_Session_ID = %s
+                    """,
+                    (cash_session_id,),
+                )
+                session = cursor.fetchone()
+                if not session:
+                    return None
+
+                # Récapitulatif financier
+                summary = self.get_session_summary(cash_session_id)
+                session["summary"] = summary
+
+                # Factures de vente de la session
+                cursor.execute(
+                    """
+                    SELECT i.Invoice_ID, i.Invoice_No, i.Invoice_Date, i.Total_Amount_TTC,
+                           i.Status, i.Payment_Method,
+                           COALESCE(c.Client_Name, 'Vente comptoir') AS Client_Name,
+                           COALESCE(u.Full_Name, u.Username) AS Cashier_Name
+                    FROM Sales_Invoices i
+                    LEFT JOIN Clients c ON i.Client_ID = c.Client_ID
+                    LEFT JOIN Users u ON i.Created_By = u.User_ID
+                    WHERE i.Cash_Session_ID = %s
+                    ORDER BY i.Invoice_Date DESC, i.Invoice_ID DESC
+                    """,
+                    (cash_session_id,),
+                )
+                session["invoices"] = cursor.fetchall()
+                return session
+        except Exception as e:
+            logging.error(f"Could not fetch full session details: {e}", exc_info=True)
+            return None
+
+    def get_cash_sessions_report(self, start_date=None, end_date=None, terminal_id=None) -> list:
+        """Rapport synthétique et détaillé de toutes les sessions de caisse pour une période/caisse donnée."""
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                query = """
+                    SELECT s.*,
+                           t.Terminal_Code, t.Terminal_Name,
+                           COALESCE(u_open.Full_Name, u_open.Username) AS Opened_By_Name,
+                           COALESCE(u_close.Full_Name, u_close.Username) AS Closed_By_Name,
+                           COALESCE(inv_agg.Invoice_Count, 0) AS Total_Invoices,
+                           COALESCE(inv_agg.Total_Sales_TTC, 0) AS Total_Sales_TTC
+                    FROM POS_Cash_Sessions s
+                    JOIN POS_Terminals t ON s.Terminal_ID = t.Terminal_ID
+                    LEFT JOIN Users u_open ON s.Opened_By = u_open.User_ID
+                    LEFT JOIN Users u_close ON s.Closed_By = u_close.User_ID
+                    LEFT JOIN (
+                        SELECT Cash_Session_ID,
+                               COUNT(Invoice_ID) AS Invoice_Count,
+                               SUM(CASE WHEN Status <> 'Cancelled' THEN Total_Amount_TTC ELSE 0 END) AS Total_Sales_TTC
+                        FROM Sales_Invoices
+                        GROUP BY Cash_Session_ID
+                    ) inv_agg ON s.Cash_Session_ID = inv_agg.Cash_Session_ID
+                    WHERE 1=1
+                """
+                params = []
+                if start_date:
+                    query += " AND (DATE(s.Opened_At) >= %s OR DATE(s.Closed_At) >= %s)"
+                    params.extend([start_date, start_date])
+                if end_date:
+                    query += " AND (DATE(s.Opened_At) <= %s OR DATE(s.Closed_At) <= %s)"
+                    params.extend([end_date, end_date])
+                if terminal_id:
+                    query += " AND s.Terminal_ID = %s"
+                    params.append(terminal_id)
+
+                query += " ORDER BY s.Opened_At DESC"
+                cursor.execute(query, tuple(params))
+                return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Could not fetch cash sessions report: {e}", exc_info=True)
+            return []
+

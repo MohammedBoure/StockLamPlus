@@ -1251,18 +1251,31 @@ class PointOfSaleTab(QWidget):
             self.open_cash_session()
         else:
             summary = self.data_manager.cash_sessions.get_session_summary(self.cash_session_id)
+            open_sess = self.data_manager.cash_sessions.get_open_session(self.terminal_id) or {}
+            open_amt = float(open_sess.get('Opening_Amount') or 0.0)
             exp_cash = float(summary.get('Expected_Cash') or 0.0)
+            theo_total = open_amt + exp_cash
             invoices = summary.get('Invoice_Count') or 0
+
             box = QMessageBox(self)
             box.setWindowTitle("Gestion de Caisse")
-            box.setText(f"<b>Session en cours : {self.cash_session_no} ({self.terminal_label})</b><br><br>"
-                        f"• Ventes espèces : <b>{format_money(exp_cash)} DA</b><br>"
-                        f"• Nombre de tickets : <b>{invoices}</b><br><br>"
+            box.setText(f"<b>Caisse Active : {self.terminal_label}</b><br>"
+                        f"<b>Session N° : {self.cash_session_no}</b><br><br>"
+                        f"• Fond initial d'ouverture : <b>{format_money(open_amt)} DA</b><br>"
+                        f"• Ventes espèces de la session : <b>{format_money(exp_cash)} DA</b><br>"
+                        f"• Total espèces théorique en caisse : <b>{format_money(theo_total)} DA</b><br>"
+                        f"• Nombre de tickets émis : <b>{invoices}</b><br><br>"
                         f"Que souhaitez-vous faire ?")
+            btn_details = box.addButton("📋 Voir Détails Session", QMessageBox.ActionRole)
             btn_close = box.addButton("🔒 Clôturer la Session", QMessageBox.ActionRole)
             btn_continue = box.addButton("Poursuivre les ventes", QMessageBox.RejectRole)
             box.exec()
-            if box.clickedButton() == btn_close:
+            clicked = box.clickedButton()
+            if clicked == btn_details:
+                from ui.widgets.sales.dialogs import CashSessionDetailsDialog
+                dlg = CashSessionDetailsDialog(self.data_manager, self.cash_session_id, parent=self)
+                dlg.exec()
+            elif clicked == btn_close:
                 self.close_cash_session()
 
     def open_cash_session(self):

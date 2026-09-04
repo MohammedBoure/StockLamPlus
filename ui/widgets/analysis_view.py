@@ -2,7 +2,8 @@ import logging
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, 
     QDateEdit, QPushButton, QTabWidget, QTableWidget, 
-    QTableWidgetItem, QHeaderView, QSplitter
+    QTableWidgetItem, QHeaderView, QSplitter, QComboBox,
+    QAbstractItemView
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor, QFont, QPainter
@@ -209,6 +210,226 @@ class FullConsumptionTab(QWidget):
             logging.error(f"Consumption Tab Error: {e}")
 
 # =============================================================================
+# 4. TAB: ANALYSE DES CAISSES & SESSIONS (Cash & Sessions Analysis)
+# Suivi financier des sessions : fond initial, encaissements, clôtures et écarts
+# =============================================================================
+class CashSessionsAnalysisTab(QWidget):
+    def __init__(self, data_manager):
+        super().__init__()
+        self.data_manager = data_manager
+        self.raw_data = []
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        # --- Filtres internes : Choix de Caisse ---
+        filter_bar = QHBoxLayout()
+        filter_bar.addWidget(QLabel("Filtrer par Caisse :"))
+        self.combo_caisse = QComboBox()
+        self.combo_caisse.setMinimumWidth(220)
+        self.combo_caisse.addItem("Toutes les Caisses", None)
+        self.combo_caisse.currentIndexChanged.connect(self.filter_table)
+        filter_bar.addWidget(self.combo_caisse)
+
+        self.combo_status = QComboBox()
+        self.combo_status.addItem("Tous les statuts", None)
+        self.combo_status.addItem("Sessions Clôturées", "Closed")
+        self.combo_status.addItem("Sessions Ouvertes", "Open")
+        self.combo_status.currentIndexChanged.connect(self.filter_table)
+        filter_bar.addWidget(QLabel("Statut :"))
+        filter_bar.addWidget(self.combo_status)
+
+        filter_bar.addStretch()
+        layout.addLayout(filter_bar)
+
+        # --- Cartes KPI Récapitulatives ---
+        kpi_layout = QHBoxLayout()
+        kpi_layout.setSpacing(8)
+
+        self.kpi_sessions = self._create_kpi_card("Total Sessions", "0", "#2c3e50")
+        self.kpi_opening = self._create_kpi_card("Total Fonds d'Ouverture", "0,00 DA", "#2980b9")
+        self.kpi_sales = self._create_kpi_card("Ventes Encaissées", "0,00 DA", "#27ae60")
+        self.kpi_counted = self._create_kpi_card("Total Sorties / Compté", "0,00 DA", "#8e44ad")
+        self.kpi_diff = self._create_kpi_card("Écart Net Constaté", "0,00 DA", "#c0392b")
+
+        kpi_layout.addWidget(self.kpi_sessions)
+        kpi_layout.addWidget(self.kpi_opening)
+        kpi_layout.addWidget(self.kpi_sales)
+        kpi_layout.addWidget(self.kpi_counted)
+        kpi_layout.addWidget(self.kpi_diff)
+        layout.addLayout(kpi_layout)
+
+        # --- Tableau des Sessions ---
+        self.table = QTableWidget()
+        cols = [
+            "ID", "N° Session", "Caisse", "Statut",
+            "Ouverture", "Clôture", "Tickets",
+            "Fond Initial", "Ventes Session", "Sortie / Compté", "Écart"
+        ]
+        self.table.setColumnCount(len(cols))
+        self.table.setHorizontalHeaderLabels(cols)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSortingEnabled(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.doubleClicked.connect(self.open_session_details)
+        layout.addWidget(self.table)
+
+    def _create_kpi_card(self, title, default_val, color):
+        frame = QFrame()
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: #ffffff; border: 1px solid #cbd5e1;
+                border-top: 3px solid {color}; border-radius: 4px; padding: 6px;
+            }}
+        """)
+        l = QVBoxLayout(frame)
+        l.setContentsMargins(4, 4, 4, 4)
+        l.setSpacing(2)
+        lbl_t = QLabel(title)
+        lbl_t.setStyleSheet("font-size: 11px; font-weight: bold; color: #64748b;")
+        lbl_v = QLabel(default_val)
+        lbl_v.setObjectName("val")
+        lbl_v.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {color};")
+        l.addWidget(lbl_t)
+        l.addWidget(lbl_v)
+        return frame
+
+    def refresh(self, d_from, d_to):
+        try:
+            # Charger les caisses dans le filtre si non chargées
+            curr_caisse = self.combo_caisse.currentData()
+            self.combo_caisse.blockSignals(True)
+            self.combo_caisse.clear()
+            self.combo_caisse.addItem("Toutes les Caisses", None)
+            terminals = self.data_manager.pos_terminals.get_all_terminals(include_inactive=True) if hasattr(self.data_manager, 'pos_terminals') else []
+            for t in terminals:
+                self.combo_caisse.addItem(f"{t.get('Terminal_Name')} ({t.get('Terminal_Code')})", t.get('Terminal_ID'))
+            idx = self.combo_caisse.findData(curr_caisse)
+            if idx >= 0:
+                self.combo_caisse.setCurrentIndex(idx)
+            self.combo_caisse.blockSignals(False)
+
+            # Charger les sessions
+            self.raw_data = self.data_manager.cash_sessions.get_cash_sessions_report(d_from, d_to)
+            self.filter_table()
+        except Exception as e:
+            logging.error(f"Error refreshing CashSessionsAnalysisTab: {e}", exc_info=True)
+
+    def filter_table(self):
+        t_id = self.combo_caisse.currentData()
+        status_filter = self.combo_status.currentData()
+
+        filtered = []
+        for s in self.raw_data:
+            if t_id is not None and s.get('Terminal_ID') != t_id:
+                continue
+            if status_filter and s.get('Status') != status_filter:
+                continue
+            filtered.append(s)
+
+        self.table.setSortingEnabled(False)
+        self.table.setRowCount(0)
+
+        tot_sessions = len(filtered)
+        tot_opening = 0.0
+        tot_sales = 0.0
+        tot_counted = 0.0
+        tot_diff = 0.0
+
+        for r, s in enumerate(filtered):
+            self.table.insertRow(r)
+
+            sess_id = s.get('Cash_Session_ID')
+            sess_no = str(s.get('Session_No') or f"#{sess_id}")
+            caisse_name = f"{s.get('Terminal_Name', 'Caisse')} ({s.get('Terminal_Code', '')})"
+            status = s.get('Status', 'Open')
+            is_open = (status == 'Open')
+
+            opened_at = str(s.get('Opened_At', '---'))[:16]
+            opened_by = s.get('Opened_By_Name') or ''
+            closed_at = str(s.get('Closed_At', '---'))[:16] if not is_open else '---'
+            closed_by = s.get('Closed_By_Name') or ''
+
+            tickets = int(s.get('Total_Invoices') or 0)
+            opening_amt = float(s.get('Opening_Amount') or 0.0)
+            sales_amt = float(s.get('Total_Sales_TTC') or 0.0)
+            counted_amt = float(s.get('Counted_Cash') or 0.0) if not is_open else 0.0
+            diff = float(s.get('Cash_Difference') or 0.0) if not is_open else 0.0
+
+            tot_opening += opening_amt
+            tot_sales += sales_amt
+            if not is_open:
+                tot_counted += counted_amt
+                tot_diff += diff
+
+            id_item = QTableWidgetItem(str(sess_id))
+            id_item.setData(Qt.UserRole, sess_id)
+            self.table.setItem(r, 0, id_item)
+
+            self.table.setItem(r, 1, QTableWidgetItem(sess_no))
+            self.table.setItem(r, 2, QTableWidgetItem(caisse_name))
+
+            st_item = QTableWidgetItem("🟢 Ouverte" if is_open else "🔒 Clôturée")
+            st_item.setTextAlignment(Qt.AlignCenter)
+            st_item.setForeground(QBrush(QColor("#27ae60" if is_open else "#64748b")))
+            st_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            self.table.setItem(r, 3, st_item)
+
+            self.table.setItem(r, 4, QTableWidgetItem(f"{opened_at} ({opened_by})" if opened_by else opened_at))
+            self.table.setItem(r, 5, QTableWidgetItem(f"{closed_at} ({closed_by})" if closed_by else closed_at))
+            
+            t_item = QTableWidgetItem(str(tickets))
+            t_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(r, 6, t_item)
+
+            self.table.setItem(r, 7, QTableWidgetItem(f"{format_money(opening_amt)} DA"))
+            self.table.setItem(r, 8, QTableWidgetItem(f"{format_money(sales_amt)} DA"))
+            self.table.setItem(r, 9, QTableWidgetItem(f"{format_money(counted_amt)} DA" if not is_open else "---"))
+
+            diff_sign = "+" if diff > 0 else ""
+            diff_color = "#27ae60" if abs(diff) < 0.01 else ("#2980b9" if diff > 0 else "#c0392b")
+            diff_item = QTableWidgetItem(f"{diff_sign}{format_money(diff)} DA" if not is_open else "---")
+            diff_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            diff_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            if not is_open:
+                diff_item.setForeground(QBrush(QColor(diff_color)))
+            self.table.setItem(r, 10, diff_item)
+
+        self.table.setSortingEnabled(True)
+
+        # Mettre à jour les KPI
+        self.kpi_sessions.findChild(QLabel, "val").setText(str(tot_sessions))
+        self.kpi_opening.findChild(QLabel, "val").setText(f"{format_money(tot_opening)} DA")
+        self.kpi_sales.findChild(QLabel, "val").setText(f"{format_money(tot_sales)} DA")
+        self.kpi_counted.findChild(QLabel, "val").setText(f"{format_money(tot_counted)} DA")
+        
+        diff_sign_tot = "+" if tot_diff > 0 else ""
+        diff_color_tot = "#27ae60" if abs(tot_diff) < 0.01 else ("#2980b9" if tot_diff > 0 else "#c0392b")
+        lbl_diff_val = self.kpi_diff.findChild(QLabel, "val")
+        lbl_diff_val.setText(f"{diff_sign_tot}{format_money(tot_diff)} DA")
+        lbl_diff_val.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {diff_color_tot};")
+
+    def open_session_details(self):
+        row = self.table.currentRow()
+        if row < 0: return
+        item = self.table.item(row, 0)
+        if not item: return
+        sess_id = item.data(Qt.UserRole)
+        if sess_id:
+            from ui.widgets.sales.dialogs import CashSessionDetailsDialog
+            dlg = CashSessionDetailsDialog(self.data_manager, int(sess_id), parent=self)
+            dlg.exec()
+
+# =============================================================================
 # MAIN VIEW: ANALYSIS VIEW (CONTAINER)
 # =============================================================================
 class AnalysisView(QWidget):
@@ -284,11 +505,13 @@ class AnalysisView(QWidget):
         self.tab_valuation = StockValuationTab()
         self.tab_waste = WasteAnalysisTab()
         self.tab_consumption = FullConsumptionTab()
+        self.tab_caisse = CashSessionsAnalysisTab(self.manager)
         self.tab_ai = AiAnalyticsTab(db_instance=self.stats.db)
         
         self.tabs.addTab(self.tab_valuation, "💰 Valorisation du Stock")
         self.tabs.addTab(self.tab_waste, "🗑️ Analyse des Pertes (Déchets)")
         self.tabs.addTab(self.tab_consumption, "📉 Rapport Consommation")
+        self.tabs.addTab(self.tab_caisse, "💵 Analyse des Caisses & Sessions")
         self.tabs.addTab(self.tab_ai, "🧠 Intelligence Artificielle & Prédictions")
         
         main_layout.addWidget(self.tabs)
@@ -310,7 +533,11 @@ class AnalysisView(QWidget):
         # 3. تحديث تقرير الاستهلاك (يعتمد على التاريخ)
         self.tab_consumption.refresh(self.stats, d_from_str, d_to_str)
 
-        # 4. تحديث تحليلات الذكاء الاصطناعي
+        # 4. تحديث تحليل جلسات وصناديق الكاسة
+        if hasattr(self, 'tab_caisse'):
+            self.tab_caisse.refresh(d_from_str, d_to_str)
+
+        # 5. تحديث تحليلات الذكاء الاصطناعي
         if hasattr(self, 'tab_ai'):
             self.tab_ai.set_db(self.stats.db)
             self.tab_ai.refresh_ai_data()

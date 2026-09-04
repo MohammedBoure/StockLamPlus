@@ -641,6 +641,10 @@ class SalesHistoryTab(QWidget):
         for method, label in (("Cash", "Especes"), ("Card", "Carte"), ("Transfer", "Virement"), ("Versement", "Versement"), ("Other", "Autre"), ("Credit", "Credit")):
             self.cb_payment.addItem(label, method)
         self.cb_payment.currentIndexChanged.connect(self.apply_filter_local)
+
+        self.cb_caisse = QComboBox()
+        self.cb_caisse.addItem("Toutes les Caisses", None)
+        self.cb_caisse.currentIndexChanged.connect(self.apply_filter_local)
         self.search_input = BarcodeLineEdit()
         self.search_input.setPlaceholderText("Rechercher par ID, Client, Caisse ou Utilisateur...")
         self.search_input.textChanged.connect(self.apply_filter_local)
@@ -670,6 +674,8 @@ class SalesHistoryTab(QWidget):
         filter_layout.addWidget(self.cb_status)
         filter_layout.addWidget(QLabel("Paiement:"))
         filter_layout.addWidget(self.cb_payment)
+        filter_layout.addWidget(QLabel("Caisse:"))
+        filter_layout.addWidget(self.cb_caisse)
         filter_layout.addWidget(self.search_input)
         filter_layout.addWidget(self.btn_print_selected)
         filter_layout.addWidget(self.btn_export)
@@ -789,6 +795,16 @@ class SalesHistoryTab(QWidget):
         for client in clients:
             self.cb_client.addItem(client['Client_Name'], client['Client_ID'])
 
+        if hasattr(self, 'cb_caisse'):
+            self.cb_caisse.blockSignals(True)
+            self.cb_caisse.clear()
+            self.cb_caisse.addItem("Toutes les Caisses", None)
+            terminals = self.data_manager.pos_terminals.get_all_terminals(include_inactive=True) if hasattr(self.data_manager, 'pos_terminals') else []
+            for t in terminals:
+                display = f"{t.get('Terminal_Name')} ({t.get('Terminal_Code')})"
+                self.cb_caisse.addItem(display, t.get('Terminal_Name'))
+            self.cb_caisse.blockSignals(False)
+
     def load_sales_data(self):
         d_from = self.date_from.date().toString("yyyy-MM-dd")
         d_to = self.date_to.date().toString("yyyy-MM-dd")
@@ -801,6 +817,7 @@ class SalesHistoryTab(QWidget):
         txt = self.search_input.text().lower().strip()
         status = self.cb_status.currentData() if hasattr(self, "cb_status") else None
         payment = self.cb_payment.currentData() if hasattr(self, "cb_payment") else None
+        caisse = self.cb_caisse.currentData() if hasattr(self, "cb_caisse") else None
 
         filtered = []
         for inv in self.raw_data:
@@ -816,6 +833,10 @@ class SalesHistoryTab(QWidget):
                 continue
             if status and inv.get('Status') != status:
                 continue
+            if caisse:
+                inv_caisse = str(inv.get('Caisse_Label') or inv.get('Terminal_Name') or '')
+                if caisse.lower() not in inv_caisse.lower():
+                    continue
             if payment and inv.get('Row_Type') == 'Sale':
                 methods = str(inv.get('Payment_Summary') or inv.get('Payment_Method') or '')
                 if payment not in methods:
@@ -883,19 +904,44 @@ class SalesHistoryTab(QWidget):
             status_item = item(inv['Status'])
             self.table.setItem(r, 4, status_item)
             
-            self.table.setItem(r, 5, item(inv.get('Caisse_Label') or inv.get('Terminal_Name') or "-"))
+            caisse_display = inv.get('Caisse_Label') or inv.get('Terminal_Name') or "-"
+            caisse_item = item(caisse_display)
+            if is_cash_row:
+                caisse_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
+                caisse_item.setForeground(QBrush(QColor("#007572")))
+            self.table.setItem(r, 5, caisse_item)
+
             self.table.setItem(r, 6, item(inv.get('User_Name') or "-"))
             payment_text = inv.get("Payment_Summary") or inv.get("Payment_Method") or "-"
             self.table.setItem(r, 7, item(payment_text))
 
-            amount_entered = inv.get("Paid_Amount") if row_type == "Sale" else inv.get("Amount_Entered")
-            self.table.setItem(r, 8, item(format_money(amount_entered) if amount_entered is not None else "-"))
-            self.table.setItem(r, 9, item(format_money(inv.get('Total_Amount_TTC', 0))))
+            if row_type == "Cash_Open":
+                amount_entered = inv.get("Opening_Amount")
+                amt_item = item(f"Fond: {format_money(amount_entered)} DA" if amount_entered is not None else "-")
+                amt_item.setForeground(QBrush(QColor("#007572")))
+                amt_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
+                self.table.setItem(r, 8, amt_item)
+                self.table.setItem(r, 9, item("---"))
+            elif row_type == "Cash_Close":
+                amount_entered = inv.get("Counted_Cash")
+                amt_item = item(f"Compté: {format_money(amount_entered)} DA" if amount_entered is not None else "-")
+                amt_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
+                self.table.setItem(r, 8, amt_item)
+
+                diff = float(inv.get('Cash_Difference') or 0.0)
+                diff_sign = "+" if diff > 0 else ""
+                diff_color = "#27ae60" if abs(diff) < 0.01 else ("#2980b9" if diff > 0 else "#c0392b")
+                diff_item = item(f"Écart: {diff_sign}{format_money(diff)} DA", color=diff_color, font=QFont("Segoe UI", 9, QFont.Bold))
+                self.table.setItem(r, 9, diff_item)
+            else:
+                amount_entered = inv.get("Paid_Amount")
+                self.table.setItem(r, 8, item(format_money(amount_entered) if amount_entered is not None else "-"))
+                self.table.setItem(r, 9, item(format_money(inv.get('Total_Amount_TTC', 0))))
             
             profit = float(inv.get('Total_Profit') or 0) if self.can_view_profit else 0
             if row_type == 'Sale':
                 total_profit_period += profit
-            profit_item = item(format_money(profit), Qt.AlignCenter, "#27ae60" if profit > 0 else "#c0392b", QFont("Segoe UI", 9, QFont.Bold))
+            profit_item = item(format_money(profit), Qt.AlignCenter, "#27ae60" if profit > 0 else "#c0392b", QFont("Segoe UI", 9, QFont.Bold)) if row_type == 'Sale' else item("---")
             self.table.setItem(r, 10, profit_item)
 
             if row_bg:
@@ -912,9 +958,19 @@ class SalesHistoryTab(QWidget):
         row = self.table.currentRow()
         if row < 0: return
         data = self.table.item(row, 0).data(Qt.UserRole)
-        if data and data.get('Row_Type') == 'Sale':
+        if not data:
+            return
+
+        row_type = data.get('Row_Type')
+        if row_type == 'Sale':
             dlg = SaleDetailsDialog(self.data_manager, data, self)
             dlg.exec()
+        elif row_type in ('Cash_Open', 'Cash_Close'):
+            session_id = data.get('Cash_Session_ID')
+            if session_id:
+                from ui.widgets.sales.dialogs import CashSessionDetailsDialog
+                dlg = CashSessionDetailsDialog(self.data_manager, session_id, parent=self)
+                dlg.exec()
 
     def on_selection_changed(self):
         row = self.table.currentRow()

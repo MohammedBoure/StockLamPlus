@@ -12,6 +12,7 @@ from .product_families_tab import ProductFamiliesTab
 from .packaging_units_tab import PackagingUnitsTab
 from .external_partners_tab import ExternalPartnersTab 
 from .clients_tab import ClientsTab
+from .caisses_tab import CaissesTab
 
 class MasterDataTabs(QWidget):
     def __init__(self, data_manager):
@@ -34,6 +35,7 @@ class MasterDataTabs(QWidget):
         self.tab_waste = WasteReasonsTab(self.data_manager.waste_reasons)
         self.tab_partners = ExternalPartnersTab(self.data_manager.partners) 
         self.tab_clients = ClientsTab(self.data_manager)
+        self.tab_caisses = CaissesTab(self.data_manager)
 
 
         layout.addWidget(self.tabs)

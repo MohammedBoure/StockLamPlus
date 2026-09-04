@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QComboBox, QMessageBox, QDoubleSpinBox, QSpinBox, QDialog,
                                QDateEdit, QFrame, QCompleter, QAbstractItemView, QInputDialog,
-                               QScrollArea, QGridLayout, QCheckBox)
+                               QScrollArea, QGridLayout, QCheckBox, QSizePolicy)
 from PySide6.QtCore import Qt, QDate, Signal, QStringListModel, QTimer, QSize, QPoint
 from PySide6.QtGui import QKeySequence, QShortcut, QFont, QColor
 from branding import get_logo_path
@@ -433,26 +433,26 @@ class PointOfSaleTab(QWidget):
         root_layout.addLayout(workspace)
 
     def _build_top_bar(self):
-        """Barre supérieure ultra-fine à bords vifs (sharp edges, sans arrondis)."""
+        """Barre supérieure réactive et fluide sans aucun chevauchement."""
         top_frame = QFrame()
         top_frame.setObjectName("POSTopBar")
+        top_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         top_frame.setStyleSheet("""
             QFrame#POSTopBar {
                 background-color: #ffffff;
                 border: 1px solid #cbd5e1;
                 border-radius: 0px;
-                padding: 2px 8px;
-                min-height: 44px;
-                max-height: 48px;
+                padding: 4px 8px;
             }
         """)
         top_layout = QHBoxLayout(top_frame)
-        top_layout.setContentsMargins(4, 2, 4, 2)
-        top_layout.setSpacing(10)
+        top_layout.setContentsMargins(6, 4, 6, 4)
+        top_layout.setSpacing(8)
 
-        # 1. Caisse & Session Badge Button (Unique bouton de caisse dans l'interface)
+        # 1. Caisse & Session Badge Button
         self.btn_caisse_status = QPushButton("🔴 Caisse Fermée (Cliquer pour ouvrir)")
         self.btn_caisse_status.setCursor(Qt.PointingHandCursor)
+        self.btn_caisse_status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.btn_caisse_status.setStyleSheet("""
             QPushButton {
                 background: #fdf2f1;
@@ -461,41 +461,42 @@ class PointOfSaleTab(QWidget):
                 border-radius: 0px;
                 padding: 4px 10px;
                 font-weight: bold;
-                font-size: 12px;
-                min-height: 28px;
+                font-size: 11px;
+                min-height: 30px;
             }
             QPushButton:hover {
                 background: #fadbd8;
             }
         """)
         self.btn_caisse_status.clicked.connect(self.manage_cash_session)
-        top_layout.addWidget(self.btn_caisse_status)
+        top_layout.addWidget(self.btn_caisse_status, 0)
 
         # Séparateur
         sep1 = QFrame()
         sep1.setFrameShape(QFrame.VLine)
         sep1.setStyleSheet("color: #cbd5e1;")
-        top_layout.addWidget(sep1)
+        top_layout.addWidget(sep1, 0)
 
-        # 2. Informations Financières Secondaires (fines, sans chevauchement)
+        # 2. Informations Financières Secondaires
         self.lbl_total_ht = QLabel("Total HT : 0,00 DA")
-        self.lbl_total_ht.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600; padding: 2px;")
-        top_layout.addWidget(self.lbl_total_ht)
+        self.lbl_total_ht.setStyleSheet("font-size: 11px; color: #475569; font-weight: 600; padding: 2px;")
+        top_layout.addWidget(self.lbl_total_ht, 0)
 
         self.lbl_total_remise = QLabel("Remise : 0,00 DA")
-        self.lbl_total_remise.setStyleSheet("font-size: 12px; color: #d35400; font-weight: 600; padding: 2px;")
-        top_layout.addWidget(self.lbl_total_remise)
+        self.lbl_total_remise.setStyleSheet("font-size: 11px; color: #d35400; font-weight: 600; padding: 2px;")
+        top_layout.addWidget(self.lbl_total_remise, 0)
 
         self.lbl_total_tva = QLabel("TVA : 0,00 DA")
-        self.lbl_total_tva.setStyleSheet("font-size: 12px; color: #475569; font-weight: 600; padding: 2px;")
-        top_layout.addWidget(self.lbl_total_tva)
+        self.lbl_total_tva.setStyleSheet("font-size: 11px; color: #475569; font-weight: 600; padding: 2px;")
+        top_layout.addWidget(self.lbl_total_tva, 0)
 
         top_layout.addStretch(1)
 
-        # 2b. Bouton Actualiser dans l'espace vide disponible (sans prendre de place supplémentaire)
+        # 2b. Bouton Actualiser
         self.btn_refresh = QPushButton("🔄 Actualiser")
         self.btn_refresh.setCursor(Qt.PointingHandCursor)
         self.btn_refresh.setToolTip("Actualiser les données de caisse, produits, stock et favoris (F5)")
+        self.btn_refresh.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.btn_refresh.setStyleSheet("""
             QPushButton {
                 background-color: #f8fafc;
@@ -504,9 +505,8 @@ class PointOfSaleTab(QWidget):
                 border-radius: 0px;
                 padding: 4px 10px;
                 font-weight: bold;
-                font-size: 12px;
-                min-height: 28px;
-                max-height: 28px;
+                font-size: 11px;
+                min-height: 30px;
             }
             QPushButton:hover {
                 background-color: #e6f4f1;
@@ -514,18 +514,19 @@ class PointOfSaleTab(QWidget):
             }
         """)
         self.btn_refresh.clicked.connect(self.load_initial_data)
-        top_layout.addWidget(self.btn_refresh)
+        top_layout.addWidget(self.btn_refresh, 0)
 
-        # 3. Prix Final Net à Payer (Bords vifs, sans rognage de texte)
+        # 3. Prix Final Net à Payer
         self.frame_net_total = QFrame()
         self.frame_net_total.setObjectName("NetTotalFrame")
+        self.frame_net_total.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.frame_net_total.setStyleSheet("""
             QFrame#NetTotalFrame {
                 background-color: #007572;
                 border: 1px solid #005a57;
                 border-radius: 0px;
-                padding: 2px 12px;
-                min-height: 36px;
+                padding: 4px 12px;
+                min-height: 34px;
             }
         """)
         frame_layout = QHBoxLayout(self.frame_net_total)
@@ -534,10 +535,10 @@ class PointOfSaleTab(QWidget):
 
         self.lbl_total_ttc = QLabel("NET À PAYER : 0,00 DA")
         self.lbl_total_ttc.setAlignment(Qt.AlignCenter)
-        self.lbl_total_ttc.setStyleSheet("font-size: 18px; font-weight: 800; color: #ffffff; padding: 0px; margin: 0px;")
+        self.lbl_total_ttc.setStyleSheet("font-size: 16px; font-weight: 800; color: #ffffff; padding: 0px; margin: 0px;")
         frame_layout.addWidget(self.lbl_total_ttc)
 
-        top_layout.addWidget(self.frame_net_total)
+        top_layout.addWidget(self.frame_net_total, 0)
 
         return top_frame
 
@@ -548,13 +549,13 @@ class PointOfSaleTab(QWidget):
         txt = f"NET À PAYER : {val_str}"
         length = len(val_str)
         if length <= 12:
-            font_size = 20
-        elif length <= 16:
             font_size = 17
-        elif length <= 22:
+        elif length <= 16:
             font_size = 15
-        else:
+        elif length <= 20:
             font_size = 13
+        else:
+            font_size = 12
         self.lbl_total_ttc.setText(txt)
         self.lbl_total_ttc.setStyleSheet(f"font-size: {font_size}px; font-weight: 800; color: #ffffff;")
 

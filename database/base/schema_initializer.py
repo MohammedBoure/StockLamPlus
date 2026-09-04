@@ -60,6 +60,7 @@ _ALL_PERMISSIONS = [
 
     # --- تبويبات الإعدادات (Settings) ---
     "tab_config",
+    "tab_auto_backup",
     "tab_set_db",
     "tab_set_printer",
     "tab_set_system",

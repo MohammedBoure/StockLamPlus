@@ -559,8 +559,13 @@ class MainWindow(QMainWindow):
             if self.connection_error:
                 widget.tabs.addTab(widget.tab_db, "Base de données")
                 widget.tabs.setCurrentWidget(widget.tab_db)
-            if self.has_permission("tab_config") and hasattr(widget, 'tab_general'):
-                widget.tabs.addTab(widget.tab_general, "🏢 Général / Gestion des données")
+            if self.has_permission("tab_config"):
+                if hasattr(widget, 'tab_lab_info'):
+                    widget.tabs.addTab(widget.tab_lab_info, "🏢 Informations du Laboratoire")
+                elif hasattr(widget, 'tab_general'):
+                    widget.tabs.addTab(widget.tab_general, "🏢 Informations du Laboratoire")
+            if (self.has_permission("tab_auto_backup") or self.has_permission("tab_config")) and hasattr(widget, 'tab_auto_backup'):
+                widget.tabs.addTab(widget.tab_auto_backup, "⏱️ Sauvegarde Automatique")
             if self.has_permission("tab_set_db") and hasattr(widget, 'tab_db'):
                 widget.tabs.addTab(widget.tab_db, "🗄️ Base de données")
             if self.has_permission("tab_set_printer"):

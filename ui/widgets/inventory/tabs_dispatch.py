@@ -328,7 +328,7 @@ class DispatchTab(QWidget):
         scan_layout.setContentsMargins(10, 10, 10, 10)
 
         self.barcode_input = BarcodeLineEdit()
-        self.barcode_input.setPlaceholderText("🔴 Scannez (Code-Barres) ou Écrivez (Nom/Lot)...")
+        self.barcode_input.setPlaceholderText("Scannez (Code-Barres) ou Écrivez (Nom/Lot)...")
         self.barcode_input.setMinimumHeight(60)
         self.barcode_input.setStyleSheet("""
             QLineEdit { 

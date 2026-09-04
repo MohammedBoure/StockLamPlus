@@ -4,7 +4,9 @@ Configuration générale, éditeurs visuels d'étiquettes/tickets et journaux d'
 
 ## Fichiers et Rôles
 
-- `settings_tab.py` : Onglet principal des paramètres de l'application.
+- `settings_tab.py` : Onglet principal des paramètres de l'application orchestrant les sous-onglets de configuration.
+- `lab_info_tab.py` : Onglet dédié aux informations administratives et d'identification du laboratoire (Nom, Adresse, NIF, RC).
+- `auto_backup_tab.py` : Onglet dédié aux sauvegardes automatiques en arrière-plan et aux opérations de sauvegarde/restauration manuelles.
 - `local_settings.py` : Persistance locale des préférences utilisateurs.
 - `system_logs_tab.py` : Consultation des journaux d'audit système.
 - `receipt_config.py` : Paramètres d'impression des tickets de caisse.

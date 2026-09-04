@@ -147,7 +147,8 @@ SYSTEM_PERMISSIONS = {
         "icon": "fa5s.sliders-h",
         "perms": {
             "nav_settings": "Accès aux Paramètres",
-            "tab_config": "Général / Gestion des données",
+            "tab_config": "Informations du Laboratoire",
+            "tab_auto_backup": "Sauvegarde Automatique",
             "tab_set_db": "Base de données",
             "tab_set_printer": "Imprimante",
             "tab_set_system": "Système",

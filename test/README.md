@@ -13,3 +13,4 @@ Suite de tests automatisés vérifiant le bon fonctionnement des modules backend
 - `test_navigation_permissions.py` : Tests du contrôle d'accès et des permissions de navigation.
 - `test_receipt_config.py` : Tests de configuration des reçus et tickets.
 - `test_history_widget.py` : Tests de la vue d'historique et de traçabilité.
+- `test_theme_and_settings_fixes.py` : Tests de séparation des onglets de paramètres (Laboratoire et Sauvegarde Automatique) et corrections visuelles (tailles de champs dates, code-barres).

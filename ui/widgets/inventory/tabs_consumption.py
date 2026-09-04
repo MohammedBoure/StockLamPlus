@@ -38,7 +38,7 @@ class ConsumptionTab(QWidget):
         input_layout = QHBoxLayout(input_group)
 
         self.barcode_input = BarcodeLineEdit()
-        self.barcode_input.setPlaceholderText("🔴 SCANNEZ LE PRODUIT ICI...")
+        self.barcode_input.setPlaceholderText("SCANNEZ LE PRODUIT ICI...")
         self.barcode_input.setMinimumHeight(65)
         self.barcode_input.setStyleSheet("""
             QLineEdit { 

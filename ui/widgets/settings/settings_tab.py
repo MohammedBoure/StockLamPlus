@@ -20,6 +20,8 @@ from .receipt_visual_editor import ReceiptVisualEditor
 from .pdf.pdf_config_dialog import PdfConfigDialog
 from .local_settings import LocalSettingsStore
 from .system_logs_tab import SystemLogsTab
+from .lab_info_tab import LabInfoTab
+from .auto_backup_tab import AutoBackupTab
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,8 +93,9 @@ class SettingsTab(QWidget):
         self.tabs = QTabWidget()
 
         # Initialize widgets only
-        self.tab_general = QWidget()
-        self._setup_general_tab()
+        self.tab_lab_info = LabInfoTab(self.settings, self)
+        self.tab_auto_backup = AutoBackupTab(self.settings, self.data_manager, self.local_store, self)
+        self.tab_general = self.tab_lab_info  # Compatibilité ascendante
 
         self.tab_db = QWidget()
         self._setup_database_tab()
@@ -134,138 +137,45 @@ class SettingsTab(QWidget):
         main_layout.addLayout(btn_layout)
 
     def _setup_general_tab(self):
-        main_h_layout = QHBoxLayout(self.tab_general)
-        left_col = QVBoxLayout()
-        right_col = QVBoxLayout()
+        pass
 
-        # ---------------------------------------------------------
-        # COLONNE GAUCHE
-        # ---------------------------------------------------------
+    # --- Accesseurs de compatibilité pour Informations du Laboratoire ---
+    @property
+    def txt_lab_name(self):
+        return self.tab_lab_info.txt_lab_name
 
-        grp_info = QGroupBox("📋 Informations du laboratoire")
-        form_info = QFormLayout()
-        self.txt_lab_name = QLineEdit(self.settings.get("lab_name", ""))
-        self.txt_lab_address = QLineEdit(self.settings.get("lab_address", ""))
-        self.txt_lab_nif = QLineEdit(self.settings.get("lab_nif", ""))
-        self.txt_lab_rc = QLineEdit(self.settings.get("lab_rc", ""))
+    @property
+    def txt_lab_address(self):
+        return self.tab_lab_info.txt_lab_address
 
-        form_info.addRow("Nom du laboratoire :", self.txt_lab_name)
-        form_info.addRow("Adresse :", self.txt_lab_address)
-        form_info.addRow("NIF :", self.txt_lab_nif)
-        form_info.addRow("Reg Commerce (RC) :", self.txt_lab_rc)
+    @property
+    def txt_lab_nif(self):
+        return self.tab_lab_info.txt_lab_nif
 
-        grp_info.setLayout(form_info)
-        left_col.addWidget(grp_info)
+    @property
+    def txt_lab_rc(self):
+        return self.tab_lab_info.txt_lab_rc
 
-        grp_alerts = QGroupBox("⚠️ Paramètres d'alerte & Seuils")
-        form_alerts = QFormLayout()
-        self.spin_expiry = QSpinBox()
-        self.spin_expiry.setRange(1, 3650)
-        self.spin_expiry.setValue(int(self.settings.get("expiry_warning_days", 30)))
-        self.spin_expiry.setSuffix(" jours")
-        self.spin_stock = QSpinBox()
-        self.spin_stock.setRange(1, 1000)
-        self.spin_stock.setValue(int(self.settings.get("low_stock_threshold", 5)))
-        self.spin_stock.setSuffix(" unités")
-        form_alerts.addRow("Alerte péremption (avant) :", self.spin_expiry)
-        form_alerts.addRow("Seuil stock critique :", self.spin_stock)
-        grp_alerts.setLayout(form_alerts)
-        left_col.addWidget(grp_alerts)
+    # --- Accesseurs de compatibilité pour Sauvegarde Automatique ---
+    @property
+    def chk_auto_backup(self):
+        return self.tab_auto_backup.chk_auto_backup
 
-        grp_data = QGroupBox("💾 Gestion Manuelle & Archives")
-        data_layout = QVBoxLayout()
-        row1 = QHBoxLayout()
-        btn_backup = QPushButton("📦 Sauvegarde complète (Excel)")
-        btn_backup.clicked.connect(self.perform_backup)
-        btn_restore = QPushButton("♻️ Restauration complète")
-        btn_restore.setStyleSheet("color: #c0392b;")
-        btn_restore.clicked.connect(self.perform_restore)
-        row1.addWidget(btn_backup)
-        row1.addWidget(btn_restore)
-        data_layout.addLayout(row1)
+    @property
+    def spin_auto_interval(self):
+        return self.tab_auto_backup.spin_auto_interval
 
-        btn_archive = QPushButton("🧹 Archiver les historiques")
-        btn_archive.clicked.connect(self.perform_archive_logs)
-        data_layout.addWidget(btn_archive)
+    @property
+    def txt_auto_pwd(self):
+        return self.tab_auto_backup.txt_auto_pwd
 
-        self.grp_view_mode = QGroupBox("👁️ Mode aperçu archive")
-        view_layout = QVBoxLayout()
-        self.lbl_mode_status = QLabel("Mode actuel : ✅ Données en direct")
-        self.lbl_mode_status.setStyleSheet("color: green; font-weight: bold;")
-        self.lbl_mode_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.btn_toggle_view = QPushButton("📂 Ouvrir un fichier archive")
-        self.btn_toggle_view.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold;")
-        self.btn_toggle_view.clicked.connect(self.toggle_archive_view)
-        view_layout.addWidget(self.lbl_mode_status)
-        view_layout.addWidget(self.btn_toggle_view)
-        self.grp_view_mode.setLayout(view_layout)
-        data_layout.addWidget(self.grp_view_mode)
-        grp_data.setLayout(data_layout)
-        left_col.addWidget(grp_data)
-        left_col.addStretch()
+    @property
+    def spin_max_backups(self):
+        return self.tab_auto_backup.spin_max_backups
 
-        # ---------------------------------------------------------
-        # COLONNE DROITE
-        # ---------------------------------------------------------
-
-        grp_auto_backup = QGroupBox("⏱️ Sauvegarde Automatique (Arrière-plan)")
-        auto_backup_layout = QVBoxLayout()
-        form_auto = QFormLayout()
-
-        self.chk_auto_backup = QCheckBox("Activer la sauvegarde automatique")
-        # Ensure we are parsing the boolean properly
-        self.chk_auto_backup.setChecked(bool(self.settings.get("auto_backup_enabled", False)))
-
-        self.spin_auto_interval = QDoubleSpinBox()
-        self.spin_auto_interval.setRange(0.1, 1440.0)
-        self.spin_auto_interval.setValue(float(self.settings.get("auto_backup_interval", 60.0)))
-        self.spin_auto_interval.setSuffix(" min")
-
-        self.txt_auto_pwd = QLineEdit(self.settings.get("auto_backup_password", ""))
-        self.txt_auto_pwd.setEchoMode(QLineEdit.EchoMode.Password)
-        self.txt_auto_pwd.setPlaceholderText("Optionnel (Chiffrement AES-256)")
-
-        self.spin_max_backups = QSpinBox()
-        self.spin_max_backups.setRange(1, 100)
-        self.spin_max_backups.setValue(int(self.settings.get("auto_backup_max_files", 5)))
-
-        form_auto.addRow("", self.chk_auto_backup)
-        form_auto.addRow("⏱️ Intervalle (Minutes) :", self.spin_auto_interval)
-        form_auto.addRow("🔐 Mot de passe ZIP :", self.txt_auto_pwd)
-        form_auto.addRow("📁 Nbre max de sauvegardes :", self.spin_max_backups)
-        auto_backup_layout.addLayout(form_auto)
-
-        auto_backup_layout.addWidget(QLabel("Dossiers de destination (Cibles multiples) :"))
-        self.list_backup_paths = QListWidget()
-
-        paths = self.settings.get("backup_paths", [])
-        if not paths and self.settings.get("backup_path"):
-            paths = [self.settings.get("backup_path")]
-        for p in paths:
-            self.list_backup_paths.addItem(str(p))
-
-        path_btns_layout = QHBoxLayout()
-        btn_add_path = QPushButton("➕ Ajouter un dossier")
-        btn_add_path.clicked.connect(self.add_backup_path)
-        btn_rem_path = QPushButton("❌ Supprimer sélection")
-        btn_rem_path.clicked.connect(self.remove_backup_path)
-        path_btns_layout.addWidget(btn_add_path)
-        path_btns_layout.addWidget(btn_rem_path)
-
-        auto_backup_layout.addWidget(self.list_backup_paths)
-        auto_backup_layout.addLayout(path_btns_layout)
-
-        btn_force_auto = QPushButton("▶️ Forcer la sauvegarde maintenant")
-        btn_force_auto.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold; padding: 8px;")
-        btn_force_auto.clicked.connect(self.force_manual_backup)
-        auto_backup_layout.addWidget(btn_force_auto)
-
-        grp_auto_backup.setLayout(auto_backup_layout)
-        right_col.addWidget(grp_auto_backup)
-        right_col.addStretch()
-
-        main_h_layout.addLayout(left_col, 50)
-        main_h_layout.addLayout(right_col, 50)
+    @property
+    def list_backup_paths(self):
+        return self.tab_auto_backup.list_backup_paths
 
     def _setup_database_tab(self):
         layout = QVBoxLayout(self.tab_db)
@@ -432,43 +342,28 @@ class SettingsTab(QWidget):
         layout.addWidget(grp_sys)
         layout.addStretch()
 
-    # --- Fonctions Auto-Backup ---
-
+    # --- Fonctions Auto-Backup (Délégation) ---
     def add_backup_path(self):
-        folder_path = QFileDialog.getExistingDirectory(self, "Sélectionner un dossier de sauvegarde")
-        if folder_path:
-            existing_paths = [self.list_backup_paths.item(i).text() for i in range(self.list_backup_paths.count())]
-            if folder_path not in existing_paths:
-                self.list_backup_paths.addItem(folder_path)
+        if hasattr(self, 'tab_auto_backup'):
+            return self.tab_auto_backup.add_backup_path()
 
     def remove_backup_path(self):
-        selected_items = self.list_backup_paths.selectedItems()
-        if not selected_items: return
-        for item in selected_items:
-            self.list_backup_paths.takeItem(self.list_backup_paths.row(item))
+        if hasattr(self, 'tab_auto_backup'):
+            return self.tab_auto_backup.remove_backup_path()
 
     def force_manual_backup(self):
-        paths = [self.list_backup_paths.item(i).text() for i in range(self.list_backup_paths.count())]
-        if not paths:
-            QMessageBox.warning(self, "Attention", "Veuillez ajouter au moins un dossier de destination.")
-            return
-
-        password = self.txt_auto_pwd.text()
-
-        if hasattr(self.data_manager.db, 'create_multi_backup'):
-            success, msg = self.data_manager.db.create_multi_backup(paths, password, is_auto=False)
-            if success:
-                QMessageBox.information(self, "Succès", f"Sauvegarde forcée terminée !\n{msg}")
-            else:
-                QMessageBox.critical(self, "Erreur", f"Échec de la sauvegarde forcée :\n{msg}")
-        else:
-            QMessageBox.critical(self, "Erreur", "La fonction 'create_multi_backup' est introuvable.")
+        if hasattr(self, 'tab_auto_backup'):
+            return self.tab_auto_backup.force_manual_backup()
 
     # --- Fonctions Générales (Save & Load) ---
     def load_settings(self):
         """Load this user's general settings from the local store."""
         logging.info(f"Reading local settings: {self.config_file}")
         self.settings.update(self.local_store.load_general(self.settings))
+        if hasattr(self, 'tab_lab_info'):
+            self.tab_lab_info.load_settings(self.settings)
+        if hasattr(self, 'tab_auto_backup'):
+            self.tab_auto_backup.load_settings(self.settings)
 
     def load_database_settings_from_env(self):
         if not os.path.exists(ENV_FILE):
@@ -492,14 +387,9 @@ class SettingsTab(QWidget):
 
     def save_settings(self):
         """Save general settings for this user without touching PDF settings."""
-        # Read the general settings from the form before writing the local store.
-        self.settings["lab_name"] = self.txt_lab_name.text()
-        self.settings["lab_address"] = self.txt_lab_address.text()
-        self.settings["lab_nif"] = self.txt_lab_nif.text()
-        self.settings["lab_rc"] = self.txt_lab_rc.text()
-
-        self.settings["expiry_warning_days"] = self.spin_expiry.value()
-        self.settings["low_stock_threshold"] = self.spin_stock.value()
+        # Read the laboratory settings from tab_lab_info
+        if hasattr(self, 'tab_lab_info'):
+            self.settings.update(self.tab_lab_info.get_settings())
 
         self.settings["db_host"] = self.txt_db_host.text()
         self.settings["db_port"] = self.spin_db_port.value()
@@ -518,12 +408,9 @@ class SettingsTab(QWidget):
         self.settings["secret_key"] = self.txt_secret.text()
         self.settings["max_content_length"] = self.spin_max_len.value()
 
-        # --- إعدادات الحفظ التلقائي ---
-        self.settings["auto_backup_enabled"] = self.chk_auto_backup.isChecked()
-        self.settings["auto_backup_interval"] = self.spin_auto_interval.value()
-        self.settings["auto_backup_password"] = self.txt_auto_pwd.text()
-        self.settings["auto_backup_max_files"] = self.spin_max_backups.value()
-        self.settings["backup_paths"] = [self.list_backup_paths.item(i).text() for i in range(self.list_backup_paths.count())]
+        # --- Réglages de sauvegarde ---
+        if hasattr(self, 'tab_auto_backup'):
+            self.settings.update(self.tab_auto_backup.get_settings())
 
         try:
             logging.info(f"💾 Sauvegarde vers : {self.config_file}")
@@ -624,104 +511,12 @@ class SettingsTab(QWidget):
             QMessageBox.critical(self, "Échec", error_msg)
 
     def perform_backup(self):
-        filename = f"sauvegarde_excel_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-        path, _ = QFileDialog.getSaveFileName(self, "Enregistrer la sauvegarde (Excel)", filename, "Fichiers ZIP (*.zip)")
-        if path:
-            if hasattr(self.data_manager.db, 'backup_database_excel'):
-                success, msg = self.data_manager.db.backup_database_excel(path)
-                if success: QMessageBox.information(self, "Terminé", "La sauvegarde Excel a été créée")
-                else: QMessageBox.critical(self, "Erreur", msg)
-            else:
-                QMessageBox.critical(self, "Erreur", "La fonction de sauvegarde Excel est introuvable.")
+        if hasattr(self, 'tab_auto_backup'):
+            return self.tab_auto_backup.perform_backup()
 
     def perform_restore(self):
-        confirm = QMessageBox.warning(
-            self,
-            "Attention - Restauration",
-            "Toutes les données actuelles seront supprimées et remplaçées par celles du fichier de sauvegarde ! \n\nÊtes-vous sûr ?",
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if confirm == QMessageBox.Yes:
-            path, _ = QFileDialog.getOpenFileName(self, "Sélectionner le fichier de sauvegarde", "", "Fichiers ZIP (*.zip)")
-            if path:
-                db_ref = self.data_manager.db
-                password = None
-
-                try:
-                    if hasattr(db_ref, 'backup_zip_requires_password') and db_ref.backup_zip_requires_password(path):
-                        password, ok = QInputDialog.getText(
-                            self,
-                            "Mot de passe sauvegarde",
-                            "Cette sauvegarde est protégée. Entrez le mot de passe ZIP :",
-                            QLineEdit.EchoMode.Password,
-                            str(self.settings.get("auto_backup_password", ""))
-                        )
-                        if not ok:
-                            return
-                except Exception as e:
-                    logging.warning(f"Impossible de vérifier le mot de passe de sauvegarde: {e}")
-
-                if hasattr(db_ref, 'restore_database_backup'):
-                    success, msg = db_ref.restore_database_backup(path, password=password)
-                    if not success and str(msg).startswith("BACKUP_PASSWORD_REQUIRED"):
-                        QMessageBox.warning(self, "Mot de passe requis", "Cette sauvegarde est chiffrée. Veuillez entrer le mot de passe.")
-                        return
-                    if not success and str(msg).startswith("BACKUP_BAD_PASSWORD"):
-                        QMessageBox.critical(self, "Mot de passe incorrect", "Le mot de passe de la sauvegarde est incorrect.")
-                        return
-                    if success: QMessageBox.information(self, "Terminé", "Restauration terminée avec succès.")
-                    else: QMessageBox.critical(self, "Échec", msg)
-                elif hasattr(db_ref, 'restore_database_excel'):
-                    success, msg = db_ref.restore_database_excel(path, password=password)
-                    if success: QMessageBox.information(self, "Terminé", "Restauration terminée avec succès.")
-                    else: QMessageBox.critical(self, "Échec", msg)
-                else:
-                    QMessageBox.critical(self, "Erreur", "La fonction de restauration est introuvable.")
-
-    def perform_archive_logs(self):
-        days, ok = QInputDialog.getInt(self, "Archiver les historiques",
-                                       "Archiver les enregistrements plus anciens que (jours) :",
-                                       365, 30, 3650)
-        if ok:
-            filename = f"logs_archive_{datetime.now().strftime('%Y%m%d')}.zip"
-            path, _ = QFileDialog.getSaveFileName(self, "Enregistrer l'archive", filename, "Fichiers ZIP (*.zip)")
-            if path:
-                if hasattr(self.data_manager.db, 'export_and_purge_tables'):
-                    success, msg = self.data_manager.db.export_and_purge_tables(path, days)
-                    if success: QMessageBox.information(self, "Terminé", msg)
-                    else: QMessageBox.information(self, "Information", msg)
-
-    def toggle_archive_view(self):
-        db_ref = self.data_manager.db
-        if not getattr(db_ref, 'is_archive_mode', False):
-            path, _ = QFileDialog.getOpenFileName(self, "Sélectionner le fichier archive pour aperçu", "", "Fichiers ZIP (*.zip)")
-            if path:
-                if hasattr(db_ref, 'activate_archive_view'):
-                    success, msg = db_ref.activate_archive_view(path)
-                    if success:
-                        QMessageBox.information(self, "Succès", "Mode archive activé. Les données affichées sont désormais celles de l'archive.")
-                        self._update_view_mode_style(True)
-                    else:
-                        QMessageBox.critical(self, "Erreur", msg)
-        else:
-            if hasattr(db_ref, 'deactivate_archive_view'):
-                success, msg = db_ref.deactivate_archive_view()
-                QMessageBox.information(self, "Terminé", msg)
-                self._update_view_mode_style(False)
-
-    def _update_view_mode_style(self, active):
-        if active:
-            self.lbl_mode_status.setText("⚠️ Mode actuel : Aperçu archive (lecture seule)")
-            self.lbl_mode_status.setStyleSheet("color: red; font-weight: bold; font-size: 16px;")
-            self.btn_toggle_view.setText("❌ Fermer l'archive et revenir")
-            self.btn_toggle_view.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold;")
-            self.grp_view_mode.setStyleSheet("QGroupBox { border: 2px solid red; background-color: #fadbd8; }")
-        else:
-            self.lbl_mode_status.setText("✅ Mode actuel : Données en direct")
-            self.lbl_mode_status.setStyleSheet("color: green; font-weight: bold; font-size: 14px;")
-            self.btn_toggle_view.setText("📂 Ouvrir un fichier archive pour aperçu")
-            self.btn_toggle_view.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold;")
-            self.grp_view_mode.setStyleSheet("QGroupBox { border: 1px solid orange; margin-top: 10px; }")
+        if hasattr(self, 'tab_auto_backup'):
+            return self.tab_auto_backup.perform_restore()
 
     def test_print_label(self):
         self.save_settings()

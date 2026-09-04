@@ -81,6 +81,7 @@ NAVIGATION_PERMISSION_FALLBACKS = {
     ),
     "nav_settings": (
         "tab_config",
+        "tab_auto_backup",
         "tab_set_db",
         "tab_set_printer",
         "tab_set_system",

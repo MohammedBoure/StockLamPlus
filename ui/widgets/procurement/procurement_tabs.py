@@ -140,7 +140,7 @@ class PurchaseOrdersTab(QWidget):
         self.date_from.setCalendarPopup(True)
         self.date_from.setDisplayFormat("yyyy-MM-dd")
         self.date_from.setDate(start_of_year)
-        self.date_from.setFixedWidth(110)
+        self.date_from.setFixedWidth(140)
         self.date_from.dateChanged.connect(self.refresh_orders)
 
         lbl_au = QLabel("Au:")
@@ -150,7 +150,7 @@ class PurchaseOrdersTab(QWidget):
         self.date_to.setCalendarPopup(True)
         self.date_to.setDisplayFormat("yyyy-MM-dd")
         self.date_to.setDate(end_of_year)
-        self.date_to.setFixedWidth(110)
+        self.date_to.setFixedWidth(140)
         self.date_to.dateChanged.connect(self.refresh_orders)
 
         btn_add = QPushButton("➕ Créer Commande")

@@ -1,4 +1,5 @@
 from decimal import Decimal
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -101,6 +102,12 @@ class FakeCursor:
             error = self.execute_errors.pop(0)
             if error:
                 raise error
+        if params is not None and isinstance(params, (tuple, list)):
+            num_placeholders = len(re.findall(r"%s", query))
+            if num_placeholders != len(params):
+                raise mysql.connector.Error(
+                    f"Not all parameters were used in the SQL statement: expected {num_placeholders}, got {len(params)}"
+                )
         self.executed.append((query, params))
 
     def fetchone(self):
@@ -1469,6 +1476,55 @@ class InventoryCountManagerHelperTests(unittest.TestCase):
 
         self.assertTrue(result["success"])
 
+    def test_fetch_count_line_by_barcode_queries_and_parameters(self):
+        expected_line = {
+            "Line_ID": 10,
+            "Session_ID": 99,
+            "Product_Name": "Product A",
+            "Internal_Barcode": "INT-001",
+            "External_Barcode": "EXT-001",
+            "Counted_Qty": Decimal("5"),
+            "Program_Qty_Snapshot": Decimal("5"),
+        }
+        cursor = FakeCursor(
+            fetchone_rows=[
+                expected_line,
+            ]
+        )
+        manager = make_manager(FakeDb(FakeConnection(cursor)))
+        result = manager.get_session_line_by_barcode(session_id=99, barcode="EXT-001")
+        self.assertEqual(result, expected_line)
+
+        # Verify query used b.External_Barcode and had 9 parameters
+        query, params = cursor.executed[0]
+        self.assertIn("b.External_Barcode", query)
+        self.assertNotIn("l.External_Barcode", query)
+        self.assertEqual(len(params), 9)
+        self.assertEqual(len(re.findall(r"%s", query)), 9)
+
+    def test_get_session_lines_search_uses_batch_external_barcode(self):
+        cursor = FakeCursor(
+            fetchall_rows=[
+                [
+                    {
+                        "Line_ID": 1,
+                        "Product_Name": "Test Product",
+                        "External_Barcode": "EXT-123",
+                    }
+                ]
+            ]
+        )
+        manager = make_manager(FakeDb(FakeConnection(cursor)))
+        lines = manager.get_session_lines(session_id=99, search="EXT-123")
+        self.assertEqual(len(lines), 1)
+
+        query, params = cursor.executed[0]
+        self.assertIn("b.External_Barcode", query)
+        self.assertNotIn("l.External_Barcode", query)
+        self.assertEqual(len(params), 11)  # 1 session_id + 10 search params
+        self.assertEqual(len(re.findall(r"%s", query)), 11)
+
 
 if __name__ == "__main__":
     unittest.main()
+

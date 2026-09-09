@@ -129,6 +129,7 @@ class InventoryCountManager:
                 pf.Family_Name,
                 m.Manuf_Name,
                 a.Automate_Name,
+                b.External_Barcode,
                 b.Lot_Number,
                 b.Expiry_Date,
                 b.Quantity_Current,
@@ -148,14 +149,14 @@ class InventoryCountManager:
               AND l.Batch_ID IS NOT NULL
               AND (
                     l.Internal_Barcode = %s OR
-                    l.External_Barcode = %s OR
+                    b.External_Barcode = %s OR
                     FIND_IN_SET(%s, REPLACE(p.Barcode, ' ', '')) > 0 OR
                     p.Manuf_Cat_No = %s
               )
             ORDER BY
                 CASE 
                     WHEN l.Internal_Barcode = %s THEN 0
-                    WHEN l.External_Barcode = %s THEN 1
+                    WHEN b.External_Barcode = %s THEN 1
                     WHEN FIND_IN_SET(%s, REPLACE(p.Barcode, ' ', '')) > 0 THEN 2
                     WHEN p.Manuf_Cat_No = %s THEN 3
                     ELSE 4
@@ -164,7 +165,7 @@ class InventoryCountManager:
                 b.Batch_ID ASC
             LIMIT 1
             """,
-            (session_id, barcode, barcode, barcode, barcode, barcode, barcode, barcode, barcode, barcode)
+            (session_id, barcode, barcode, barcode, barcode, barcode, barcode, barcode, barcode)
         )
         return cursor.fetchone()
 
@@ -513,7 +514,7 @@ class InventoryCountManager:
                 (
                     p.Product_Name LIKE %s OR
                     l.Internal_Barcode LIKE %s OR
-                    l.External_Barcode LIKE %s OR
+                    b.External_Barcode LIKE %s OR
                     p.Barcode LIKE %s OR
                     p.Manuf_Cat_No LIKE %s OR
                     b.Lot_Number LIKE %s OR
@@ -545,6 +546,7 @@ class InventoryCountManager:
                         pf.Family_Name,
                         m.Manuf_Name,
                         a.Automate_Name,
+                        b.External_Barcode,
                         b.Lot_Number,
                         b.Expiry_Date,
                         b.Quantity_Current,

@@ -1,18 +1,25 @@
 import unittest
 from unittest.mock import MagicMock
-from PySide6.QtWidgets import QApplication
 
-# Assurer l'existence d'une instance QApplication pour les widgets Qt
-app = QApplication.instance() or QApplication([])
+try:
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from ui.widgets.settings.lab_info_tab import LabInfoTab
+    from ui.widgets.settings.auto_backup_tab import AutoBackupTab
+    from ui.widgets.settings.settings_tab import SettingsTab
+    from ui.navigation_permissions import has_navigation_permission, has_permission, NAVIGATION_PERMISSION_FALLBACKS
+    from ui.widgets.inventory.tabs_dispatch import DispatchTab
+    from ui.widgets.procurement.procurement_tabs import PurchaseOrdersTab
+    HAS_PYSIDE6 = True
+except ImportError:
+    HAS_PYSIDE6 = False
+    try:
+        from ui.navigation_permissions import has_navigation_permission, has_permission, NAVIGATION_PERMISSION_FALLBACKS
+    except ImportError:
+        pass
 
-from ui.widgets.settings.lab_info_tab import LabInfoTab
-from ui.widgets.settings.auto_backup_tab import AutoBackupTab
-from ui.widgets.settings.settings_tab import SettingsTab
-from ui.navigation_permissions import has_navigation_permission, has_permission, NAVIGATION_PERMISSION_FALLBACKS
-from ui.widgets.inventory.tabs_dispatch import DispatchTab
-from ui.widgets.procurement.procurement_tabs import PurchaseOrdersTab
 
-
+@unittest.skipUnless(HAS_PYSIDE6, "PySide6 is not installed in the current environment")
 class ThemeAndSettingsFixesTests(unittest.TestCase):
     def test_lab_info_tab(self):
         settings = {

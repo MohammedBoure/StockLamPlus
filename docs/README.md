@@ -13,4 +13,6 @@
 - `mobile_inventory_scanner.md`: توثيق تطبيق الموبايل Flutter للماسح الضوئي والجرد الميداني.
 - `pos-migration-verification.md`: تقرير التحقق من ترحيل وتكامل نقطة البيع POS.
 - `stocklam_feature_gap_report.md`: تقرير تحليل الفوارق والميزات بين StockLam و GstockSW4.
+- **[`stocklam_migration_20260909.md`](file:///D:/git/StockLamPlus/docs/stocklam_migration_20260909.md)**: تقرير ترحيل محرك فض نزاعات الجرد (Inventory Count Conflict Resolution)، رأس الترقيم الرأسي للدفعات، أيقونات الأسهم المتجهة SVG، وتنسيقات المبالغ والفرز الرقمي.
 - `stocklam_migration_*.md`: سجلات مراحل ترحيل ميزات StockLam التاريخية.
+

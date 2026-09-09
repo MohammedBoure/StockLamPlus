@@ -17,7 +17,7 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
 - **`external_partners_manager.py`** : Gestion des partenaires externes (laboratoires confrères, cliniques partenaires).
 - **`external_transfer_manager.py`** : Gestion des transferts et cessions de réactifs entre établissements.
 - **`inventory_batch_manager.py`** : Gestion des lots en inventaire, réceptions, transferts, déconditionnement en sous-unités de détail (`unpack_and_transfer_batch`), génération de codes-barres uniques EAN-13 (`generate_unique_barcode`), vérification de collision (`is_barcode_available`), ajustements et péremptions.
-- **`inventory_count_manager.py`** : Gestion des sessions de comptage d'inventaire physique et réconciliation d'écarts.
+- **`inventory_count_manager.py`** : Gestion des sessions de comptage d'inventaire physique, réconciliation d'écarts, détection des conflits de snapshot (`get_session_conflicts`), résolutions d'arbitrage paramétrables (`force_counted`, `apply_delta`, `skip` via `conflict_resolutions`), suppression de sessions et recherche multi-code-barres (`FIND_IN_SET`).
 - **`location_manager.py`** : Gestion des emplacements de stockage (armoires, réfrigérateurs, congélateurs, tiroirs).
 - **`manufacturer_manager.py`** : Gestion des fabricants et marques d'équipements / réactifs.
 - **`packaging_unit_manager.py`** : Gestion des unités de conditionnement et facteurs de conversion.

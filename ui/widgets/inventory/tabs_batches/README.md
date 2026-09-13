@@ -5,7 +5,7 @@ Modular sub-package responsible for displaying and managing inventory batches (l
 ## Files and Purpose
 
 - **`__init__.py`**: Main package entry point and definition of the `BatchesTab` widget class.
-- **`_ui.py`**: Builds the filter panels (including `combo_priority_group`), search bar, table columns configuration with dedicated "Unité" column (between Stock and prices), "Groupe Vente" column, high-contrast clearly visible horizontal scrollbar styling (`#007572` handle, 18px height) and distinct contrasting bottom bar frame.
+- **`_ui.py`**: Builds the filter panels (including `combo_priority_group`, responsive combo box widths, and unified dropdown arrows), search bar, table columns configuration with dedicated "Unité" column (between Stock and prices), "Groupe Vente" column, high-contrast clearly visible horizontal scrollbar styling (`#007572` handle, 18px height) and distinct contrasting bottom bar frame.
 - **`_table.py`**: Manages table row rendering (`_fill_row`), `BatchesVerticalHeader` with fixed row-number alignment, cursor feedback, and isolated reclamation indicator, product stock unit display in column 2, lazy loading, infinite scroll, "Groupe Vente" badge cell rendering, and multi-column sorting with prioritized pricing and inventory columns.
 - **`_filters.py`**: Handles local and global filter application (families, suppliers, expiry dates, stock status, priority groups filter, and waste/loss filter).
 - **`_actions.py`**: Handles batch operations (FEFO validation, direct use, transfer, unpack & retail unit transfer, sales prices adjustment, price change history audit, POS priority group assignment (Liste N°), double-click direct assignment, reclamation notes).

@@ -4,7 +4,7 @@ import os
 import logging
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                                QStackedWidget, QLabel, QPushButton, QFrame, QButtonGroup,
-                               QTabWidget, QMessageBox)
+                               QTabWidget, QMessageBox, QApplication)
 from PySide6.QtCore import Qt, QSize, QFile, QTextStream, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup
 from PySide6.QtGui import QPixmap, QIcon
 import qtawesome as qta

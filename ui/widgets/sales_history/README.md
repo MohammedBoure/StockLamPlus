@@ -4,7 +4,7 @@ Ce dossier regroupe l'interface utilisateur et les composants dédiés à la con
 
 ## Fichiers et Rôles
 
-- `sales_history_tab.py` : Interface principale de l'historique (`SalesHistoryTab`). Comprend une barre de filtres responsive à deux niveaux (période, caisse, client, statut, moyen de paiement, suivi du vieillissement de dette / factures échues), la pagination, le calcul du bénéfice (profit) sous autorisation, ainsi que les raccourcis d'encaissement et de retours sans facture.
+- `sales_history_tab.py` : Interface principale de l'historique (`SalesHistoryTab`). Comprend une barre de filtres responsive à deux niveaux avec sélecteur client autocomplété par Nom et Téléphone (`SearchableClientComboBox`), filtres par période, caisse, statut, moyen de paiement, suivi du vieillissement de dette / factures échues (AR Aging), pagination, calcul du bénéfice sous autorisation, ainsi que les raccourcis d'encaissement direct et de retours sans facture.
 - `sale_details_dialog.py` : Fenêtre modale (`SaleDetailsDialog`) affichant le détail des articles d'une facture de vente avec actions d'annulation, ajustement des quantités, restitution de stock et retours partiels.
 - `pdf_export.py` : Moteur d'exportation PDF ReportLab (`export_invoice_to_pdf`) produisant des factures de vente conformes et prêtes à l'impression.
 - `__init__.py` : Point d'entrée du package exportant `SalesHistoryTab`, `SaleDetailsDialog` et `export_invoice_to_pdf`.

@@ -122,7 +122,7 @@ class TestTouchKeypadSupport(unittest.TestCase):
 
         # Focus cart row quantity
         keypad.focus_qty()
-        qty_spin = tab.cart_table.cellWidget(0, 8)
+        qty_spin = tab.cart_table.cellWidget(0, 9)
         self.assertIsInstance(qty_spin, QDoubleSpinBox)
         self.assertEqual(qty_spin.value(), 5.0)
 
@@ -142,7 +142,7 @@ class TestTouchKeypadSupport(unittest.TestCase):
 
         # Focus remise
         keypad.focus_remise()
-        remise_spin = tab.cart_table.cellWidget(0, 9)
+        remise_spin = tab.cart_table.cellWidget(0, 10)
         self.assertIsInstance(remise_spin, QDoubleSpinBox)
         self.assertEqual(remise_spin.value(), 0.0)
 

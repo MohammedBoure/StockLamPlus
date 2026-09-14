@@ -184,6 +184,15 @@ DUOTONE_SVGS: Dict[str, str] = {
         <line x1="16" y1="14" x2="16" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
         <line x1="20" y1="14" x2="20" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
     </svg>''',
+
+    # 13: Créances Clients (Debts & Receivables: Ledger Card, Coins & Outstanding Balance)
+    "debts": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <rect x="3" y="6" width="26" height="19" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
+        <rect x="3" y="11" width="26" height="4" fill="#007572"/>
+        <rect x="6" y="18" width="5" height="3" rx="0.6" fill="#FFB800" stroke="#2C3E50" stroke-width="1.2"/>
+        <circle cx="23" cy="24" r="5" fill="#10B981" stroke="#2C3E50" stroke-width="2"/>
+        <path d="M21 24H25M23 22V26" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>''',
 }
 
 def get_duotone_icon(name: str, size: int = 64) -> QIcon:

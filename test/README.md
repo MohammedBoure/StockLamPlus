@@ -18,3 +18,4 @@ Suite de tests automatisés vérifiant le bon fonctionnement des modules backend
 - `test_wholesale_b2b_features.py` : Tests des fonctionnalités de vente en gros B2B (génération de numéros de documents, paliers de prix, plafonds de crédit).
 - `test_touch_keypad_support.py` : Tests du pavé tactile/clavier virtuel partagé (`TouchKeypadDialog`), ergonomie tactile et intégration complète avec la Vente en Gros et le POS.
 - `test_wholesale_refactoring.py` : Tests de validation de la ségrégation comptable (exclusion des devis et commandes brouillons des soldes et grands livres clients) et de la résolution automatique des paliers de prix B2B.
+- `test_debts_management.py` : Tests des méthodes d'audit comptable du solde client, de ventilation FIFO des règlements globaux, des acomptes libres, des permissions de navigation `nav_debts`, et de l'autocomplétion nom/téléphone (`SearchableClientComboBox`).

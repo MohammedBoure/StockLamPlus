@@ -15,6 +15,7 @@ from ui.widgets.inventory.dialogs import BarcodeLineEdit
 from ui.formatting import format_money, format_quantity
 from ui.widgets.sales.invoice_payment_dialog import InvoicePaymentDialog
 from ui.widgets.sales.return_dialog import ReturnProductSelectionDialog
+from ui.widgets.sales.searchable_client_combo import SearchableClientComboBox
 from .sale_details_dialog import SaleDetailsDialog
 from .pdf_export import export_invoice_to_pdf
 
@@ -107,11 +108,10 @@ class SalesHistoryTab(QWidget):
         self.cb_caisse.currentIndexChanged.connect(self.apply_filter_local)
 
         lbl_client = QLabel("👤 Client :")
-        self.cb_client = QComboBox()
-        self.cb_client.setMinimumWidth(150)
+        self.cb_client = SearchableClientComboBox(self, placeholder="🔍 Tous les Clients (Nom/Tél)...")
+        self.cb_client.setMinimumWidth(200)
         self.cb_client.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self.cb_client.addItem("Tous les Clients", None)
-        self.cb_client.currentIndexChanged.connect(self.load_sales_data)
+        self.cb_client.client_changed.connect(lambda _: self.load_sales_data())
 
         lbl_status = QLabel("Statut :")
         self.cb_status = QComboBox()
@@ -380,8 +380,7 @@ class SalesHistoryTab(QWidget):
 
     def load_filters(self):
         clients = self.data_manager.clients.get_all_clients()
-        for client in clients:
-            self.cb_client.addItem(client['Client_Name'], client['Client_ID'])
+        self.cb_client.set_clients(clients)
 
         if hasattr(self, 'cb_caisse'):
             self.cb_caisse.blockSignals(True)
@@ -396,7 +395,7 @@ class SalesHistoryTab(QWidget):
     def load_sales_data(self):
         d_from = self.date_from.date().toString("yyyy-MM-dd")
         d_to = self.date_to.date().toString("yyyy-MM-dd")
-        client_id = self.cb_client.currentData()
+        client_id = self.cb_client.get_selected_client_id()
 
         self.raw_data = self.data_manager.sales.get_sales_operations_history(d_from, d_to, client_id)
         self.apply_filter_local()

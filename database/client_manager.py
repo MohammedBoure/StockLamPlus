@@ -508,3 +508,368 @@ class ClientManager:
                 'transactions': [],
                 'final_balance': 0.0
             }
+
+    def audit_client_debt_balance(self, client_id: int) -> dict:
+        """
+        Audit d'intégrité comptable vérifiant la formule fondamentale :
+        Solde Actuel = Total(Factures & BL Validés) - Total(Règlements) - Total(Avoirs Validés)
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute(
+                    "SELECT Client_ID, Client_Name, Credit_Limit, Price_Tier FROM Clients WHERE Client_ID = %s",
+                    (client_id,)
+                )
+                client = cursor.fetchone()
+                if not client:
+                    return {"client_id": client_id, "error": "Client introuvable", "is_balanced": False}
+
+                # 1. Total Factures & BL validés (excluant Cancelled, Draft, DEV, BC)
+                cursor.execute("""
+                    SELECT COALESCE(SUM(Total_Amount_TTC), 0) AS total_invoiced,
+                           COUNT(*) AS count_invoices
+                    FROM Sales_Invoices
+                    WHERE Client_ID = %s 
+                      AND Status NOT IN ('Cancelled', 'Draft')
+                      AND Invoice_No NOT LIKE 'DEV-%'
+                      AND Invoice_No NOT LIKE 'BC-%'
+                """, (client_id,))
+                inv_res = cursor.fetchone() or {}
+                total_invoiced = float(inv_res.get('total_invoiced') or 0.0)
+                count_invoices = int(inv_res.get('count_invoices') or 0)
+
+                # 2. Total Règlements Caisse POS
+                cursor.execute("""
+                    SELECT COALESCE(SUM(p.Amount), 0) AS pos_paid,
+                           COUNT(*) AS count_pos_payments
+                    FROM POS_Sale_Payments p
+                    JOIN Sales_Invoices i ON i.Invoice_ID = p.Invoice_ID
+                    WHERE i.Client_ID = %s 
+                      AND i.Status NOT IN ('Cancelled', 'Draft')
+                      AND i.Invoice_No NOT LIKE 'DEV-%'
+                      AND i.Invoice_No NOT LIKE 'BC-%'
+                      AND p.Payment_Method != 'Credit'
+                """, (client_id,))
+                pos_res = cursor.fetchone() or {}
+                pos_paid = float(pos_res.get('pos_paid') or 0.0)
+                count_pos = int(pos_res.get('count_pos_payments') or 0)
+
+                # 3. Total Règlements Directs & Acomptes (Client_Payments)
+                cursor.execute("""
+                    SELECT COALESCE(SUM(Amount), 0) AS client_paid,
+                           COUNT(*) AS count_client_payments
+                    FROM Client_Payments
+                    WHERE Client_ID = %s
+                """, (client_id,))
+                cl_res = cursor.fetchone() or {}
+                client_paid = float(cl_res.get('client_paid') or 0.0)
+                count_cl_pay = int(cl_res.get('count_client_payments') or 0)
+
+                total_paid = round(pos_paid + client_paid, 2)
+
+                # 4. Total Avoirs / Retours (Client_Credit_Notes)
+                cursor.execute("""
+                    SELECT COALESCE(SUM(Total_Amount_TTC), 0) AS total_credit_notes,
+                           COUNT(*) AS count_credit_notes
+                    FROM Client_Credit_Notes
+                    WHERE Client_ID = %s AND Status != 'Cancelled'
+                """, (client_id,))
+                cn_res = cursor.fetchone() or {}
+                total_credit_notes = float(cn_res.get('total_credit_notes') or 0.0)
+                count_cn = int(cn_res.get('count_credit_notes') or 0)
+
+                # Expected balance
+                expected_balance = round(total_invoiced - total_paid - total_credit_notes, 2)
+
+                # Balance from get_client_balance
+                balance_data = self.get_client_balance(client_id)
+                current_balance = float(balance_data.get('current_balance', 0.0))
+
+                discrepancy = round(current_balance - expected_balance, 2)
+                is_balanced = abs(discrepancy) < 0.005
+
+                return {
+                    "client_id": client_id,
+                    "client_name": client.get('Client_Name', ''),
+                    "credit_limit": float(client.get('Credit_Limit') or 0.0),
+                    "price_tier": client.get('Price_Tier', 'Prix_1'),
+                    "is_balanced": is_balanced,
+                    "current_balance": current_balance,
+                    "expected_balance": expected_balance,
+                    "discrepancy": discrepancy,
+                    "total_invoiced": total_invoiced,
+                    "count_invoices": count_invoices,
+                    "total_paid": total_paid,
+                    "pos_paid": pos_paid,
+                    "client_paid": client_paid,
+                    "count_payments": count_pos + count_cl_pay,
+                    "total_credit_notes": total_credit_notes,
+                    "count_credit_notes": count_cn
+                }
+        except Exception as e:
+            logging.error(f"Error auditing client debt balance for {client_id}: {e}", exc_info=True)
+            return {
+                "client_id": client_id,
+                "error": str(e),
+                "is_balanced": False
+            }
+
+    def get_client_unpaid_invoices(self, client_id: int) -> list:
+        """
+        Récupère toutes les factures et BL impayés ou partiellement payés pour un client.
+        Calcule les jours de retard par rapport à l'échéance (Due_Date) ou à la date de facture.
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("""
+                    SELECT Invoice_ID, Invoice_No, Invoice_Date, Due_Date, Sale_Type, Status,
+                           Total_Amount_TTC, COALESCE(Paid_Amount, 0.00) AS Paid_Amount,
+                           ROUND(Total_Amount_TTC - COALESCE(Paid_Amount, 0.00), 2) AS Remaining_Balance
+                    FROM Sales_Invoices
+                    WHERE Client_ID = %s
+                      AND Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                      AND Invoice_No NOT LIKE 'DEV-%'
+                      AND Invoice_No NOT LIKE 'BC-%'
+                      AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)) > 0.009
+                    ORDER BY Invoice_Date ASC, Invoice_ID ASC
+                """, (client_id,))
+                rows = cursor.fetchall()
+                today = datetime.now().date()
+                result = []
+                for r in rows:
+                    due_date_str = r.get('Due_Date') or r.get('Invoice_Date')
+                    days_overdue = 0
+                    if due_date_str:
+                        try:
+                            due_date = datetime.strptime(str(due_date_str)[:10], "%Y-%m-%d").date()
+                            days_overdue = (today - due_date).days
+                        except Exception:
+                            days_overdue = 0
+
+                    r['Days_Overdue'] = max(0, days_overdue)
+                    r['Is_Overdue'] = days_overdue > 0
+                    result.append(r)
+                return result
+        except Exception as e:
+            logging.error(f"Error fetching unpaid invoices for client {client_id}: {e}")
+            return []
+
+    def get_debts_analytics(self) -> dict:
+        """
+        Calcule les indicateurs clés (KPIs) globaux des créances clients :
+        - Total des créances en cours (Solde > 0)
+        - Total des créances échues (dettes dépassées en date d'échéance)
+        - Nombre de clients débiteurs
+        - Total des règlements recouvrés durant le mois en cours
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                
+                # 1. Tous les soldes clients
+                all_clients = self.get_all_clients_with_balances()
+                total_receivables = 0.0
+                debtor_count = 0
+                for c in all_clients:
+                    bal = float(c.get('Current_Balance') or 0.0)
+                    if bal > 0.009:
+                        total_receivables += bal
+                        debtor_count += 1
+
+                # 2. Créances échues (factures impayées dont Due_Date < aujourd'hui)
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                cursor.execute("""
+                    SELECT COALESCE(SUM(Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)), 0) AS overdue_total
+                    FROM Sales_Invoices
+                    WHERE Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                      AND Invoice_No NOT LIKE 'DEV-%'
+                      AND Invoice_No NOT LIKE 'BC-%'
+                      AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)) > 0.009
+                      AND COALESCE(Due_Date, Invoice_Date) < %s
+                """, (today_str,))
+                overdue_row = cursor.fetchone() or {}
+                overdue_total = float(overdue_row.get('overdue_total') or 0.0)
+
+                # 3. Règlements recouvrés durant le mois en cours (Client_Payments + POS payments)
+                first_of_month = datetime.now().strftime("%Y-%m-01")
+                cursor.execute("""
+                    SELECT COALESCE(SUM(Amount), 0) AS month_recovered
+                    FROM Client_Payments
+                    WHERE Payment_Date >= %s
+                """, (first_of_month,))
+                month_row = cursor.fetchone() or {}
+                month_recovered_cl = float(month_row.get('month_recovered') or 0.0)
+
+                cursor.execute("""
+                    SELECT COALESCE(SUM(p.Amount), 0) AS month_pos
+                    FROM POS_Sale_Payments p
+                    JOIN Sales_Invoices i ON i.Invoice_ID = p.Invoice_ID
+                    WHERE i.Invoice_Date >= %s
+                      AND i.Status NOT IN ('Cancelled', 'Draft')
+                      AND i.Invoice_No NOT LIKE 'DEV-%'
+                      AND i.Invoice_No NOT LIKE 'BC-%'
+                      AND p.Payment_Method != 'Credit'
+                """, (first_of_month,))
+                pos_row = cursor.fetchone() or {}
+                month_pos = float(pos_row.get('month_pos') or 0.0)
+
+                total_month_recovered = round(month_recovered_cl + month_pos, 2)
+
+                return {
+                    "total_receivables": round(total_receivables, 2),
+                    "overdue_receivables": round(overdue_total, 2),
+                    "debtor_clients_count": debtor_count,
+                    "recovered_this_month": total_month_recovered
+                }
+        except Exception as e:
+            logging.error(f"Error calculating debts analytics: {e}")
+            return {
+                "total_receivables": 0.0,
+                "overdue_receivables": 0.0,
+                "debtor_clients_count": 0,
+                "recovered_this_month": 0.0
+            }
+
+    def get_debtor_clients_summary(self, min_debt: float = 0.0, filter_status: str = "Tous", search_term: str = None) -> list:
+        """
+        Récupère la liste synthétique des clients débiteurs avec informations d'échéance,
+        date de dernier règlement et classification de statut / badge :
+        - 'Plafond Dépassé' : Solde > Plafond Crédit (avec Plafond > 0)
+        - 'Alerte Retard' : Au moins une facture échue dépassée
+        - 'Normal' : Solde > 0 dans les limites autorisées
+        - 'Soldé' : Solde <= 0
+        """
+        try:
+            with self.db.get_db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+                today_str = datetime.now().strftime("%Y-%m-%d")
+
+                query = """
+                    SELECT 
+                        c.Client_ID,
+                        c.Client_Name,
+                        c.Phone,
+                        c.City,
+                        COALESCE(c.Credit_Limit, 0.00) AS Credit_Limit,
+                        COALESCE(c.Price_Tier, 'Prix_1') AS Price_Tier,
+                        COALESCE(inv.total_invoiced, 0.00) AS total_invoiced,
+                        COALESCE(pos_pay.pos_paid, 0.00) + COALESCE(cl_pay.client_paid, 0.00) AS total_paid,
+                        COALESCE(cn.total_credit_notes, 0.00) AS total_credit_notes,
+                        ROUND(
+                            COALESCE(inv.total_invoiced, 0.00) 
+                            - (COALESCE(pos_pay.pos_paid, 0.00) + COALESCE(cl_pay.client_paid, 0.00)) 
+                            - COALESCE(cn.total_credit_notes, 0.00), 
+                            2
+                        ) AS Current_Balance,
+                        last_pay.Last_Payment_Date,
+                        COALESCE(overdue.Overdue_Count, 0) AS Overdue_Count,
+                        COALESCE(unpaid.Unpaid_Count, 0) AS Unpaid_Count
+                    FROM Clients c
+                    LEFT JOIN (
+                        SELECT Client_ID, SUM(Total_Amount_TTC) AS total_invoiced
+                        FROM Sales_Invoices
+                        WHERE Status NOT IN ('Cancelled', 'Draft') 
+                          AND Invoice_No NOT LIKE 'DEV-%'
+                          AND Invoice_No NOT LIKE 'BC-%'
+                          AND Client_ID IS NOT NULL
+                        GROUP BY Client_ID
+                    ) inv ON c.Client_ID = inv.Client_ID
+                    LEFT JOIN (
+                        SELECT i.Client_ID, SUM(p.Amount) AS pos_paid
+                        FROM POS_Sale_Payments p
+                        JOIN Sales_Invoices i ON i.Invoice_ID = p.Invoice_ID
+                        WHERE i.Status NOT IN ('Cancelled', 'Draft') 
+                          AND i.Invoice_No NOT LIKE 'DEV-%'
+                          AND i.Invoice_No NOT LIKE 'BC-%'
+                          AND p.Payment_Method != 'Credit' 
+                          AND i.Client_ID IS NOT NULL
+                        GROUP BY i.Client_ID
+                    ) pos_pay ON c.Client_ID = pos_pay.Client_ID
+                    LEFT JOIN (
+                        SELECT Client_ID, SUM(Amount) AS client_paid
+                        FROM Client_Payments
+                        WHERE Client_ID IS NOT NULL
+                        GROUP BY Client_ID
+                    ) cl_pay ON c.Client_ID = cl_pay.Client_ID
+                    LEFT JOIN (
+                        SELECT Client_ID, SUM(Total_Amount_TTC) AS total_credit_notes
+                        FROM Client_Credit_Notes
+                        WHERE Status != 'Cancelled' AND Client_ID IS NOT NULL
+                        GROUP BY Client_ID
+                    ) cn ON c.Client_ID = cn.Client_ID
+                    LEFT JOIN (
+                        SELECT Client_ID, MAX(Payment_Date) AS Last_Payment_Date
+                        FROM Client_Payments
+                        GROUP BY Client_ID
+                    ) last_pay ON c.Client_ID = last_pay.Client_ID
+                    LEFT JOIN (
+                        SELECT Client_ID, COUNT(*) AS Overdue_Count
+                        FROM Sales_Invoices
+                        WHERE Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                          AND Invoice_No NOT LIKE 'DEV-%'
+                          AND Invoice_No NOT LIKE 'BC-%'
+                          AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0)) > 0.009
+                          AND COALESCE(Due_Date, Invoice_Date) < %s
+                        GROUP BY Client_ID
+                    ) overdue ON c.Client_ID = overdue.Client_ID
+                    LEFT JOIN (
+                        SELECT Client_ID, COUNT(*) AS Unpaid_Count
+                        FROM Sales_Invoices
+                        WHERE Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                          AND Invoice_No NOT LIKE 'DEV-%'
+                          AND Invoice_No NOT LIKE 'BC-%'
+                          AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0)) > 0.009
+                        GROUP BY Client_ID
+                    ) unpaid ON c.Client_ID = unpaid.Client_ID
+                    WHERE c.Deleted_At IS NULL
+                    ORDER BY Current_Balance DESC, c.Client_Name ASC
+                """
+                cursor.execute(query, (today_str,))
+                clients = cursor.fetchall()
+
+                result = []
+                for c in clients:
+                    bal = float(c.get('Current_Balance') or 0.0)
+                    limit = float(c.get('Credit_Limit') or 0.0)
+                    has_overdue = int(c.get('Overdue_Count') or 0) > 0
+
+                    if limit > 0 and bal > limit:
+                        status_badge = "Plafond Dépassé"
+                    elif has_overdue and bal > 0.009:
+                        status_badge = "Alerte Retard"
+                    elif bal > 0.009:
+                        status_badge = "Normal"
+                    else:
+                        status_badge = "Soldé"
+
+                    c['Status_Badge'] = status_badge
+
+                    # Filters
+                    if min_debt > 0 and bal < min_debt:
+                        continue
+
+                    if filter_status == "Dépassant le Plafond" and status_badge != "Plafond Dépassé":
+                        continue
+                    elif filter_status == "En Retard / Échues" and status_badge != "Alerte Retard":
+                        continue
+                    elif filter_status == "Actifs" and bal <= 0.009:
+                        continue
+                    elif filter_status == "Soldés" and bal > 0.009:
+                        continue
+
+                    if search_term:
+                        st = search_term.lower().strip()
+                        c_name = str(c.get('Client_Name') or '').lower()
+                        c_phone = str(c.get('Phone') or '').lower()
+                        if st not in c_name and st not in c_phone:
+                            continue
+
+                    result.append(c)
+
+                return result
+        except Exception as e:
+            logging.error(f"Error fetching debtor clients summary: {e}")
+            return []
+

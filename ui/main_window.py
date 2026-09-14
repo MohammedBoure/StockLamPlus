@@ -32,6 +32,7 @@ from .widgets.history import MovementHistoryTab
 from .widgets.sales.point_of_sale_tab import PointOfSaleTab
 from .widgets.wholesale_sales import WholesaleSalesTab
 from .widgets.sales_history import SalesHistoryTab
+from .widgets.sales.debts_management_tab import DebtsManagementTab
 from .navigation_permissions import has_permission as check_permission, has_navigation_permission as check_navigation_permission
 from database.auto_backup_worker import AutoBackupWorker
 from database import active_user_id
@@ -118,6 +119,7 @@ class MainWindow(QMainWindow):
                 10: "nav_pos",
                 11: "nav_wholesale",
                 12: "nav_sales_history",
+                13: "nav_debts",
                 5: "tab_users",
                 4: "nav_settings"
             }
@@ -311,6 +313,7 @@ class MainWindow(QMainWindow):
             (10, "Point de Vente", "pos"),
             (11, "Vente en Gros B2B", "wholesale"),
             (12, "Historique Ventes", "sales_history"),
+            (13, "Créances Clients", "debts"),
             (7, "Traçabilité", "history"),
             (5, "Utilisateurs", "users"),
             (4, "Paramètres", "settings"),
@@ -448,6 +451,7 @@ class MainWindow(QMainWindow):
             10: "nav_pos",
             11: "nav_wholesale",
             12: "nav_sales_history",
+            13: "nav_debts",
             7: "nav_history",  # واجهة السجل المستقلة
             5: "tab_users",
             4: "nav_settings"
@@ -476,7 +480,7 @@ class MainWindow(QMainWindow):
             self.close()
 
     def _init_placeholders(self):
-        for i in range(13):
+        for i in range(14):
             self.content_area.addWidget(QWidget())
 
     def has_permission(self, perm_key):
@@ -629,6 +633,10 @@ class MainWindow(QMainWindow):
         elif page_id == 12:
             widget = SalesHistoryTab(self.data_manager)
 
+        # --- 13. Debts Management (Créances Clients) ---
+        elif page_id == 13:
+            widget = DebtsManagementTab(self.data_manager)
+
         if widget:
             old_widget = self.content_area.widget(page_id)
             self.content_area.removeWidget(old_widget)
@@ -685,6 +693,7 @@ class MainWindow(QMainWindow):
             10: "nav_pos",
             11: "nav_wholesale",
             12: "nav_sales_history",
+            13: "nav_debts",
             7: "nav_history",
             5: "tab_users",
             4: "nav_settings"

@@ -23,6 +23,9 @@ _ALL_PERMISSIONS = [
     "nav_pos",
     "nav_wholesale",
     "nav_sales_history",
+    "nav_debts",
+    "debts_management:view",
+    "debts_management:settle",
 
     # --- تبويبات لوحة التحكم (Dashboard) ---
     "tab_dash_overview",

@@ -139,6 +139,15 @@ SYSTEM_PERMISSIONS = {
             "act_pos_audit": "Consulter la piste d'audit des ventes"
         }
     },
+    "5c. CREANCES_CLIENTS": {
+        "label": "💳 Gestion des Créances & Dettes Clients",
+        "icon": "fa5s.hand-holding-usd",
+        "perms": {
+            "nav_debts": "Accès Gestion des Créances Clients",
+            "debts_management:view": "Consulter les dettes et créances clients",
+            "debts_management:settle": "Encaisser et solder les créances clients"
+        }
+    },
     "6. SOUS_TRAITANTS": {
         "label": "🧾 Sous-Traitants",
         "icon": "fa5s.file-invoice-dollar",

@@ -84,9 +84,11 @@ class ClientStatementDialog(QDialog):
         self.preset_combo.addItems([
             "Ce mois",
             "Mois précédent",
+            "Dernier trimestre",
             "30 derniers jours",
             "Cette année",
-            "Tout l'historique"
+            "Tout l'historique",
+            "Personnalisé"
         ])
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
         filter_layout.addWidget(self.preset_combo)
@@ -95,12 +97,14 @@ class ClientStatementDialog(QDialog):
         self.date_start = QDateEdit()
         self.date_start.setCalendarPopup(True)
         self.date_start.setDate(QDate.currentDate().addMonths(-1))
+        self.date_start.dateChanged.connect(self._on_date_changed)
         filter_layout.addWidget(self.date_start)
 
         filter_layout.addWidget(QLabel("Au :"))
         self.date_end = QDateEdit()
         self.date_end.setCalendarPopup(True)
         self.date_end.setDate(QDate.currentDate())
+        self.date_end.dateChanged.connect(self._on_date_changed)
         filter_layout.addWidget(self.date_end)
 
         self.btn_refresh = QPushButton("🔄 Actualiser")
@@ -145,7 +149,7 @@ class ClientStatementDialog(QDialog):
 
         # 4. Table du Grand Livre (Transactions Ledger)
         self.table = QTableWidget()
-        cols = ["Date", "Type d'Opération", "Référence", "Débit (+ Facture)", "Crédit (- Paiement)", "Solde Cumulé", "Notes"]
+        cols = ["Date", "Type de Document", "Référence", "Débit (+)", "Crédit (-)", "Solde Progressif", "Notes"]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.setAlternatingRowColors(True)
@@ -202,12 +206,23 @@ class ClientStatementDialog(QDialog):
         if val_lbl:
             val_lbl.setText(text)
 
+    def _on_date_changed(self):
+        idx = self.preset_combo.findText("Personnalisé")
+        if idx >= 0 and self.preset_combo.currentIndex() != idx:
+            self.preset_combo.blockSignals(True)
+            self.preset_combo.setCurrentIndex(idx)
+            self.preset_combo.blockSignals(False)
+
     def _on_preset_changed(self, index):
-        presets = ["this_month", "last_month", "last_30_days", "this_year", "all"]
+        presets = ["this_month", "last_month", "last_quarter", "last_30_days", "this_year", "all", "custom"]
         if 0 <= index < len(presets):
             self.apply_preset(presets[index])
 
     def apply_preset(self, preset_key):
+        if preset_key == "custom":
+            self.load_ledger()
+            return
+
         today = date.today()
         if preset_key == "this_month":
             start = date(today.year, today.month, 1)
@@ -217,6 +232,24 @@ class ClientStatementDialog(QDialog):
             last_day_prev = first_this_month - timedelta(days=1)
             start = date(last_day_prev.year, last_day_prev.month, 1)
             end = last_day_prev
+        elif preset_key == "last_quarter":
+            curr_quarter = (today.month - 1) // 3 + 1
+            if curr_quarter == 1:
+                prev_quarter = 4
+                year = today.year - 1
+            else:
+                prev_quarter = curr_quarter - 1
+                year = today.year
+            start_month = (prev_quarter - 1) * 3 + 1
+            start = date(year, start_month, 1)
+            end_month = start_month + 2
+            if end_month in (1, 3, 5, 7, 8, 10, 12):
+                end_day = 31
+            elif end_month == 2:
+                end_day = 29 if (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)) else 28
+            else:
+                end_day = 30
+            end = date(year, end_month, end_day)
         elif preset_key == "last_30_days":
             start = today - timedelta(days=30)
             end = today
@@ -391,12 +424,16 @@ class ClientStatementDialog(QDialog):
             story.append(Spacer(1, 12))
 
             # 3. Informations Client
+            tax_id = client.get('Tax_ID_Number') or client.get('Tax_ID') or '-'
+            rc = client.get('Commercial_Reg_No') or client.get('Commercial_Register') or '-'
             client_info = [
                 [Paragraph(f"<b>Client :</b> {client_name}", normal_style),
                  Paragraph(f"<b>Catégorie :</b> {client.get('Price_Tier', 'Prix_1')}", normal_style)],
                 [Paragraph(f"<b>Contact :</b> {client.get('Contact_Person', '-')}", normal_style),
                  Paragraph(f"<b>Téléphone :</b> {client.get('Phone', '-')}", normal_style)],
-                [Paragraph(f"<b>Ville / Adresse :</b> {client.get('City', '-')}", normal_style),
+                [Paragraph(f"<b>NIF :</b> {tax_id}", normal_style),
+                 Paragraph(f"<b>RC :</b> {rc}", normal_style)],
+                [Paragraph(f"<b>Ville / Adresse :</b> {client.get('City') or client.get('Address') or '-'}", normal_style),
                  Paragraph(f"<b>Plafond de Crédit :</b> {format_money(float(client.get('Credit_Limit') or 0.0))} DA", normal_style)]
             ]
             t_client = Table(client_info, colWidths=[9.5 * cm, 8.5 * cm])
@@ -436,7 +473,7 @@ class ClientStatementDialog(QDialog):
             story.append(Spacer(1, 14))
 
             # 5. Détail des Écritures (Ledger Grid)
-            ledger_header = ["Date", "Opération", "Réf.", "Débit (DA)", "Crédit (DA)", "Solde Cumulé (DA)"]
+            ledger_header = ["Date", "Type Document", "Réf.", "Débit (DA)", "Crédit (DA)", "Solde Progressif (DA)"]
             ledger_table_data = [ledger_header]
 
             for t in txs:

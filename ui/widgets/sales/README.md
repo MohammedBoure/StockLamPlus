@@ -17,9 +17,10 @@ Composants PySide6 pour le point de vente (POS), la vente en gros B2B, l'encaiss
   - Barre supérieure ultra-fine avec net à payer dynamique, bouton d'actualisation F5, contrôles client/date/emplacement sur une ligne.
   - Panier multi-colonnes avec changement direct de l'emplacement de retrait, support complet des codes-barres multiples et favoris dynamiques illimités.
 - `sales_history_tab.py` : Historique complet des ventes, tickets POS et documents de gros :
-  - Suivi des créances clients et du vieillissement de la dette (AR Aging : Toutes Échues, 1-30j, 31-60j, >60j).
-  - Nouvelle colonne "Retard (Jours)" avec formatage visuel d'alerte (badge rouge pour factures en retard, vert pour factures soldées).
-  - Menu contextuel sur clic droit et bouton d'action dédié "💳 Encaisser Paiement" ouvrant `InvoicePaymentDialog`.
+  - Suivi des créances clients et du vieillissement de la dette (AR Aging : toggle "Factures Échues Non Payées", tranches 0-30j, 31-60j, >60j).
+  - Colonne "Retard (Jours)" et surlignage visuel en rouge doux des lignes de factures échues impayées.
+  - Colonne "Action" avec bouton rapide intégré "💳 Encaisser" pour enregistrer directement le paiement.
+  - Menu contextuel sur clic droit et bouton supérieur dédié "💳 Encaisser Paiement" ouvrant `InvoicePaymentDialog`.
   - Remplacement du dialogue de retour manuel par le dialogue graphique moderne `ReturnProductSelectionDialog`.
   - Export CSV incluant les dates d'échéances et les jours de retard.
 - `invoice_payment_dialog.py` : Dialogue d'encaissement et de règlement direct d'une facture client impayée ou échue avec enregistrement dans `Client_Payments` et mise à jour automatique du statut de la facture.

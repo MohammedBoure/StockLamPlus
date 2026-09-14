@@ -717,13 +717,13 @@ class SalesHistoryTab(QWidget):
         row1_layout.addWidget(self.cb_payment)
 
         # AR Aging Controls
-        self.chk_overdue_only = QCheckBox("⚠️ Échues non soldées")
-        self.chk_overdue_only.setToolTip("Filtrer uniquement les factures échues non soldées")
+        self.chk_overdue_only = QCheckBox("⚠️ Factures Échues Non Payées")
+        self.chk_overdue_only.setToolTip("Filtrer uniquement les factures échues non payées / non soldées")
         self.chk_overdue_only.setStyleSheet("color: #dc2626; font-weight: bold; font-size: 12px;")
         
         self.cb_aging = QComboBox()
         self.cb_aging.addItem("Toutes Échues", "all")
-        self.cb_aging.addItem("1 - 30 jours", "1-30")
+        self.cb_aging.addItem("0 - 30 jours", "0-30")
         self.cb_aging.addItem("31 - 60 jours", "31-60")
         self.cb_aging.addItem("> 60 jours", ">60")
         self.cb_aging.setEnabled(False)
@@ -824,7 +824,7 @@ class SalesHistoryTab(QWidget):
         cols = [
             "ID", "Date", "Operation", "Client / Details", "Statut",
             "Retard (Jours)", "Caisse", "Utilisateur", "Paiement", "Montant saisi",
-            "Total TTC", "Fayda (Profit)"
+            "Total TTC", "Fayda (Profit)", "Action"
         ]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
@@ -843,6 +843,7 @@ class SalesHistoryTab(QWidget):
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(12, QHeaderView.ResizeToContents)
         
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -1011,10 +1012,10 @@ class SalesHistoryTab(QWidget):
                     except Exception:
                         days = 0
                 days = int(days or 0) if days is not None else 0
-                if days <= 0:
-                    continue  # not overdue yet
+                if days < 0:
+                    continue  # not due yet (future due date)
 
-                if aging_bucket == "1-30" and not (1 <= days <= 30):
+                if (aging_bucket == "0-30" or aging_bucket == "1-30") and not (0 <= days <= 30):
                     continue
                 elif aging_bucket == "31-60" and not (31 <= days <= 60):
                     continue
@@ -1156,7 +1157,50 @@ class SalesHistoryTab(QWidget):
             profit_item = item(format_money(profit), Qt.AlignCenter, "#27ae60" if profit > 0 else "#c0392b", QFont("Segoe UI", 9, QFont.Bold)) if row_type == 'Sale' else item("---")
             self.table.setItem(r, 11, profit_item)
 
-            if row_bg:
+            # 12. Quick-Action Button (Encaisser)
+            is_overdue = False
+            if row_type == 'Sale':
+                if days is not None and days >= 0 and not is_settled and inv.get('Status') != 'Cancelled':
+                    is_overdue = True
+
+                if inv.get('Status') == 'Cancelled':
+                    self.table.setItem(r, 12, item("Annulée", color="#94a3b8"))
+                elif is_settled:
+                    self.table.setItem(r, 12, item("Soldée", color="#059669", font=QFont("Segoe UI", 9, QFont.Bold)))
+                else:
+                    btn_pay = QPushButton("💳 Encaisser")
+                    btn_pay.setCursor(Qt.PointingHandCursor)
+                    btn_pay.setToolTip("Encaisser le règlement de cette facture")
+                    btn_pay.setStyleSheet("""
+                        QPushButton {
+                            background-color: #0f766e;
+                            color: white;
+                            font-weight: bold;
+                            font-size: 11px;
+                            border-radius: 4px;
+                            padding: 3px 8px;
+                            border: none;
+                        }
+                        QPushButton:hover { background-color: #115e59; }
+                    """)
+                    btn_pay.clicked.connect(lambda _, invoice=inv: self._open_payment_settlement(invoice))
+                    btn_container = QWidget()
+                    btn_container.setStyleSheet("background: transparent;")
+                    btn_layout = QHBoxLayout(btn_container)
+                    btn_layout.setContentsMargins(2, 2, 2, 2)
+                    btn_layout.setAlignment(Qt.AlignCenter)
+                    btn_layout.addWidget(btn_pay)
+                    self.table.setCellWidget(r, 12, btn_container)
+            else:
+                self.table.setItem(r, 12, item("-"))
+
+            # Highlight overdue rows with soft red visual cues
+            if is_overdue:
+                for col in range(12):
+                    cell = self.table.item(r, col)
+                    if cell and col != 5:  # keep retard badge's distinct style
+                        cell.setBackground(QBrush(QColor("#fef2f2")))
+            elif row_bg:
                 for col in range(self.table.columnCount()):
                     cell = self.table.item(r, col)
                     if cell:

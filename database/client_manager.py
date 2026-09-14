@@ -347,7 +347,16 @@ class ClientManager:
                 cursor.execute(inv_query, tuple(inv_params))
                 for r in cursor.fetchall():
                     ref = r.get('Invoice_No') or f"FAC-{r['Invoice_ID']}"
-                    label = "Facture Vente Gros" if r.get('Sale_Type') == 'Wholesale' else "Facture Vente POS"
+                    if ref.startswith("BL-"):
+                        label = "Bon de Livraison (BL)"
+                    elif ref.startswith("DEV-"):
+                        label = "Devis"
+                    elif ref.startswith("BC-"):
+                        label = "Bon de Commande (BC)"
+                    elif r.get('Sale_Type') == 'Wholesale':
+                        label = "Facture (Vente Gros)"
+                    else:
+                        label = "Facture (Vente POS)"
                     transactions.append({
                         'date': str(r['op_date']),
                         'type': label,

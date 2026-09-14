@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QTableWidget, QTableWidgetI
                                QHeaderView, QPushButton, QHBoxLayout, QMessageBox, QLineEdit,
                                QMenu)
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QColor, QFont
+from PySide6.QtGui import QAction, QColor, QFont, QBrush
 from .dialogs import ClientDialog
 from .client_statement_dialog import ClientStatementDialog
 from ui.formatting import format_money
@@ -160,20 +160,20 @@ class ClientsTab(QWidget):
                 item_limit.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.clients_table.setItem(row_idx, 7, item_limit)
 
-                # 8. Solde Actuel avec Color Cues
+                # 8. Solde Actuel avec Badge Styling / QBrush Coloring
                 bal_val = float(c.get('Current_Balance') or 0.0)
                 item_bal = QTableWidgetItem(f"{format_money(bal_val)} DA")
                 item_bal.setData(Qt.EditRole, bal_val)
-                item_bal.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                item_bal.setTextAlignment(Qt.AlignCenter)
                 item_bal.setFont(QFont("Segoe UI", 9, QFont.Bold))
 
-                # Color Cues: Green for 0 / credit advance, Orange for <= Limit, Red for > Limit
-                if bal_val <= 0:
-                    item_bal.setForeground(QColor("#16a34a"))  # Green
-                elif limit_val > 0 and bal_val <= limit_val:
-                    item_bal.setForeground(QColor("#d97706"))  # Orange
+                # Badge styling / QBrush coloring: Green when Solde <= Credit_Limit, and Red when Solde > Credit_Limit
+                if bal_val <= limit_val:
+                    item_bal.setBackground(QBrush(QColor("#dcfce7")))  # Soft pastel green
+                    item_bal.setForeground(QBrush(QColor("#15803d")))  # Dark green text
                 else:
-                    item_bal.setForeground(QColor("#dc2626"))  # Red (exceeds limit or debt with 0 limit)
+                    item_bal.setBackground(QBrush(QColor("#fee2e2")))  # Soft pastel red
+                    item_bal.setForeground(QBrush(QColor("#b91c1c")))  # Dark red text
 
                 self.clients_table.setItem(row_idx, 8, item_bal)
 

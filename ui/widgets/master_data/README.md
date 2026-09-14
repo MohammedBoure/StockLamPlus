@@ -17,13 +17,13 @@ Ce dossier regroupe les interfaces de gestion des référentiels de données du 
 - `external_partners_tab.py` : Gestion des partenaires et sous-traitants externes.
 - `clients_tab.py` : Gestion des clients pour le point de vente et la vente en gros :
   - Colonnes "Catégorie" (Prix 1 à 4), "Plafond Crédit" et "Solde Actuel" en temps réel.
-  - Indicateurs visuels de solvabilité : Vert ($\le 0$ DA), Orange (dans la limite autorisée), Rouge (dépassement du plafond de crédit).
+  - Badge styling et coloration QBrush : Vert pastel lorsque Solde $\le$ Plafond de Crédit, et Rouge pastel en cas de dépassement (Solde > Plafond).
   - Bouton d'action et menu contextuel sur clic droit : "📄 Générer Relevé de Compte".
 - `client_statement_dialog.py` : Dialogue interactif de Relevé de Compte Client ("Extrait de Compte") :
-  - Périodes prédéfinies (Mois en cours, Mois dernier, Année en cours, Tout l'historique).
-  - Cartes KPI synthétiques : Total Facturé, Total Réglé, Total Avoirs / Retours, Solde Final Restant Dû.
-  - Grand livre chronologique avec solde progressif (Débit, Crédit, Solde cumulé).
-  - Export et impression A4 professionnelle au format PDF via ReportLab.
+  - Filtres temporels : Ce mois, Mois précédent, Dernier trimestre, 30 derniers jours, Cette année, Tout l'historique et Période personnalisée.
+  - Cartes KPI synthétiques : Solde Antérieur, Total Débit (Factures), Total Crédit (Règlements), Nouveau Solde Dû.
+  - Grand livre chronologique avec solde progressif (Date, Type de Document, Référence, Débit +, Crédit -, Solde Progressif, Notes).
+  - Export PDF A4 ReportLab avec en-tête d'entreprise, coordonnées fiscales du client (NIF, RC), récapitulatif KPI et tableau chronologique.
 - `caisses_tab.py` : Gestion et contrôle des caisses (Terminaux POS), statut actif/inactif et suivi du nombre de sessions.
 - `dialogs.py` : Boîtes de dialogue de saisie et de modification des entités de base :
   - `LocationDialog` : Contrôles de visibilité (Public / Privé) et case à cocher "Autoriser la vente POS" avec règle stricte d'intégrité (vente POS impossible sur emplacement privé).

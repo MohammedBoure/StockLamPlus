@@ -794,7 +794,18 @@ SCHEMA_QUERIES = [
 
     # [Migration]: Expand Barcode columns for multiple barcodes support
     """ALTER TABLE Products_Master MODIFY COLUMN Barcode VARCHAR(255) NULL;""",
-    """ALTER TABLE Inventory_Batches MODIFY COLUMN External_Barcode VARCHAR(255) NULL;"""
+    """ALTER TABLE Inventory_Batches MODIFY COLUMN External_Barcode VARCHAR(255) NULL;""",
+
+    # [Migration]: Wholesale & Retail Architecture Schema Enhancements
+    """ALTER TABLE Locations ADD COLUMN Visibility ENUM('Private', 'Public') NOT NULL DEFAULT 'Private';""",
+    """ALTER TABLE Locations ADD COLUMN Allow_POS_Sales BOOLEAN NOT NULL DEFAULT FALSE;""",
+    """ALTER TABLE Inventory_Batches ADD COLUMN Parent_Batch_ID BIGINT UNSIGNED NULL;""",
+    """ALTER TABLE Inventory_Batches ADD COLUMN Batch_Type ENUM('Standard_Bulk', 'Extracted_Retail') NOT NULL DEFAULT 'Standard_Bulk';""",
+    """ALTER TABLE Inventory_Batches ADD CONSTRAINT fk_batch_parent_batch FOREIGN KEY (Parent_Batch_ID) REFERENCES Inventory_Batches(Batch_ID) ON DELETE SET NULL ON UPDATE CASCADE;""",
+    """ALTER TABLE Sales_Invoices ADD COLUMN Sale_Type ENUM('Retail_POS', 'Wholesale') NOT NULL DEFAULT 'Retail_POS';""",
+    """ALTER TABLE Sales_Invoices ADD COLUMN Due_Date DATE NULL;""",
+    """ALTER TABLE Clients ADD COLUMN Price_Tier ENUM('Prix_1', 'Prix_2', 'Prix_3', 'Prix_4') NOT NULL DEFAULT 'Prix_1';""",
+    """ALTER TABLE Clients ADD COLUMN Credit_Limit DECIMAL(15, 2) NOT NULL DEFAULT 0.00;"""
 ]
 
 INDEX_QUERIES = [
@@ -829,7 +840,10 @@ INDEX_QUERIES = [
     "CREATE INDEX idx_sales_invoice_sequences_updated ON Sales_Invoice_Sequences(Updated_At);",
     "CREATE INDEX idx_pos_cash_terminal_status ON POS_Cash_Sessions(Terminal_ID, Status);",
     "CREATE INDEX idx_client_payments_client ON Client_Payments(Client_ID);",
-    "CREATE INDEX idx_client_credit_client ON Client_Credit_Notes(Client_ID);"
+    "CREATE INDEX idx_client_credit_client ON Client_Credit_Notes(Client_ID);",
+    "CREATE INDEX idx_locations_visibility_pos ON Locations(Visibility, Allow_POS_Sales);",
+    "CREATE INDEX idx_batch_parent_type ON Inventory_Batches(Parent_Batch_ID, Batch_Type);",
+    "CREATE INDEX idx_sales_type_due_date ON Sales_Invoices(Sale_Type, Due_Date);"
 ]
 
 class SchemaInitializerMixin:

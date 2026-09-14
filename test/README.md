@@ -14,3 +14,4 @@ Suite de tests automatisés vérifiant le bon fonctionnement des modules backend
 - `test_receipt_config.py` : Tests de configuration des reçus et tickets.
 - `test_history_widget.py` : Tests de la vue d'historique et de traçabilité.
 - `test_theme_and_settings_fixes.py` : Tests de séparation des onglets de paramètres (Laboratoire et Sauvegarde Automatique) et corrections visuelles (tailles de champs dates, code-barres).
+- `test_wholesale_retail_migration.py` : Tests de validation unitaire de la migration de schéma idempotent pour le commerce de gros et détail.

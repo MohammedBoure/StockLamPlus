@@ -39,3 +39,4 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
 - **`template_manager.py`** : Modèles d'impression et formats de reçus.
 - **`user_manager.py`** : Gestion des utilisateurs, authentification, rôles et permissions d'accès.
 - **`waste_reason_manager.py`** : Référentiel des motifs de rebut et de perte (périmé, altéré, bris, etc.).
+- **`migrations/`** : Dossier contenant les scripts SQL de migration idempotents (ex: support commerce de gros et détail).

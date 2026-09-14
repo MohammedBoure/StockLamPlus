@@ -45,6 +45,25 @@ class NavigationPermissionTests(unittest.TestCase):
         self.assertTrue(has_permission(user, "nav_sales"))
         self.assertFalse(has_permission(user, "act_create_sale"))
 
+    def test_new_sales_interfaces_fall_back_to_nav_sales(self):
+        user = {"Permissions": {"nav_sales": True}}
+
+        self.assertTrue(has_navigation_permission(user, "nav_pos"))
+        self.assertTrue(has_navigation_permission(user, "nav_wholesale"))
+        self.assertTrue(has_navigation_permission(user, "nav_sales_history"))
+
+    def test_explicit_deny_on_new_sales_interface(self):
+        user = {
+            "Permissions": {
+                "nav_sales": True,
+                "nav_wholesale": False,
+            }
+        }
+
+        self.assertTrue(has_navigation_permission(user, "nav_pos"))
+        self.assertFalse(has_navigation_permission(user, "nav_wholesale"))
+        self.assertTrue(has_navigation_permission(user, "nav_sales_history"))
+
 
 if __name__ == "__main__":
     unittest.main()

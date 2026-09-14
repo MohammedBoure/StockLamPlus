@@ -9,6 +9,7 @@ import hashlib
 # 1. PERMISSIONS DEFINITION (Granular Control)
 # =============================================================================
 _ALL_PERMISSIONS = [
+    # --- التنقل الرئيسي (Sidebar Modules) ---
     "nav_dashboard",
     "nav_data",
     "nav_procurement",
@@ -19,7 +20,11 @@ _ALL_PERMISSIONS = [
     "nav_settings",
     "nav_market",
     "nav_sales",
+    "nav_pos",
+    "nav_wholesale",
+    "nav_sales_history",
 
+    # --- تبويبات لوحة التحكم (Dashboard) ---
     "tab_dash_overview",
     "tab_dash_reception",
     "tab_dash_consumption",
@@ -38,6 +43,7 @@ _ALL_PERMISSIONS = [
     "tab_data_locations",
     "tab_data_waste_reasons",
     "tab_clients",
+    "tab_data_caisses",
 
     # --- تبويبات المشتريات (Procurement) ---
     "tab_proc_po",
@@ -51,9 +57,10 @@ _ALL_PERMISSIONS = [
     "tab_inv_financials",
 
     # --- تبويبات السجل والتتبع (History) ---
-    "tab_inv_history", # سجل حركات المخزون
+    "tab_inv_history",
 
-    # --- تبويبات المالية (Finance) ---
+    # --- تبويبات المبيعات والتجارة (Sales, Wholesale & Invoices) ---
+    "tab_wholesale_sales",
     "tab_sales_invoices",
     "tab_sales_returns",
     "tab_sales_payments",
@@ -68,19 +75,29 @@ _ALL_PERMISSIONS = [
     "tab_set_pdf",
     "tab_users",
 
-    # --- الإجراءات (Actions) ---
+    # --- إجراءات المنتجات والمشتريات ---
     "act_add_product",
     "act_edit_product",
     "act_delete_product",
     "act_create_po",
     "act_approve_po",
     "act_receive_po",
+
+    # --- إجراءات الجرد والمخزن ---
     "act_inventory_create",
     "act_inventory_scan",
     "act_inventory_apply",
     "act_inventory_cancel",
     "act_inventory_export",
     "act_manage_stamps",
+
+    # --- إجراءات مبيعات الجملة (Wholesale B2B Actions) ---
+    "act_wholesale_create",
+    "act_wholesale_validate",
+    "act_wholesale_credit_override",
+    "act_wholesale_pdf_export",
+
+    # --- إجراءات نقطة البيع والكاشير (POS Actions) ---
     "act_create_sale",
     "act_validate_sale",
     "act_return_sale",

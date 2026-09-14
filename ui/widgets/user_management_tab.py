@@ -40,7 +40,8 @@ SYSTEM_PERMISSIONS = {
             "tab_data_automates": "Automates",
             "tab_data_locations": "Emplacements",
             "tab_data_waste_reasons": "Motifs Rebut",
-            "tab_clients": "Clients"
+            "tab_clients": "Clients",
+            "tab_data_caisses": "Caisses & Terminaux POS"
         }
     },
     "3. ACHATS": {
@@ -82,41 +83,60 @@ SYSTEM_PERMISSIONS = {
             "act_inventory_export": "Exporter vers Excel"
         }
     },
-    "5. VENTES": {
-        "label": "Ventes & Caisses",
+    "5. POINT_DE_VENTE": {
+        "label": "🛒 Point de Vente (POS / Caisse)",
         "icon": "fa5s.cash-register",
         "perms": {
-            "nav_sales": "Acces aux ventes",
-            "tab_sales_invoices": "Historique des ventes",
-            "tab_sales_returns": "Retours de vente",
-            "tab_sales_payments": "Paiements clients",
-            "act_create_sale": "Creer une vente",
-            "act_validate_sale": "Valider une vente",
+            "nav_pos": "Accès Point de Vente (Caisse POS)",
+            "nav_sales": "Accès Global Ventes (Compatibilité)",
+            "act_create_sale": "Créer une vente en caisse",
+            "act_validate_sale": "Valider un ticket / encaissement POS",
             "act_sale_without_client": "Vente comptoir sans client",
-            "act_return_sale": "Retour de vente",
-            "act_cancel_sale": "Annuler une vente",
-            "act_edit_sale": "Modifier une vente",
-            "act_pos_open_session": "Ouvrir une caisse",
-            "act_pos_close_session": "Cloturer une caisse",
-            "act_edit_closed_cash_session": "Modifier une session cloturee",
+            "act_pos_open_session": "Ouvrir une session de caisse",
+            "act_pos_close_session": "Clôturer une session de caisse",
+            "act_edit_closed_cash_session": "Modifier une session clôturée",
+            "act_pos_reopen_session": "Réouvrir une session de caisse",
+            "act_pos_cash_movement": "Mouvements de fond (Cash In / Out)",
             "act_pos_multi_payment": "Autoriser les paiements multiples",
-            "act_pos_credit_sale": "Autoriser la vente a credit",
-            "act_pos_hold_sale": "Suspendre une vente",
-            "act_pos_resume_sale": "Reprendre une vente",
-            "act_pos_quote": "Creer un devis",
-            "act_pos_discount": "Appliquer une remise / promotion",
-            "act_pos_price_override": "Modifier le prix de vente",
-            "act_pos_return": "Creer un retour",
-            "act_pos_return_without_invoice": "Retour sans facture",
+            "act_pos_credit_sale": "Autoriser la vente à crédit au POS",
+            "act_pos_hold_sale": "Mettre en attente / suspendre un panier",
+            "act_pos_resume_sale": "Reprendre un panier en attente",
+            "act_pos_quote": "Créer un devis de caisse",
+            "act_pos_discount": "Appliquer une remise en caisse",
+            "act_pos_price_override": "Modifier le prix de vente en direct",
+            "act_pos_return": "Effectuer un retour d'article POS",
+            "act_pos_return_without_invoice": "Retour sans facture (Manager)",
             "act_pos_refund": "Autoriser un remboursement",
-            "act_pos_exchange": "Autoriser un remplacement",
-            "act_pos_cash_movement": "Cash In / Cash Out",
-            "act_pos_reopen_session": "Reouvrir une caisse",
-            "act_pos_view_profit": "Voir les benefices",
-            "act_pos_reprint_invoice": "Reimprimer une facture",
-            "act_pos_manage_promotions": "Gerer les promotions",
-            "act_pos_manage_loyalty": "Gerer la fidelite",
-            "act_pos_audit": "Voir la piste d audit"
+            "act_pos_exchange": "Autoriser un échange d'article",
+            "act_pos_manage_promotions": "Gérer les promotions",
+            "act_pos_manage_loyalty": "Gérer le programme fidélité"
+        }
+    },
+    "5a. VENTE_EN_GROS": {
+        "label": "🏢 Vente en Gros B2B",
+        "icon": "fa5s.truck-loading",
+        "perms": {
+            "nav_wholesale": "Accès Vente en Gros B2B",
+            "tab_wholesale_sales": "Interface commandes & facturation de gros",
+            "act_wholesale_create": "Créer un document de gros (Devis, BC, BL, Facture)",
+            "act_wholesale_validate": "Valider un document de gros avec déduction stock",
+            "act_wholesale_credit_override": "Autoriser le dépassement du plafond de crédit",
+            "act_wholesale_pdf_export": "Exporter les factures & BL en PDF A4"
+        }
+    },
+    "5b. HISTORIQUE_VENTES": {
+        "label": "📊 Historique & Facturation Ventes",
+        "icon": "fa5s.file-invoice-dollar",
+        "perms": {
+            "nav_sales_history": "Accès Historique des Ventes & Factures",
+            "tab_sales_invoices": "Consulter les factures de vente",
+            "tab_sales_returns": "Consulter l'historique des retours & avoirs",
+            "tab_sales_payments": "Consulter les paiements et encaissements",
+            "act_cancel_sale": "Annuler une facture validée",
+            "act_edit_sale": "Modifier les lignes d'une facture existante",
+            "act_pos_view_profit": "Consulter la marge et le bénéfice (Profit / Fayda)",
+            "act_pos_reprint_invoice": "Réimprimer une facture de vente",
+            "act_pos_audit": "Consulter la piste d'audit des ventes"
         }
     },
     "6. SOUS_TRAITANTS": {
@@ -216,6 +236,29 @@ class UserDialog(BaseDialog):
             
             # إسقاط الصلاحيات على الشجرة
             self.set_permissions(self.data.get('Permissions', {}))
+        else:
+            self.role_combo.currentTextChanged.connect(self._apply_role_defaults)
+            self._apply_role_defaults(self.role_combo.currentText())
+
+    def _apply_role_defaults(self, role_name):
+        """Applique des permissions par défaut selon le rôle lors de l'ajout d'un utilisateur."""
+        all_keys = []
+        for group in SYSTEM_PERMISSIONS.values():
+            if "perms" in group:
+                all_keys.extend(group["perms"].keys())
+
+        if role_name == 'Administrateur':
+            self.set_permissions({k: True for k in all_keys})
+        elif role_name == 'Responsable':
+            excluded = {"tab_set_db", "tab_system_logs", "tab_set_system"}
+            self.set_permissions({k: (k not in excluded) for k in all_keys})
+        else:
+            tech_perms = {
+                "nav_pos": True, "nav_sales": True, "act_create_sale": True, "act_validate_sale": True,
+                "nav_inventory": True, "tab_inv_list": True, "tab_inv_dispatch": True,
+                "nav_procurement": True, "tab_proc_reception": True, "tab_proc_credit": True
+            }
+            self.set_permissions(tech_perms)
 
     def build_permissions_tree(self):
         self.tree_perms.blockSignals(True)

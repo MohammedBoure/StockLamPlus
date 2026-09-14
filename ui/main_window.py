@@ -115,9 +115,9 @@ class MainWindow(QMainWindow):
                 9: "nav_inventaire",
                 6: "nav_services",
                 7: "nav_history",
-                10: "nav_sales",
-                11: "nav_sales",
-                12: "nav_sales",
+                10: "nav_pos",
+                11: "nav_wholesale",
+                12: "nav_sales_history",
                 5: "tab_users",
                 4: "nav_settings"
             }
@@ -445,8 +445,9 @@ class MainWindow(QMainWindow):
             3: "nav_inventory",
             9: "nav_inventaire",
             6: "nav_services",
-            10: "nav_sales",
-            12: "nav_sales",
+            10: "nav_pos",
+            11: "nav_wholesale",
+            12: "nav_sales_history",
             7: "nav_history",  # واجهة السجل المستقلة
             5: "tab_users",
             4: "nav_settings"
@@ -681,9 +682,9 @@ class MainWindow(QMainWindow):
             3: "nav_inventory",
             9: "nav_inventaire",
             6: "nav_services",
-            10: "nav_sales",
-            11: "nav_sales",
-            12: "nav_sales",
+            10: "nav_pos",
+            11: "nav_wholesale",
+            12: "nav_sales_history",
             7: "nav_history",
             5: "tab_users",
             4: "nav_settings"

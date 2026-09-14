@@ -15,3 +15,5 @@ Suite de tests automatisés vérifiant le bon fonctionnement des modules backend
 - `test_history_widget.py` : Tests de la vue d'historique et de traçabilité.
 - `test_theme_and_settings_fixes.py` : Tests de séparation des onglets de paramètres (Laboratoire et Sauvegarde Automatique) et corrections visuelles (tailles de champs dates, code-barres).
 - `test_wholesale_retail_migration.py` : Tests de validation unitaire de la migration de schéma idempotent pour le commerce de gros et détail.
+- `test_wholesale_b2b_features.py` : Tests des fonctionnalités de vente en gros B2B (génération de numéros de documents, paliers de prix, plafonds de crédit).
+- `test_touch_keypad_support.py` : Tests du pavé tactile/clavier virtuel partagé (`TouchKeypadDialog`), ergonomie tactile et intégration complète avec la Vente en Gros et le POS.

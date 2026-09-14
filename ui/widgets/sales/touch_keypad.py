@@ -88,9 +88,11 @@ class TouchKeypadDialog(QDialog):
             self.last_target_widget = None
             target = None
 
-        if not target and self.pos_tab and hasattr(self.pos_tab, 'cb_product_search'):
-            if is_widget_valid(self.pos_tab.cb_product_search):
+        if not target and self.pos_tab:
+            if hasattr(self.pos_tab, 'cb_product_search') and is_widget_valid(self.pos_tab.cb_product_search):
                 target = self.pos_tab.cb_product_search
+            elif hasattr(self.pos_tab, 'search_input') and is_widget_valid(self.pos_tab.search_input):
+                target = self.pos_tab.search_input
 
         return target if is_widget_valid(target) else None
 
@@ -102,17 +104,38 @@ class TouchKeypadDialog(QDialog):
                 return
 
             if self.pos_tab:
-                if target == self.pos_tab.cb_product_search:
+                if hasattr(self.pos_tab, 'cb_product_search') and target == self.pos_tab.cb_product_search:
                     self.lbl_target.setText("Cible : 🔍 <b>Recherche / Code-barres</b>")
                     return
-                elif hasattr(self.pos_tab, 'cb_client') and (
-                    target == self.pos_tab.cb_client or target == self.pos_tab.cb_client.lineEdit()
-                ):
-                    self.lbl_target.setText("Cible : 👤 <b>Recherche Client</b>")
+                elif hasattr(self.pos_tab, 'search_input') and target == self.pos_tab.search_input:
+                    self.lbl_target.setText("Cible : 🔍 <b>Recherche Produit / Lot</b>")
                     return
+                elif hasattr(self.pos_tab, 'cb_client'):
+                    cb = self.pos_tab.cb_client
+                    cb_line = getattr(cb, 'lineEdit', lambda: None)()
+                    if target == cb or target == cb_line:
+                        self.lbl_target.setText("Cible : 👤 <b>Recherche Client</b>")
+                        return
+                if hasattr(self.pos_tab, 'spin_quick_qty'):
+                    sq = self.pos_tab.spin_quick_qty
+                    sq_line = getattr(sq, 'lineEdit', lambda: None)()
+                    if target == sq or target == sq_line:
+                        self.lbl_target.setText("Cible : 🔢 <b>Quantité Rapide</b>")
+                        return
+
+                if hasattr(self.pos_tab, 'cart_table') and is_widget_valid(self.pos_tab.cart_table):
+                    table = self.pos_tab.cart_table
+                    for r in range(table.rowCount()):
+                        for c in range(table.columnCount()):
+                            w = table.cellWidget(r, c)
+                            if w and (w == target or (hasattr(w, 'isAncestorOf') and w.isAncestorOf(target))):
+                                hdr_item = table.horizontalHeaderItem(c)
+                                col_name = hdr_item.text() if hdr_item else f"Col {c}"
+                                self.lbl_target.setText(f"Cible : 🛒 Ligne {r + 1} - <b>{col_name}</b>")
+                                return
 
             parent = target.parent() if hasattr(target, 'parent') else None
-            if (parent and isinstance(parent, QDoubleSpinBox)) or isinstance(target, QDoubleSpinBox):
+            if (parent and isinstance(parent, QAbstractSpinBox)) or isinstance(target, QAbstractSpinBox):
                 self.lbl_target.setText("Cible : 🔢 <b>Nombre / Quantité / Prix</b>")
                 return
 
@@ -181,11 +204,13 @@ class TouchKeypadDialog(QDialog):
         btn_focus_search = self._make_quick_focus_button("🔍 Code", self.focus_search)
         btn_focus_client = self._make_quick_focus_button("👤 Client", self.focus_client)
         btn_focus_qty = self._make_quick_focus_button("🔢 Qté", self.focus_qty)
+        btn_focus_price = self._make_quick_focus_button("💰 Prix", self.focus_price)
         btn_focus_rem = self._make_quick_focus_button("🏷️ Remise", self.focus_remise)
 
         quick_targets.addWidget(btn_focus_search)
         quick_targets.addWidget(btn_focus_client)
         quick_targets.addWidget(btn_focus_qty)
+        quick_targets.addWidget(btn_focus_price)
         quick_targets.addWidget(btn_focus_rem)
         self.main_layout.addLayout(quick_targets)
 
@@ -701,8 +726,10 @@ class TouchKeypadDialog(QDialog):
                 target.clear()
             elif hasattr(target, 'setValue'):
                 target.setValue(0.0)
-            elif isinstance(target, QDoubleSpinBox):
+            elif isinstance(target, QAbstractSpinBox):
                 target.setValue(0.0)
+            if self.pos_tab and hasattr(self.pos_tab, 'calculate_totals'):
+                self.pos_tab.calculate_totals()
         except RuntimeError:
             self.last_target_widget = None
             self._update_target_indicator()
@@ -710,23 +737,31 @@ class TouchKeypadDialog(QDialog):
     # Raccourcis de ciblage rapide avec sélection intégrale
     def focus_search(self):
         try:
-            if self.pos_tab and hasattr(self.pos_tab, 'cb_product_search'):
+            if not self.pos_tab:
+                return
+            w = None
+            if hasattr(self.pos_tab, 'cb_product_search') and is_widget_valid(self.pos_tab.cb_product_search):
                 w = self.pos_tab.cb_product_search
-                if is_widget_valid(w):
-                    w.setFocus()
+            elif hasattr(self.pos_tab, 'search_input') and is_widget_valid(self.pos_tab.search_input):
+                w = self.pos_tab.search_input
+            if is_widget_valid(w):
+                w.setFocus()
+                if hasattr(w, 'selectAll'):
                     QTimer.singleShot(0, w.selectAll)
-                    self.last_target_widget = w
-                    self._update_target_indicator()
+                self.last_target_widget = w
+                self._update_target_indicator()
         except RuntimeError:
             self.last_target_widget = None
 
     def focus_client(self):
         try:
             if self.pos_tab and hasattr(self.pos_tab, 'cb_client'):
-                w = self.pos_tab.cb_client.lineEdit() or self.pos_tab.cb_client
+                cb = self.pos_tab.cb_client
+                w = getattr(cb, 'lineEdit', lambda: None)() or cb
                 if is_widget_valid(w):
                     w.setFocus()
-                    QTimer.singleShot(0, w.selectAll)
+                    if hasattr(w, 'selectAll'):
+                        QTimer.singleShot(0, w.selectAll)
                     self.last_target_widget = w
                     self._update_target_indicator()
         except RuntimeError:
@@ -742,21 +777,66 @@ class TouchKeypadDialog(QDialog):
             row = table.currentRow()
             if row < 0:
                 row = table.rowCount() - 1
-                table.setCurrentCell(row, 1)
+                table.setCurrentCell(row, 1 if table.columnCount() > 1 else 0)
             return row
         except RuntimeError:
             return -1
 
+    def _find_cart_column(self, keywords):
+        if not self.pos_tab or not hasattr(self.pos_tab, 'cart_table'):
+            return -1
+        table = self.pos_tab.cart_table
+        if not is_widget_valid(table):
+            return -1
+        for c in range(table.columnCount()):
+            hdr = table.horizontalHeaderItem(c)
+            if hdr:
+                txt = hdr.text().lower()
+                if any(kw.lower() in txt for kw in keywords):
+                    return c
+        return -1
+
     def focus_qty(self):
         try:
+            col = self._find_cart_column(["quantité", "qté", "qte"])
             row = self._get_active_row()
-            if row >= 0:
-                qty_spin = self.pos_tab.cart_table.cellWidget(row, 2)
-                if is_widget_valid(qty_spin):
-                    target = qty_spin.lineEdit() or qty_spin
+            if row >= 0 and col >= 0:
+                qty_w = self.pos_tab.cart_table.cellWidget(row, col)
+                if is_widget_valid(qty_w):
+                    target = getattr(qty_w, 'lineEdit', lambda: None)() or qty_w
                     if is_widget_valid(target):
                         target.setFocus()
+                        if hasattr(target, 'selectAll'):
+                            QTimer.singleShot(0, target.selectAll)
+                        self.last_target_widget = target
+                        self._update_target_indicator()
+                        return
+
+            if hasattr(self.pos_tab, 'spin_quick_qty') and is_widget_valid(self.pos_tab.spin_quick_qty):
+                sq = self.pos_tab.spin_quick_qty
+                target = getattr(sq, 'lineEdit', lambda: None)() or sq
+                if is_widget_valid(target):
+                    target.setFocus()
+                    if hasattr(target, 'selectAll'):
                         QTimer.singleShot(0, target.selectAll)
+                    self.last_target_widget = target
+                    self._update_target_indicator()
+        except RuntimeError:
+            self.last_target_widget = None
+
+    def focus_price(self):
+        try:
+            col = self._find_cart_column(["prix", "price"])
+            row = self._get_active_row()
+            if row >= 0 and col >= 0:
+                price_w = self.pos_tab.cart_table.cellWidget(row, col)
+                if is_widget_valid(price_w):
+                    spin = getattr(price_w, 'value_spin', price_w)
+                    target = getattr(spin, 'lineEdit', lambda: None)() or spin
+                    if is_widget_valid(target):
+                        target.setFocus()
+                        if hasattr(target, 'selectAll'):
+                            QTimer.singleShot(0, target.selectAll)
                         self.last_target_widget = target
                         self._update_target_indicator()
         except RuntimeError:
@@ -764,14 +844,17 @@ class TouchKeypadDialog(QDialog):
 
     def focus_remise(self):
         try:
+            col = self._find_cart_column(["remise", "discount"])
             row = self._get_active_row()
-            if row >= 0:
-                remise_w = self.pos_tab.cart_table.cellWidget(row, 4)
-                if is_widget_valid(remise_w) and hasattr(remise_w, 'value_spin'):
-                    target = remise_w.value_spin.lineEdit() or remise_w.value_spin
+            if row >= 0 and col >= 0:
+                remise_w = self.pos_tab.cart_table.cellWidget(row, col)
+                if is_widget_valid(remise_w):
+                    spin = getattr(remise_w, 'value_spin', remise_w)
+                    target = getattr(spin, 'lineEdit', lambda: None)() or spin
                     if is_widget_valid(target):
                         target.setFocus()
-                        QTimer.singleShot(0, target.selectAll)
+                        if hasattr(target, 'selectAll'):
+                            QTimer.singleShot(0, target.selectAll)
                         self.last_target_widget = target
                         self._update_target_indicator()
         except RuntimeError:
@@ -779,31 +862,74 @@ class TouchKeypadDialog(QDialog):
 
     def adjust_active_qty(self, delta):
         try:
-            row = self._get_active_row()
-            if row >= 0:
-                qty_spin = self.pos_tab.cart_table.cellWidget(row, 2)
-                if is_widget_valid(qty_spin):
-                    new_val = max(0.01, min(qty_spin.maximum(), qty_spin.value() + delta))
-                    qty_spin.setValue(new_val)
-                    target = qty_spin.lineEdit() or qty_spin
-                    if is_widget_valid(target):
-                        target.setFocus()
-                        QTimer.singleShot(0, target.selectAll)
-                        self.last_target_widget = target
-                    self._update_target_indicator()
+            target = self._get_target_widget()
+            spin_target = None
+            if isinstance(target, QAbstractSpinBox):
+                spin_target = target
+            elif target and hasattr(target, 'parent') and isinstance(target.parent(), QAbstractSpinBox):
+                spin_target = target.parent()
+
+            if spin_target and is_widget_valid(spin_target) and hasattr(spin_target, 'value') and hasattr(spin_target, 'setValue'):
+                new_val = max(getattr(spin_target, 'minimum', lambda: 0.0)(),
+                              min(getattr(spin_target, 'maximum', lambda: 999999.0)(), spin_target.value() + delta))
+                spin_target.setValue(new_val)
+                line_edit = getattr(spin_target, 'lineEdit', lambda: None)()
+                if is_widget_valid(line_edit):
+                    line_edit.setFocus()
+                    QTimer.singleShot(0, line_edit.selectAll)
+                    self.last_target_widget = line_edit
+                if hasattr(self.pos_tab, 'calculate_totals'):
+                    self.pos_tab.calculate_totals()
+                self._update_target_indicator()
+                return
+
+            if self.pos_tab and hasattr(self.pos_tab, 'cart_table'):
+                col = self._find_cart_column(["quantité", "qté", "qte"])
+                row = self._get_active_row()
+                if row >= 0 and col >= 0:
+                    qty_spin = self.pos_tab.cart_table.cellWidget(row, col)
+                    if is_widget_valid(qty_spin) and hasattr(qty_spin, 'setValue'):
+                        new_val = max(getattr(qty_spin, 'minimum', lambda: 0.01)(),
+                                      min(getattr(qty_spin, 'maximum', lambda: 999999.0)(), qty_spin.value() + delta))
+                        qty_spin.setValue(new_val)
+                        line_edit = getattr(qty_spin, 'lineEdit', lambda: None)()
+                        if is_widget_valid(line_edit):
+                            line_edit.setFocus()
+                            QTimer.singleShot(0, line_edit.selectAll)
+                            self.last_target_widget = line_edit
+                        if hasattr(self.pos_tab, 'calculate_totals'):
+                            self.pos_tab.calculate_totals()
+                        self._update_target_indicator()
+                        return
+
+            if hasattr(self.pos_tab, 'spin_quick_qty') and is_widget_valid(self.pos_tab.spin_quick_qty):
+                sq = self.pos_tab.spin_quick_qty
+                new_val = max(sq.minimum(), min(sq.maximum(), sq.value() + delta))
+                sq.setValue(new_val)
+                line_edit = getattr(sq, 'lineEdit', lambda: None)()
+                if is_widget_valid(line_edit):
+                    line_edit.setFocus()
+                    QTimer.singleShot(0, line_edit.selectAll)
+                    self.last_target_widget = line_edit
+                self._update_target_indicator()
         except RuntimeError:
             self.last_target_widget = None
             self._update_target_indicator()
 
     def delete_active_cart_row(self):
         self.last_target_widget = None
-        row = self._get_active_row()
-        if row >= 0:
-            self.pos_tab.cart_table.removeRow(row)
-            self.pos_tab.calculate_totals()
-        if self.pos_tab and hasattr(self.pos_tab, 'cb_product_search') and is_widget_valid(self.pos_tab.cb_product_search):
+        if self.pos_tab and hasattr(self.pos_tab, 'cart_table'):
+            row = self._get_active_row()
+            if row >= 0:
+                self.pos_tab.cart_table.removeRow(row)
+                if hasattr(self.pos_tab, 'calculate_totals'):
+                    self.pos_tab.calculate_totals()
+        if hasattr(self.pos_tab, 'cb_product_search') and is_widget_valid(self.pos_tab.cb_product_search):
             self.last_target_widget = self.pos_tab.cb_product_search
             self.pos_tab.cb_product_search.setFocus()
+        elif hasattr(self.pos_tab, 'search_input') and is_widget_valid(self.pos_tab.search_input):
+            self.last_target_widget = self.pos_tab.search_input
+            self.pos_tab.search_input.setFocus()
         self._update_target_indicator()
 
     # Déplacement fluide par glissement

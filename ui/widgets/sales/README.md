@@ -4,7 +4,7 @@ Composants PySide6 pour le point de vente (POS), la vente en gros B2B, l'encaiss
 
 ## Fichiers et Rôles
 
-- `__init__.py` : Expose les composants de vente (`PointOfSaleTab`, `SalesHistoryTab`, `WholesaleSalesTab`).
+- `__init__.py` : Expose les composants de vente (`PointOfSaleTab`, `SalesHistoryTab`, `WholesaleSalesTab`, `ReturnProductSelectionDialog`).
 - `wholesale_sales_tab.py` : Interface indépendante pour la Vente en Gros B2B (sans session de caisse POS obligatoire) :
   - Sélection de client avec solde débiteur en temps réel, plafond de crédit, marge disponible et badge de catégorie tarifaire.
   - Gestion des documents commerciaux : Devis, Bon de Commande (brouillons sans déduction de stock), Bon de Livraison et Facture (validation avec déduction atomique du stock).
@@ -21,10 +21,14 @@ Composants PySide6 pour le point de vente (POS), la vente en gros B2B, l'encaiss
   - Colonne "Retard (Jours)" et surlignage visuel en rouge doux des lignes de factures échues impayées.
   - Colonne "Action" avec bouton rapide intégré "💳 Encaisser" pour enregistrer directement le paiement.
   - Menu contextuel sur clic droit et bouton supérieur dédié "💳 Encaisser Paiement" ouvrant `InvoicePaymentDialog`.
-  - Remplacement du dialogue de retour manuel par le dialogue graphique moderne `ReturnProductSelectionDialog`.
+  - Remplacement de l'invite de saisie d'IDs bruts par le dialogue graphique moderne `ReturnProductSelectionDialog`.
   - Export CSV incluant les dates d'échéances et les jours de retard.
 - `invoice_payment_dialog.py` : Dialogue d'encaissement et de règlement direct d'une facture client impayée ou échue avec enregistrement dans `Client_Payments` et mise à jour automatique du statut de la facture.
-- `return_dialog.py` : Dialogue `ReturnProductSelectionDialog` pour les retours sans facture avec recherche textuelle/code-barres, sélection du lot dans une grille, choix de l'emplacement de réintégration et du mode de remboursement.
+- `return_dialog.py` : Dialogue modal ergonomique `ReturnProductSelectionDialog` pour les retours sans facture :
+  - Champ de recherche auto-focus avec capture immédiate des codes-barres et filtrage temps-réel.
+  - Grille des résultats complète affichant Produit, Code-barres/SKU, N° Lot, Stock, Péremption, Prix Vente HT/TTC.
+  - Configuration du retour : Quantité avec garde-fou, emplacement de destination (priorité automatique à la zone Quarantaine/Retour), motif du retour (liste déroulante normalisée) et mode de remboursement.
+  - Traitement transactionnel atomique avec incrémentation du stock, écriture dans l'historique de mouvements et génération d'un Bon de Retour (Avoir) A4 ReportLab.
 - `pos_payment_dialog.py` : Dialogue de règlement multi-moyens pour le POS (espèces, carte, virement, crédit).
 - `dialogs.py` : Dialogues auxiliaires de caisse (`ClientDialog`, `OpenSessionDialog`, `CloseSessionDialog`, `CashSessionDetailsDialog`, `QuickCashPaymentDialog`, `SelectBatchBarcodeDialog`, `EnterProductBarcodeDialog`).
 - `touch_keypad.py` : Clavier tactile virtuel bi-mode compact et flottant (pavé numérique `123` et clavier complet `ABC`).

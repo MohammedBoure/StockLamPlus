@@ -19,10 +19,12 @@ Composants PySide6 pour le point de vente tactile au détail (POS), les règleme
   - Configuration du retour : Quantité avec garde-fou, emplacement de destination (priorité automatique à la zone Quarantaine/Retour), motif du retour (liste déroulante normalisée) et mode de remboursement.
   - Traitement transactionnel atomique avec incrémentation du stock, écriture dans l'historique de mouvements et génération d'un Bon de Retour (Avoir) A4 ReportLab.
 - `debts_management_tab.py` : Interface complète de gestion des créances et suivi des dettes clients (`DebtsManagementTab`) :
-  - Cartes KPI synthétiques en temps réel (Total créances clients, Créances échues, Nombre de clients débiteurs, Règlements recouvrés ce mois).
-  - Barre de filtrage multi-critères avec autocomplétion nom/téléphone (`SearchableClientComboBox`), statut (Dépassant plafond, En retard, Actifs, Soldés) et seuil minimum de dette.
-  - Répertoire maître des clients débiteurs avec calcul du solde dû, plafond crédit, date de dernier règlement et badges d'alerte.
-  - Panneau de détail (drill-down) des factures et BL impayés avec jours de retard, actions directes d'encaissement et impression PDF.
+  - Cartes KPI modernisées à fond blanc unifié, typographie hiérarchisée (titre 11px semi-bold, valeur 20px extra-bold) avec badge icône vectoriel 2D et alerte dynamique conditionnelle rouge (`#dc2626`) en cas de retard.
+  - Barre de filtrage ergonomique avec étiquettes supérieures normalisées (Top Labels), autocomplétion nom/téléphone (`SearchableClientComboBox`), statut et seuil minimum de dette.
+  - Séparateur équilibré (Splitter 50/50 avec persistance) entre le répertoire maître des clients débiteurs et le détail des pièces.
+  - Entêtes de tables à fort contraste (`#0f172a` sur fond `#f8fafc` avec bordure inférieure `2px solid #007572`), alignement rigoureux des données (texte à gauche, montants financiers et soldes à droite, dates et statuts au centre).
+  - Boutons d'actions vectoriels à largeur fixe (`185px` pour la colonne, `80px` par bouton) évitant tout tronquage horizontal.
+  - Gestion contextuelle de l'état vide (Empty State via `QStackedWidget`) guidant l'utilisateur lorsqu'aucun client n'est sélectionné ou qu'aucune facture impayée n'existe.
   - Dialogue de règlement global / acompte (`GlobalPaymentDialog`) avec ventilation automatique FIFO ou acompte libre.
   - Dialogue d'audit d'intégrité comptable (`ClientDebtAuditDialog`).
 - `searchable_client_combo.py` : Widget de sélection client avec autocomplétion instantanée (`SearchableClientComboBox`) :

@@ -305,8 +305,8 @@ class MainWindow(QMainWindow):
         buttons_info = [
             (0, "Tableau de Bord", "dashboard"),
             (1, "Données de Base", "master_data"),
-            (2, "Achats & Entrées", "procurement"),
-            (3, "Stock & Magasin", "inventory"),
+            (2, "Achats && Entrées", "procurement"),
+            (3, "Stock && Magasin", "inventory"),
             (6, "Sous-Traitants", "services"),
             (8, "Réclamations", "reclamations"),
             (9, "Inventaire", "inventaire"),
@@ -372,7 +372,7 @@ class MainWindow(QMainWindow):
             self.update_header_layout(compact=True)
             for btn in self.nav_group.buttons() + [self.btn_logout]:
                 btn.setText("")
-                btn.setToolTip(self.button_texts[btn])
+                btn.setToolTip(self.button_texts[btn].replace("&&", "&"))
         else:
             self.sidebar_container.setProperty("state", "expanded")
             self.update_header_layout(compact=False)

@@ -9,189 +9,234 @@ from PySide6.QtSvg import QSvgRenderer
 _icon_cache: Dict[str, QIcon] = {}
 
 DUOTONE_SVGS: Dict[str, str] = {
-    # 0: Tableau de Bord (Analytics Board with rising KPI trends, Blue & Gold bars)
+    # 0: Tableau de Bord (Dashboard)
     "dashboard": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="3" y="4" width="26" height="24" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <rect x="6.5" y="16" width="4.5" height="9" rx="1" fill="#0284C7" stroke="#2C3E50" stroke-width="1.8"/>
-        <rect x="13.5" y="11" width="4.5" height="14" rx="1" fill="#00A896" stroke="#2C3E50" stroke-width="1.8"/>
-        <rect x="20.5" y="7" width="4.5" height="18" rx="1" fill="#FFB800" stroke="#2C3E50" stroke-width="1.8"/>
-        <path d="M7 13L14 8L23 5" fill="none" stroke="#2C3E50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="23" cy="5" r="2" fill="#FF6B6B"/>
+        <rect x="4" y="4" width="10" height="13" rx="2" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <rect x="18" y="4" width="10" height="7" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
+        <rect x="18" y="15" width="10" height="13" rx="2" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <rect x="4" y="21" width="10" height="7" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
     </svg>''',
 
-    # 1: Données de Base (Master Database layers & registry catalog)
+    # 1: Données de Base (Master Data)
     "master_data": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <ellipse cx="16" cy="8" rx="11" ry="4.5" fill="#FFB800" stroke="#2C3E50" stroke-width="2.2"/>
-        <path d="M5 8V16C5 18.5 9.9 20.5 16 20.5C22.1 20.5 27 18.5 27 16V8" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2"/>
-        <path d="M5 16V24C5 26.5 9.9 28.5 16 28.5C22.1 28.5 27 26.5 27 24V16" fill="#00A896" stroke="#2C3E50" stroke-width="2.2"/>
-        <line x1="9" y1="14" x2="13" y2="14" stroke="#2C3E50" stroke-width="1.8" stroke-linecap="round"/>
-        <line x1="9" y1="22" x2="13" y2="22" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+        <ellipse cx="16" cy="7" rx="11" ry="4" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <path d="M5 7v9c0 2.2 4.9 4 11 4s11-1.8 11-4V7" fill="none" stroke="#1E293B" stroke-width="2"/>
+        <path d="M5 16v9c0 2.2 4.9 4 11 4s11-1.8 11-4v-9" fill="none" stroke="#007572" stroke-width="2"/>
+        <line x1="10" y1="13" x2="14" y2="13" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <line x1="10" y1="22" x2="14" y2="22" stroke="#007572" stroke-width="2" stroke-linecap="round"/>
     </svg>''',
 
-    # 2: Achats & Entrées (Procurement / Shopping cart with incoming goods & reception receipt)
+    # 2: Achats & Entrées (Procurement)
     "procurement": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <circle cx="11" cy="27" r="2.5" fill="#2C3E50"/>
-        <circle cx="23" cy="27" r="2.5" fill="#2C3E50"/>
-        <path d="M4 5H7.5L10.5 20H25L28 9H8.5" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        <rect x="12" y="7" width="11" height="9" rx="1.5" fill="#10B981" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M12 11H23" stroke="#2C3E50" stroke-width="1.8"/>
-        <path d="M17.5 7V16" stroke="#FFB800" stroke-width="2" stroke-linecap="round"/>
+        <path d="M7 4h18l3 7v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V11l3-7z" fill="#E6F4F1" stroke="#007572" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="4" y1="11" x2="28" y2="11" stroke="#1E293B" stroke-width="2"/>
+        <path d="M21 16a5 5 0 0 1-10 0" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round"/>
     </svg>''',
 
-    # 3: Stock & Magasin (Warehouse storage racks holding inventory products on shelves)
+    # 3: Stock & Magasin (Inventory)
     "inventory": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <line x1="5" y1="4" x2="5" y2="28" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <line x1="27" y1="4" x2="27" y2="28" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <line x1="5" y1="16" x2="27" y2="16" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <line x1="5" y1="28" x2="27" y2="28" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <rect x="8" y="8" width="7" height="7" rx="1" fill="#00A896" stroke="#2C3E50" stroke-width="1.8" stroke-linejoin="round"/>
-        <line x1="11.5" y1="8" x2="11.5" y2="15" stroke="#FFFFFF" stroke-width="1.4"/>
-        <rect x="17" y="9" width="7" height="6" rx="1" fill="#FFB800" stroke="#2C3E50" stroke-width="1.8" stroke-linejoin="round"/>
-        <rect x="8" y="19" width="9" height="8" rx="1" fill="#FF6B6B" stroke="#2C3E50" stroke-width="1.8" stroke-linejoin="round"/>
-        <line x1="12.5" y1="19" x2="12.5" y2="27" stroke="#2C3E50" stroke-width="1.4"/>
-        <rect x="19" y="20" width="6" height="7" rx="1" fill="#F8FAFC" stroke="#2C3E50" stroke-width="1.8" stroke-linejoin="round"/>
+        <rect x="4" y="6" width="24" height="20" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
+        <line x1="4" y1="16" x2="28" y2="16" stroke="#1E293B" stroke-width="2"/>
+        <rect x="7" y="9" width="7" height="5" rx="1" fill="#E6F4F1" stroke="#007572" stroke-width="1.8"/>
+        <rect x="18" y="9" width="7" height="5" rx="1" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.8"/>
+        <rect x="7" y="19" width="8" height="5" rx="1" fill="#E6F4F1" stroke="#007572" stroke-width="1.8"/>
+        <rect x="18" y="19" width="6" height="5" rx="1" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.8"/>
     </svg>''',
 
-    # 6: Sous-Traitants (Trading Partners Handshake & Deal exchange)
+    # 6: Sous-Traitants (Partners)
     "services": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <path d="M3 17L8 12L13 16L9 21L3 17Z" fill="#00A896" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M29 17L24 12L19 16L23 21L29 17Z" fill="#FFB800" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M12 15L15 12C15.8 11.2 17.2 11.2 18 12L20 14L15 19L11 16" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M15 19L17 21C17.8 21.8 19.2 21.8 20 21L21 20" fill="none" stroke="#2C3E50" stroke-width="2" stroke-linecap="round"/>
-        <circle cx="16" cy="6" r="3" fill="#FF6B6B" stroke="#2C3E50" stroke-width="1.8"/>
-        <path d="M15 6H17M16 5V7" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round"/>
+        <circle cx="12" cy="11" r="5" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <path d="M4 27v-3a6 6 0 0 1 12 0v3" fill="none" stroke="#1E293B" stroke-width="2"/>
+        <circle cx="23" cy="12" r="3.5" fill="#F8FAFC" stroke="#1E293B" stroke-width="1.8"/>
+        <path d="M20 25a5 5 0 0 1 8 0" fill="none" stroke="#1E293B" stroke-width="1.8"/>
     </svg>''',
 
-    # 8: Réclamations (Non-conformity Claim Warning & Alert)
+    # 8: Réclamations (Alerts)
     "reclamations": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <path d="M16 3L28 26C28.5 27 27.8 28.5 26.5 28.5H5.5C4.2 28.5 3.5 27 4 26L16 3Z" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M16 7L25 25H7L16 7Z" fill="#FF6B6B" stroke="#2C3E50" stroke-width="1.8" stroke-linejoin="round"/>
-        <line x1="16" y1="12" x2="16" y2="19" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
-        <circle cx="16" cy="22.5" r="1.3" fill="#FFFFFF"/>
+        <path d="M16 4L29 27H3L16 4z" fill="#FEF2F2" stroke="#DC2626" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="16" y1="12" x2="16" y2="19" stroke="#DC2626" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="16" cy="23" r="1.3" fill="#DC2626"/>
     </svg>''',
 
-    # 9: Inventaire (Physical Count Checklist & Barcode audit scanner)
+    # 9: Inventaire (Stock Count)
     "inventaire": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="5" y="5" width="22" height="24" rx="2.5" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M12 5V3.5C12 2.7 12.7 2 13.5 2H18.5C19.3 2 20 2.7 20 3.5V5" fill="#FFB800" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M8.5 10L10.5 12L14.5 8" fill="none" stroke="#007572" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="17" y1="10" x2="23" y2="10" stroke="#2C3E50" stroke-width="2" stroke-linecap="round"/>
-        <path d="M8.5 16L10.5 18L14.5 14" fill="none" stroke="#007572" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="17" y1="16" x2="23" y2="16" stroke="#2C3E50" stroke-width="2" stroke-linecap="round"/>
-        <rect x="8" y="21" width="16" height="5" rx="1" fill="#E8F8F5" stroke="#007572" stroke-width="1.5"/>
-        <line x1="11" y1="22.5" x2="11" y2="24.5" stroke="#007572" stroke-width="1.5"/>
-        <line x1="14" y1="22.5" x2="14" y2="24.5" stroke="#007572" stroke-width="1.5"/>
-        <line x1="17" y1="22.5" x2="17" y2="24.5" stroke="#007572" stroke-width="1.5"/>
-        <line x1="20" y1="22.5" x2="20" y2="24.5" stroke="#007572" stroke-width="1.5"/>
+        <rect x="6" y="5" width="20" height="23" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
+        <rect x="11" y="2" width="10" height="5" rx="1.5" fill="#E6F4F1" stroke="#007572" stroke-width="1.8"/>
+        <path d="M10 13l3 3 6-6" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="10" y1="21" x2="22" y2="21" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
     </svg>''',
 
-    # 10: Point de Vente (POS Cash register & checkout)
+    # 10: Point de Vente (POS)
     "pos": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="4" y="5" width="24" height="14" rx="2" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <rect x="7" y="8" width="18" height="8" rx="1" fill="#E11D48" stroke="#2C3E50" stroke-width="1.6"/>
-        <line x1="10" y1="12" x2="22" y2="12" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M2 24C2 21.8 3.8 20 6 20H26C28.2 20 30 21.8 30 24V27H2V24Z" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <circle cx="7" cy="24" r="1.5" fill="#FFB800"/>
-        <circle cx="12" cy="24" r="1.5" fill="#00A896"/>
-        <circle cx="17" cy="24" r="1.5" fill="#0284C7"/>
-        <rect x="21" y="22.5" width="6" height="3" rx="0.8" fill="#10B981" stroke="#2C3E50" stroke-width="1.2"/>
+        <rect x="4" y="6" width="24" height="15" rx="2" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <line x1="4" y1="12" x2="28" y2="12" stroke="#1E293B" stroke-width="2"/>
+        <rect x="8" y="16" width="6" height="2" rx="0.5" fill="#007572"/>
+        <path d="M6 25h20l2 3H4l2-3z" fill="#F8FAFC" stroke="#1E293B" stroke-width="2" stroke-linejoin="round"/>
     </svg>''',
 
-    # 11: Vente en Gros B2B (Wholesale Bulk Shipping & Commercial Invoicing)
+    # 11: Vente en Gros B2B (Wholesale)
     "wholesale": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <path d="M4 8L16 2L28 8L16 14L4 8Z" fill="#FFB800" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M4 8V22L16 28V14L4 8Z" fill="#0284C7" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M28 8V22L16 28V14L28 8Z" fill="#00A896" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M11 11.5L21 6.5" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
-        <circle cx="21" cy="20" r="4.5" fill="#10B981" stroke="#2C3E50" stroke-width="1.8"/>
-        <path d="M19.5 20L20.8 21.3L22.8 18.8" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="4" y="8" width="24" height="19" rx="2" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <path d="M4 8l12-5 12 5" fill="none" stroke="#1E293B" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="16" y1="3" x2="16" y2="27" stroke="#007572" stroke-width="1.8"/>
+        <line x1="10" y1="15" x2="10" y2="21" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <line x1="22" y1="15" x2="22" y2="21" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
     </svg>''',
 
-    # 12: Historique Ventes (Sales Analytics & transaction chart)
+    # 12: Historique Ventes (Sales History)
     "sales_history": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="4" y="4" width="24" height="24" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <polyline points="7,22 13,15 18,19 25,10" fill="none" stroke="#0891B2" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="7" cy="22" r="2" fill="#FFB800" stroke="#2C3E50" stroke-width="1.4"/>
-        <circle cx="13" cy="15" r="2" fill="#00A896" stroke="#2C3E50" stroke-width="1.4"/>
-        <circle cx="18" cy="19" r="2" fill="#FF6B6B" stroke="#2C3E50" stroke-width="1.4"/>
-        <circle cx="25" cy="10" r="2.2" fill="#0891B2" stroke="#2C3E50" stroke-width="1.4"/>
+        <rect x="4" y="4" width="24" height="24" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
+        <polyline points="7 22 13 15 18 19 25 10" fill="none" stroke="#007572" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="25" cy="10" r="2" fill="#007572"/>
     </svg>''',
 
-    # 7: Traçabilité (Internal stock movement audit trail, transfer flow & chronological history)
+    # 7: Traçabilité (History & Audit Trail)
     "history": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <circle cx="16" cy="16" r="11.5" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2"/>
-        <path d="M16 4.5A11.5 11.5 0 0 1 27.5 16" fill="none" stroke="#8B5CF6" stroke-width="2.6" stroke-linecap="round"/>
-        <polygon points="27.5,12 27.5,17 22.5,17" fill="#8B5CF6" stroke="#2C3E50" stroke-width="1.5" stroke-linejoin="round"/>
-        <circle cx="16" cy="16" r="2.5" fill="#FFB800" stroke="#2C3E50" stroke-width="1.8"/>
-        <path d="M16 9V16L20 18" fill="none" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M6 25L10 21L14 25" fill="none" stroke="#00A896" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="16" cy="16" r="12" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <polyline points="16 9 16 16 21 18" fill="none" stroke="#1E293B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>''',
 
-    # 5: Utilisateurs (Org hierarchy network tree of team users)
+    # 5: Utilisateurs (Users)
     "users": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <circle cx="16" cy="8" r="4.5" fill="#FFB800" stroke="#2C3E50" stroke-width="2"/>
-        <circle cx="16" cy="7" r="1.8" fill="#2C3E50"/>
-        <circle cx="8" cy="22" r="4.5" fill="#6366F1" stroke="#2C3E50" stroke-width="2"/>
-        <circle cx="8" cy="21" r="1.8" fill="#FFFFFF"/>
-        <circle cx="24" cy="22" r="4.5" fill="#6366F1" stroke="#2C3E50" stroke-width="2"/>
-        <circle cx="24" cy="21" r="1.8" fill="#FFFFFF"/>
-        <path d="M16 13V16M16 16H8V17.5M16 16H24V17.5" fill="none" stroke="#2C3E50" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="16" cy="10" r="5" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <path d="M6 26v-2a6 6 0 0 1 12 0v2" fill="none" stroke="#1E293B" stroke-width="2"/>
+        <path d="M20 18a5 5 0 0 1 6 0v2" fill="none" stroke="#007572" stroke-width="1.8"/>
+        <circle cx="23" cy="11" r="3.5" fill="#F8FAFC" stroke="#007572" stroke-width="1.8"/>
     </svg>''',
 
-    # 4: Paramètres (Settings sliders & Configuration)
+    # 4: Paramètres (Settings)
     "settings": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <line x1="6" y1="9" x2="26" y2="9" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="12" cy="9" r="3.5" fill="#00A896" stroke="#2C3E50" stroke-width="2"/>
-        <line x1="6" y1="16" x2="26" y2="16" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="20" cy="16" r="3.5" fill="#FFB800" stroke="#2C3E50" stroke-width="2"/>
-        <line x1="6" y1="23" x2="26" y2="23" stroke="#2C3E50" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="10" cy="23" r="3.5" fill="#64748B" stroke="#2C3E50" stroke-width="2"/>
+        <line x1="5" y1="9" x2="27" y2="9" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="12" cy="9" r="3" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <line x1="5" y1="16" x2="27" y2="16" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="20" cy="16" r="3" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <line x1="5" y1="23" x2="27" y2="23" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="10" cy="23" r="3" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
     </svg>''',
 
     # Logout (Power / Exit)
     "logout": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <path d="M16 5V15" stroke="#FF6B6B" stroke-width="2.6" stroke-linecap="round"/>
-        <path d="M10 9C6.5 11.2 4.5 15 4.5 19C4.5 25.4 9.6 30.5 16 30.5C22.4 30.5 27.5 25.4 27.5 19C27.5 15 25.5 11.2 22 9" fill="none" stroke="#2C3E50" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M16 5V15" stroke="#DC2626" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M10 9C6.5 11.2 4.5 15 4.5 19C4.5 25.4 9.6 30.5 16 30.5C22.4 30.5 27.5 25.4 27.5 19C27.5 15 25.5 11.2 22 9" fill="none" stroke="#1E293B" stroke-width="2.6" stroke-linecap="round"/>
     </svg>''',
 
     # Collapse Sidebar
     "collapse": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="4" y="6" width="24" height="20" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2"/>
-        <line x1="12" y1="6" x2="12" y2="26" stroke="#2C3E50" stroke-width="2"/>
-        <path d="M21 13L18 16L21 19" fill="none" stroke="#00A896" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="4" y="6" width="24" height="20" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
+        <line x1="12" y1="6" x2="12" y2="26" stroke="#1E293B" stroke-width="2"/>
+        <path d="M21 13L18 16L21 19" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>''',
 
     # Expand Sidebar
     "expand": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="4" y="6" width="24" height="20" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2"/>
-        <line x1="12" y1="6" x2="12" y2="26" stroke="#2C3E50" stroke-width="2"/>
-        <path d="M18 13L21 16L18 19" fill="none" stroke="#FFB800" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="4" y="6" width="24" height="20" rx="2" fill="#F8FAFC" stroke="#1E293B" stroke-width="2"/>
+        <line x1="12" y1="6" x2="12" y2="26" stroke="#1E293B" stroke-width="2"/>
+        <path d="M18 13L21 16L18 19" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>''',
 
     # Menu Hamburger Toggle
     "menu": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <line x1="6" y1="9" x2="26" y2="9" stroke="#2C3E50" stroke-width="2.5" stroke-linecap="round"/>
-        <line x1="6" y1="16" x2="20" y2="16" stroke="#00A896" stroke-width="2.5" stroke-linecap="round"/>
-        <line x1="6" y1="23" x2="26" y2="23" stroke="#FFB800" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="6" y1="9" x2="26" y2="9" stroke="#1E293B" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="6" y1="16" x2="26" y2="16" stroke="#007572" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="6" y1="23" x2="26" y2="23" stroke="#1E293B" stroke-width="2.2" stroke-linecap="round"/>
     </svg>''',
 
     # Trash / Delete action
     "trash": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <path d="M7 9H25V26C25 27.1 24.1 28 23 28H9C7.9 28 7 27.1 7 26V9Z" fill="#FEE2E2" stroke="#DC2626" stroke-width="2.2" stroke-linejoin="round"/>
-        <path d="M4 9H28" stroke="#DC2626" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M11 9V5C11 4.4 11.4 4 12 4H20C20.6 4 21 4.4 21 5V9" fill="#FEE2E2" stroke="#DC2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="12" y1="14" x2="12" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
-        <line x1="16" y1="14" x2="16" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
-        <line x1="20" y1="14" x2="20" y2="23" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+        <path d="M7 9h18v17a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V9z" fill="#FEF2F2" stroke="#DC2626" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="4" y1="9" x2="28" y2="9" stroke="#DC2626" stroke-width="2" stroke-linecap="round"/>
+        <path d="M11 9V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4" fill="none" stroke="#DC2626" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="13" y1="14" x2="13" y2="23" stroke="#DC2626" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="19" y1="14" x2="19" y2="23" stroke="#DC2626" stroke-width="1.8" stroke-linecap="round"/>
     </svg>''',
 
-    # 13: Créances Clients (Debts & Receivables: Ledger Card, Coins & Outstanding Balance)
+    # 13: Créances Clients (Debts & Receivables)
     "debts": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <rect x="3" y="6" width="26" height="19" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>
-        <rect x="3" y="11" width="26" height="4" fill="#007572"/>
-        <rect x="6" y="18" width="5" height="3" rx="0.6" fill="#FFB800" stroke="#2C3E50" stroke-width="1.2"/>
-        <circle cx="23" cy="24" r="5" fill="#10B981" stroke="#2C3E50" stroke-width="2"/>
-        <path d="M21 24H25M23 22V26" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+        <rect x="5" y="4" width="22" height="24" rx="2" fill="#E6F4F1" stroke="#007572" stroke-width="2"/>
+        <line x1="9" y1="10" x2="23" y2="10" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <line x1="9" y1="15" x2="23" y2="15" stroke="#1E293B" stroke-width="2" stroke-linecap="round"/>
+        <line x1="9" y1="20" x2="16" y2="20" stroke="#007572" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="22" cy="22" r="5" fill="#FFFFFF" stroke="#007572" stroke-width="2"/>
+        <text x="22" y="25" font-family="sans-serif" font-size="7" font-weight="bold" fill="#007572" text-anchor="middle">D</text>
+    </svg>''',
+
+    # KPI & Debts Specific Vector Icons
+    "kpi_wallet": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="5" width="20" height="14" rx="2" fill="#E6F4F1"/>
+        <line x1="2" y1="10" x2="22" y2="10"/>
+        <circle cx="17" cy="14" r="1.5" fill="#007572"/>
+    </svg>''',
+
+    "kpi_overdue": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9" fill="#FEF2F2"/>
+        <polyline points="12 7 12 12 15 15"/>
+    </svg>''',
+
+    "kpi_debtors": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" fill="#F1F5F9"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>''',
+
+    "kpi_recovered": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9" fill="#F0FDF4"/>
+        <polyline points="8 12 11 15 16 9"/>
+    </svg>''',
+
+    "empty_invoices": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="16" y="8" width="32" height="48" rx="4" fill="#F8FAFC" stroke="#CBD5E1"/>
+        <line x1="24" y1="20" x2="40" y2="20" stroke="#CBD5E1"/>
+        <line x1="24" y1="28" x2="36" y2="28" stroke="#CBD5E1"/>
+        <circle cx="32" cy="42" r="9" fill="#E6F4F1" stroke="#007572"/>
+        <polyline points="28 42 31 45 36 39" stroke="#007572" stroke-width="2.5"/>
+    </svg>''',
+
+    "filter": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+    </svg>''',
+
+    "refresh": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg>''',
+
+    "export": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>''',
+
+    "payment": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2" fill="#E6F4F1"/>
+        <line x1="1" y1="10" x2="23" y2="10"/>
+    </svg>''',
+
+    "payment_white": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="4" width="22" height="16" rx="2"/>
+        <line x1="1" y1="10" x2="23" y2="10"/>
+    </svg>''',
+
+    "statement": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <line x1="10" y1="9" x2="8" y2="9"/>
+    </svg>''',
+
+    "audit": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#007572" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        <line x1="11" y1="8" x2="11" y2="14"/>
+        <line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>''',
+
+    "print": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 6 2 18 2 18 9"/>
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+        <rect x="6" y="14" width="12" height="8"/>
     </svg>''',
 }
 

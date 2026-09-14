@@ -624,16 +624,30 @@ class ClientManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 cursor.execute("""
-                    SELECT Invoice_ID, Invoice_No, Invoice_Date, Due_Date, Sale_Type, Status,
-                           Total_Amount_TTC, COALESCE(Paid_Amount, 0.00) AS Paid_Amount,
-                           ROUND(Total_Amount_TTC - COALESCE(Paid_Amount, 0.00), 2) AS Remaining_Balance
-                    FROM Sales_Invoices
-                    WHERE Client_ID = %s
-                      AND Status NOT IN ('Cancelled', 'Draft', 'Paid')
-                      AND Invoice_No NOT LIKE 'DEV-%'
-                      AND Invoice_No NOT LIKE 'BC-%'
-                      AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)) > 0.009
-                    ORDER BY Invoice_Date ASC, Invoice_ID ASC
+                    SELECT * FROM (
+                        SELECT 
+                            i.Invoice_ID, i.Invoice_No, i.Invoice_Date, i.Due_Date, i.Sale_Type, i.Status,
+                            i.Total_Amount_TTC,
+                            ROUND(
+                                COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0),
+                                2
+                            ) AS Paid_Amount,
+                            ROUND(
+                                i.Total_Amount_TTC - (
+                                    COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                    + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0)
+                                ),
+                                2
+                            ) AS Remaining_Balance
+                        FROM Sales_Invoices i
+                        WHERE i.Client_ID = %s
+                          AND i.Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                          AND i.Invoice_No NOT LIKE 'DEV-%'
+                          AND i.Invoice_No NOT LIKE 'BC-%'
+                    ) unpaid
+                    WHERE unpaid.Remaining_Balance > 0.009
+                    ORDER BY unpaid.Invoice_Date ASC, unpaid.Invoice_ID ASC
                 """, (client_id,))
                 rows = cursor.fetchall()
                 today = datetime.now().date()
@@ -681,13 +695,20 @@ class ClientManager:
                 # 2. Créances échues (factures impayées dont Due_Date < aujourd'hui)
                 today_str = datetime.now().strftime("%Y-%m-%d")
                 cursor.execute("""
-                    SELECT COALESCE(SUM(Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)), 0) AS overdue_total
-                    FROM Sales_Invoices
-                    WHERE Status NOT IN ('Cancelled', 'Draft', 'Paid')
-                      AND Invoice_No NOT LIKE 'DEV-%'
-                      AND Invoice_No NOT LIKE 'BC-%'
-                      AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)) > 0.009
-                      AND COALESCE(Due_Date, Invoice_Date) < %s
+                    SELECT COALESCE(SUM(unpaid.Remaining_Balance), 0) AS overdue_total
+                    FROM (
+                        SELECT 
+                            i.Total_Amount_TTC - (
+                                COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0)
+                            ) AS Remaining_Balance
+                        FROM Sales_Invoices i
+                        WHERE i.Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                          AND i.Invoice_No NOT LIKE 'DEV-%'
+                          AND i.Invoice_No NOT LIKE 'BC-%'
+                          AND COALESCE(i.Due_Date, i.Invoice_Date) < %s
+                    ) unpaid
+                    WHERE unpaid.Remaining_Balance > 0.009
                 """, (today_str,))
                 overdue_row = cursor.fetchone() or {}
                 overdue_total = float(overdue_row.get('overdue_total') or 0.0)
@@ -806,21 +827,39 @@ class ClientManager:
                     ) last_pay ON c.Client_ID = last_pay.Client_ID
                     LEFT JOIN (
                         SELECT Client_ID, COUNT(*) AS Overdue_Count
-                        FROM Sales_Invoices
-                        WHERE Status NOT IN ('Cancelled', 'Draft', 'Paid')
-                          AND Invoice_No NOT LIKE 'DEV-%'
-                          AND Invoice_No NOT LIKE 'BC-%'
-                          AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0)) > 0.009
-                          AND COALESCE(Due_Date, Invoice_Date) < %s
+                        FROM (
+                            SELECT 
+                                i.Client_ID,
+                                i.Total_Amount_TTC - (
+                                    COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                    + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0)
+                                ) AS Remaining_Balance
+                            FROM Sales_Invoices i
+                            WHERE i.Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                              AND i.Invoice_No NOT LIKE 'DEV-%'
+                              AND i.Invoice_No NOT LIKE 'BC-%'
+                              AND COALESCE(i.Due_Date, i.Invoice_Date) < %s
+                              AND i.Client_ID IS NOT NULL
+                        ) ov_sub
+                        WHERE ov_sub.Remaining_Balance > 0.009
                         GROUP BY Client_ID
                     ) overdue ON c.Client_ID = overdue.Client_ID
                     LEFT JOIN (
                         SELECT Client_ID, COUNT(*) AS Unpaid_Count
-                        FROM Sales_Invoices
-                        WHERE Status NOT IN ('Cancelled', 'Draft', 'Paid')
-                          AND Invoice_No NOT LIKE 'DEV-%'
-                          AND Invoice_No NOT LIKE 'BC-%'
-                          AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0)) > 0.009
+                        FROM (
+                            SELECT 
+                                i.Client_ID,
+                                i.Total_Amount_TTC - (
+                                    COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                    + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0)
+                                ) AS Remaining_Balance
+                            FROM Sales_Invoices i
+                            WHERE i.Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                              AND i.Invoice_No NOT LIKE 'DEV-%'
+                              AND i.Invoice_No NOT LIKE 'BC-%'
+                              AND i.Client_ID IS NOT NULL
+                        ) unp_sub
+                        WHERE unp_sub.Remaining_Balance > 0.009
                         GROUP BY Client_ID
                     ) unpaid ON c.Client_ID = unpaid.Client_ID
                     WHERE c.Deleted_At IS NULL

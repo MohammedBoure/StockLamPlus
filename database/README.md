@@ -15,9 +15,9 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
   - Calcul dynamique et instantané du solde débiteur client (`get_client_balance`, `get_all_clients_with_balances`) avec ségrégation comptable stricte : exclusion des devis (`DEV-`) et commandes brouillons (`BC-` / `Status='Draft'`) qui n'engendrent aucune dette légale.
   - Génération du grand livre client chronologique pour relevé de compte (`get_client_ledger`) avec calcul du solde antérieur, débits, crédits et solde progressif en ignorant l'impact financier des pièces pro-forma / devis.
   - Audit d'intégrité comptable (`audit_client_debt_balance`) réconciliant le solde actuel avec la somme des factures, règlements et avoirs.
-  - Indicateurs clés (KPIs) des créances clients (`get_debts_analytics`), extraction des factures impayées avec vieillissement (`get_client_unpaid_invoices`) et synthèse des débiteurs (`get_debtor_clients_summary`).
+  - Indicateurs clés (KPIs) des créances clients (`get_debts_analytics`), extraction des factures impayées avec vieillissement (`get_client_unpaid_invoices`) et synthèse des débiteurs (`get_debtor_clients_summary`) basés sur le calcul dynamique des montants réglés (`POS_Sale_Payments` + `Client_Payments`).
 - **`client_payment_manager.py`** : Gestion des encaissements et règlements clients :
-  - Lettrage de facture unitaire (`add_payment`) avec synchronisation automatique du montant réglé et mise à jour du statut en `Paid`.
+  - Lettrage de facture unitaire (`add_payment`) avec calcul dynamique du cumul réglé et mise à jour automatique du statut en `Paid` à solde complet.
   - Règlements globaux et acomptes (`add_global_payment`) avec ventilation automatique FIFO sur les factures les plus anciennes et enregistrement de surplus en acompte libre.
 - **`company_settings_manager.py`** : Configuration générale de l'entreprise, devise, seuils, cachets et paramètres globaux.
 - **`credit_note_manager.py`** : Gestion des avoirs fournisseurs suite aux retours de marchandises.

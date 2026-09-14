@@ -65,11 +65,12 @@ class ClientPaymentManager:
             cumulative_paid = round(cl_paid + pos_paid, 2)
             new_status = 'Paid' if cumulative_paid >= (total_ttc - 0.009) else current_status
 
-            cursor.execute(
-                "UPDATE Sales_Invoices SET Paid_Amount = %s, Status = %s WHERE Invoice_ID = %s",
-                (cumulative_paid, new_status, invoice_id)
-            )
-            logging.info(f"Invoice {invoice_id} status updated: Paid_Amount={cumulative_paid}, Status={new_status}")
+            if new_status != current_status:
+                cursor.execute(
+                    "UPDATE Sales_Invoices SET Status = %s WHERE Invoice_ID = %s",
+                    (new_status, invoice_id)
+                )
+            logging.info(f"Invoice {invoice_id} status updated: Cumulative_Paid={cumulative_paid}, Status={new_status}")
         except Exception as e:
             logging.error(f"Error checking invoice payment status: {e}", exc_info=True)
 
@@ -122,15 +123,29 @@ class ClientPaymentManager:
 
                 # Auto-allocation FIFO
                 cursor.execute("""
-                    SELECT Invoice_ID, Invoice_No, Invoice_Date, Total_Amount_TTC, COALESCE(Paid_Amount, 0.00) AS Paid_Amount,
-                           ROUND(Total_Amount_TTC - COALESCE(Paid_Amount, 0.00), 2) AS Remaining
-                    FROM Sales_Invoices
-                    WHERE Client_ID = %s 
-                      AND Status NOT IN ('Cancelled', 'Draft', 'Paid')
-                      AND Invoice_No NOT LIKE 'DEV-%'
-                      AND Invoice_No NOT LIKE 'BC-%'
-                      AND (Total_Amount_TTC - COALESCE(Paid_Amount, 0.00)) > 0.009
-                    ORDER BY Invoice_Date ASC, Invoice_ID ASC
+                    SELECT * FROM (
+                        SELECT 
+                            i.Invoice_ID, i.Invoice_No, i.Invoice_Date, i.Status, i.Total_Amount_TTC,
+                            ROUND(
+                                COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0),
+                                2
+                            ) AS Paid_Amount,
+                            ROUND(
+                                i.Total_Amount_TTC - (
+                                    COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID AND pp.Payment_Method != 'Credit'), 0)
+                                    + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0)
+                                ),
+                                2
+                            ) AS Remaining
+                        FROM Sales_Invoices i
+                        WHERE i.Client_ID = %s 
+                          AND i.Status NOT IN ('Cancelled', 'Draft', 'Paid')
+                          AND i.Invoice_No NOT LIKE 'DEV-%'
+                          AND i.Invoice_No NOT LIKE 'BC-%'
+                    ) unpaid
+                    WHERE unpaid.Remaining > 0.009
+                    ORDER BY unpaid.Invoice_Date ASC, unpaid.Invoice_ID ASC
                 """, (client_id,))
                 unpaid_invoices = cursor.fetchall()
 
@@ -158,13 +173,14 @@ class ClientPaymentManager:
                     pay_id = cursor.lastrowid
                     created_payment_ids.append(pay_id)
 
-                    # Mettre à jour le montant payé et le statut de la facture
-                    new_paid = round(float(inv['Paid_Amount']) + alloc, 2)
+                    # Mettre à jour le statut de la facture si entièrement soldée
+                    new_paid = round(float(inv.get('Paid_Amount') or 0.0) + alloc, 2)
                     new_status = 'Paid' if new_paid >= (float(inv['Total_Amount_TTC']) - 0.009) else 'Validated'
-                    cursor.execute(
-                        "UPDATE Sales_Invoices SET Paid_Amount = %s, Status = %s WHERE Invoice_ID = %s",
-                        (new_paid, new_status, inv_id)
-                    )
+                    if new_status == 'Paid':
+                        cursor.execute(
+                            "UPDATE Sales_Invoices SET Status = 'Paid' WHERE Invoice_ID = %s",
+                            (inv_id,)
+                        )
 
                     allocated_invoices.append({
                         "invoice_id": inv_id,

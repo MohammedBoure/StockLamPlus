@@ -181,6 +181,119 @@ class TestDebtsManagementBackend(unittest.TestCase):
         self.assertEqual(res['free_advance'], 8000.0)
         self.assertEqual(res['allocated_to_invoices'], 0.0)
 
+    def test_check_and_update_invoice_status_fully_paid(self):
+        """Vérifie que la mise à jour du statut en 'Paid' n'essaie pas d'écrire dans une colonne Paid_Amount."""
+        mock_cursor = MagicMock()
+        # total_ttc = 5000, current_status = 'Validated'
+        mock_cursor.fetchone.side_effect = [
+            {'Total_Amount_TTC': 5000.0, 'Status': 'Validated'},
+            {'COALESCE(SUM(Amount), 0)': 3000.0},  # cl_paid
+            {'COALESCE(SUM(Amount), 0)': 2000.0},  # pos_paid
+        ]
+
+        self.client_payment_manager._check_and_update_invoice_status(mock_cursor, 42)
+
+        # Doit exécuter UPDATE Sales_Invoices SET Status = %s WHERE Invoice_ID = %s
+        update_calls = [
+            call for call in mock_cursor.execute.call_args_list 
+            if "UPDATE Sales_Invoices" in call[0][0]
+        ]
+        self.assertEqual(len(update_calls), 1)
+        sql, params = update_calls[0][0]
+        self.assertNotIn("Paid_Amount", sql)
+        self.assertIn("Status", sql)
+        self.assertEqual(params, ('Paid', 42))
+
+    def test_check_and_update_invoice_status_partially_paid(self):
+        """Vérifie qu'aucune mise à jour de statut n'est effectuée si la facture reste partiellement payée."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.side_effect = [
+            {'Total_Amount_TTC': 5000.0, 'Status': 'Validated'},
+            {'COALESCE(SUM(Amount), 0)': 1000.0},
+            {'COALESCE(SUM(Amount), 0)': 1000.0},
+        ]
+
+        self.client_payment_manager._check_and_update_invoice_status(mock_cursor, 42)
+
+        update_calls = [
+            call for call in mock_cursor.execute.call_args_list 
+            if "UPDATE Sales_Invoices" in call[0][0]
+        ]
+        self.assertEqual(len(update_calls), 0)
+
+    def test_get_debts_analytics(self):
+        """Vérifie le calcul des analytics de dettes sans erreur de colonne."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        self.mock_db.get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+
+        with patch.object(self.client_manager, 'get_all_clients_with_balances') as mock_all:
+            mock_all.return_value = [
+                {'Client_ID': 1, 'Current_Balance': 25000.0},
+                {'Client_ID': 2, 'Current_Balance': 0.0},
+                {'Client_ID': 3, 'Current_Balance': 15000.0},
+            ]
+            mock_cursor.fetchone.side_effect = [
+                {'overdue_total': 10000.0},       # overdue
+                {'month_recovered': 5000.0},      # cl_payments
+                {'month_pos': 2500.0},            # pos_payments
+            ]
+
+            analytics = self.client_manager.get_debts_analytics()
+            self.assertEqual(analytics['total_receivables'], 40000.0)
+            self.assertEqual(analytics['debtor_clients_count'], 2)
+            self.assertEqual(analytics['overdue_receivables'], 10000.0)
+            self.assertEqual(analytics['recovered_this_month'], 7500.0)
+
+    def test_get_debtor_clients_summary(self):
+        """Vérifie la génération de la liste synthétique avec statut et badge appropriés."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        self.mock_db.get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+
+        mock_cursor.fetchall.return_value = [
+            {
+                'Client_ID': 1,
+                'Client_Name': 'Client A',
+                'Phone': '0550000001',
+                'City': 'Alger',
+                'Credit_Limit': 50000.0,
+                'Price_Tier': 'Prix_2',
+                'total_invoiced': 80000.0,
+                'total_paid': 10000.0,
+                'total_credit_notes': 0.0,
+                'Current_Balance': 70000.0,
+                'Last_Payment_Date': '2026-09-01',
+                'Overdue_Count': 1,
+                'Unpaid_Count': 2
+            },
+            {
+                'Client_ID': 2,
+                'Client_Name': 'Client B',
+                'Phone': '0550000002',
+                'City': 'Oran',
+                'Credit_Limit': 100000.0,
+                'Price_Tier': 'Prix_1',
+                'total_invoiced': 20000.0,
+                'total_paid': 20000.0,
+                'total_credit_notes': 0.0,
+                'Current_Balance': 0.0,
+                'Last_Payment_Date': '2026-09-10',
+                'Overdue_Count': 0,
+                'Unpaid_Count': 0
+            }
+        ]
+
+        summary = self.client_manager.get_debtor_clients_summary(filter_status="Tous")
+        self.assertEqual(len(summary), 2)
+        # Client 1 balance 70,000 > limit 50,000 -> Plafond Dépassé
+        self.assertEqual(summary[0]['Status_Badge'], "Plafond Dépassé")
+        # Client 2 balance 0 -> Soldé
+        self.assertEqual(summary[1]['Status_Badge'], "Soldé")
+
+
 
 class TestDebtsNavigationPermissions(unittest.TestCase):
     """Vérifie les permissions de navigation et d'encaissement pour la gestion des créances."""

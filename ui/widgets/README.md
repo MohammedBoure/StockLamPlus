@@ -2,8 +2,22 @@
 
 Ce dossier regroupe l'ensemble des modules d'interface graphique PySide6 de l'application bureautique.
 
-## Fichiers et Rôles
+## Sous-Dossiers Spécialisés
+
+- `wholesale_sales/` : Interface de Vente en Gros B2B (`WholesaleSalesTab`), tarification dynamique (Prix 1 à 4), documents commerciaux (BL, BC, Devis, Facture) et export ReportLab PDF.
+- `sales_history/` : Historique complet des ventes (`SalesHistoryTab`), suivi des créances et vieillissement de dette (AR Aging), encaissement rapide et gestion détaillée des lignes de facture (`SaleDetailsDialog`).
+- `sales/` : Interface de caisse tactile au détail POS (`PointOfSaleTab`), paiements directs et retours sans facture (`ReturnProductSelectionDialog`).
+- `billing/` : Gestion de la facturation générale, devis et éditeurs de factures.
+- `dashboard/` : Tableaux de bord, indicateurs clés de performance (KPIs) et graphiques statistiques.
+- `inventory/` : Gestion des stocks, mouvements, inventaires physiques et gestion avancée des lots (`tabs_batches`).
+- `master_data/` : Référentiels de base (clients, fournisseurs, produits, familles, emplacements, fabricants, automates).
+- `procurement/` : Gestion des approvisionnements, réceptions de commandes et réclamations.
+- `reclamation/` : Suivi et gestion des retours/réclamations fournisseurs.
+- `settings/` : Paramètres de configuration système, imprimantes et sauvegardes automatiques.
+
+## Fichiers Racine
 
 - `analysis_view.py` : Vue d'analyse détaillée de la consommation et des mouvements de stock.
 - `history.py` : Vue de traçabilité complète des mouvements de stock internes et externes.
-- `user_management_tab.py` : Gestion des comptes utilisateurs, des rôles et des autorisations en mémoire.
+- `user_management_tab.py` : Gestion des comptes utilisateurs, des rôles et des autorisations.
+- `ai_analytics_tab.py` : Module d'analyses prédictives et d'intelligence artificielle.

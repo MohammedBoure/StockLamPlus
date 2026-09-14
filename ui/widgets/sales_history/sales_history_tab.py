@@ -1,593 +1,31 @@
-# ui/widgets/sales/sales_history_tab.py
+# ui/widgets/sales_history/sales_history_tab.py
 
 import csv
-import os
 from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableWidget, QHeaderView, QPushButton,
-    QHBoxLayout, QLabel, QComboBox, QDateEdit, QDialog, QFormLayout, 
-    QGroupBox, QAbstractItemView, QStyle, QTableWidgetItem, QSpinBox, QMessageBox,
-    QFileDialog, QInputDialog, QFrame, QSizePolicy, QCheckBox, QMenu
+    QHBoxLayout, QLabel, QComboBox, QDateEdit, QDialog,
+    QAbstractItemView, QTableWidgetItem, QMessageBox,
+    QFileDialog, QFrame, QSizePolicy, QCheckBox, QMenu
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor, QBrush, QFont
+
 from ui.widgets.inventory.dialogs import BarcodeLineEdit
 from ui.formatting import format_money, format_quantity
-from ui.navigation_permissions import has_permission
 from ui.widgets.sales.invoice_payment_dialog import InvoicePaymentDialog
 from ui.widgets.sales.return_dialog import ReturnProductSelectionDialog
-
-try:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
-    HAS_REPORTLAB = True
-except ImportError:
-    HAS_REPORTLAB = False
-
-def export_invoice_to_pdf(data_manager, invoice_data, parent_widget):
-    print("\n" + "🚀" * 10 + " PDF EXPORT START " + "🚀" * 10)
-
-    if not HAS_REPORTLAB:
-        QMessageBox.warning(parent_widget, "Erreur", "La bibliothèque 'reportlab' est manquante.")
-        return
-
-    try:
-        settings = data_manager.company_settings.get_settings()
-        if os.path.exists("config.json"):
-            import json
-            with open("config.json", "r", encoding="utf-8") as f:
-                local_settings = json.load(f)
-                for k, v in local_settings.items():
-                    if k not in settings or not settings[k]:
-                        settings[k] = v
-    except Exception as e:
-        QMessageBox.critical(parent_widget, "Erreur", f"Configuration error: {str(e)}")
-        return
-
-    try:
-        invoice_id = invoice_data['Invoice_ID']
-        details_data = data_manager.sales.get_invoice_details_with_profit(invoice_id)
-        client_name = invoice_data.get('Client_Name') or 'Vente comptoir'
-    except Exception as e:
-        QMessageBox.critical(parent_widget, "Erreur BD", str(e))
-        return
-
-    document_title = "FACTURE"
-    
-    try:
-        raw_date = str(invoice_data.get('Invoice_Date', ''))
-        year_val = raw_date.split('-')[0] if '-' in raw_date else str(datetime.now().year)
-        formatted_ref = invoice_data.get('Invoice_No') or f"{year_val}/{int(invoice_id):03d}"
-    except:
-        formatted_ref = str(invoice_id)
-
-    client_clean = str(client_name).replace(" ", "_")
-    safe_ref_for_filename = formatted_ref.replace("/", "-")
-    default_name = f"Facture_{client_clean}_{safe_ref_for_filename}.pdf"
-
-    path, _ = QFileDialog.getSaveFileName(parent_widget, "Enregistrer PDF", default_name, "PDF Files (*.pdf)")
-    if not path: return
-
-    try:
-        PAGE_WIDTH, PAGE_HEIGHT = A4
-        default_color = settings.get('theme_color', '#0b666a')
-        primary_color = colors.HexColor(default_color)
-        banner_h_cm = settings.get('banner_height_cm', 4.8)
-        table_start_y_cm = settings.get('table_start_y_cm', 9.5)
-
-        doc = SimpleDocTemplate(
-            path, pagesize=A4, rightMargin=40, leftMargin=40,
-            topMargin=table_start_y_cm * cm, bottomMargin=50
-        )
-
-        elements = []
-        styles = getSampleStyleSheet()
-        current_time = datetime.now().strftime('%d/%m/%Y %H:%M')
-
-        lab_name = settings.get('lab_name', 'Laboratoire')
-        lab_addr = settings.get('lab_address', '')
-        lab_nif = settings.get('lab_nif', '')
-        lab_rc = settings.get('lab_rc', '')
-
-        lab_info_lines = [
-            f"<font size=14 color='{default_color}'><b>{document_title} N°: {formatted_ref}</b></font><br/>",
-            f"<font size=10><b>{lab_name}</b></font>"
-        ]
-        
-        def clean_str(val):
-            if not val: return ""
-            v = str(val).replace('\n', '').replace('\r', '').strip()
-            if v.lower() in ["none", "n/a", "null", "nan", "-", "", "."]:
-                return ""
-            return v
-
-        if clean_str(lab_addr): lab_info_lines.append(f"<font size=9>{clean_str(lab_addr)}</font>")
-        if clean_str(lab_nif): lab_info_lines.append(f"<font size=9>NIF : {clean_str(lab_nif)}</font>")
-        if clean_str(lab_rc): lab_info_lines.append(f"<font size=9>RC : {clean_str(lab_rc)}</font>")
-
-        bank_name = settings.get('bank_name', '')
-        bank_acc = settings.get('bank_acc', '')
-
-        if clean_str(bank_name): lab_info_lines.append(f"<font size=9>Banque : {clean_str(bank_name)}</font>")
-        if clean_str(bank_acc): lab_info_lines.append(f"<font size=9>RIB : {clean_str(bank_acc)}</font>")
-
-        bon_date = raw_date
-        lab_info_lines.append("")
-        if bon_date:
-            lab_info_lines.append(f"<font size=9>Date : {bon_date}</font>")
-        lab_info_lines.append(f"<font size=9>Date d'édition : {current_time}</font>")
-
-        left_text_top = "<br/>".join(lab_info_lines)
-
-        dest_label = 'Client :'
-        p_name_clean = str(client_name).replace('\n', '').replace('\r', '').strip()
-        right_text_lines = [
-            f"<b>{dest_label}</b>",
-            "",
-            f"<font size=11><b>{p_name_clean}</b></font>",
-        ]
-
-        right_text = "<br/>".join(right_text_lines)
-
-        def draw_header_compact(canvas, doc):
-            canvas.saveState()
-            img_x = settings.get('banner_img_x_cm', 0.0) * cm
-            img_w = settings.get('banner_img_w_cm', 21.0) * cm
-            img_h = settings.get('banner_img_h_cm', 4.8) * cm
-            y_offset = settings.get('banner_img_y_cm', 0.2) * cm
-            img_y = PAGE_HEIGHT - img_h - y_offset
-
-            img_bytes = data_manager.company_settings.get_banner_image()
-            if img_bytes:
-                from reportlab.lib.utils import ImageReader
-                import io
-                img = ImageReader(io.BytesIO(img_bytes))
-                canvas.drawImage(img, img_x, img_y, width=img_w, height=img_h)
-            else:
-                canvas.setStrokeColor(colors.red)
-                canvas.rect(img_x, img_y, img_w, img_h, stroke=1)
-
-            total_h_cm = settings.get('banner_height_cm', 4.8) * cm
-            top_y = PAGE_HEIGHT - total_h_cm - 0.5*cm
-
-            left_p = Paragraph(left_text_top, styles["Normal"])
-            left_w, left_h = left_p.wrap(9.5*cm, 10.0*cm)
-            left_p.drawOn(canvas, doc.leftMargin, top_y - left_h)
-
-            dest_x = settings.get('dest_box_x_cm', 11.5) * cm
-            dest_y_abs = PAGE_HEIGHT - settings.get('dest_box_y_cm', 6.0) * cm
-            dest_w = settings.get('dest_box_w_cm', 8.0) * cm
-
-            right_p = Paragraph(right_text, styles["Normal"])
-            right_w, right_h = right_p.wrap(dest_w - 0.5*cm, 10.0*cm)
-            box_h = max(right_h + 1.0 * cm, 2.5 * cm)
-
-            canvas.setFillColor(colors.HexColor("#f8f9fa"))
-            canvas.setStrokeColor(colors.lightgrey)
-            canvas.setLineWidth(0.5)
-            canvas.rect(dest_x, dest_y_abs - box_h, dest_w, box_h, fill=1, stroke=1)
-
-            right_p.drawOn(canvas, dest_x + 0.25*cm, dest_y_abs - right_h - 0.5*cm)
-            canvas.restoreState()
-
-        has_remise = any(float(item.get('Discount_Percent', 0)) > 0 for item in details_data)
-        has_tva = any(float(item.get('TVA_Percent', 0)) > 0 for item in details_data)
-        
-        header_row = ["Désignation", "Qté", "Prix U. HT"]
-        if has_remise: header_row.append("Remise")
-        if has_tva: header_row.append("TVA")
-        header_row.append("Total TTC")
-        
-        table_data = [header_row]
-        
-        for item in details_data:
-            qty = float(item.get('Qty_Sold', 0))
-            price = float(item.get('Unit_Price_HT', 0))
-            remise = float(item.get('Discount_Percent', 0))
-            tva = float(item.get('TVA_Percent', 0))
-            line_val_ttc = float(item.get('Line_Total_TTC', 0))
-            
-            p_info = f"<b>{item.get('Product_Name', '-')}</b>"
-            
-            row = [
-                Paragraph(p_info, styles["Normal"]),
-                format_quantity(qty),
-                f"{price:,.2f}"
-            ]
-            
-            if has_remise:
-                row.append(f"{remise}%" if remise > 0 else "-")
-            if has_tva:
-                row.append(f"{tva}%" if tva > 0 else "-")
-                
-            row.append(f"{line_val_ttc:,.2f}")
-            table_data.append(row)
-
-        col_widths = [8.0*cm, 1.5*cm, 2.5*cm]
-        if has_remise: col_widths.append(1.5*cm)
-        else: col_widths[0] += 1.5*cm
-        
-        if has_tva: col_widths.append(1.5*cm)
-        else: col_widths[0] += 1.5*cm
-        col_widths.append(3.0*cm)
-
-        items_table = Table(table_data, colWidths=col_widths)
-        items_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), primary_color),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
-            ('ALIGN', (1,0), (len(header_row)-1, -1), 'CENTER'),
-            ('ALIGN', (len(header_row)-1, 0), (len(header_row)-1, -1), 'RIGHT'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('PADDING', (0,0), (-1,-1), 6),
-        ]))
-        elements.append(items_table)
-        
-        tot_ht_net = float(invoice_data.get('Total_Amount_HT', 0))
-        tot_discount = float(invoice_data.get('Total_Discount', 0))
-        tot_tva = float(invoice_data.get('Total_TVA', 0))
-        tot_ttc = float(invoice_data.get('Total_Amount_TTC', 0))
-        
-        tot_ht_gross = tot_ht_net + tot_discount
-        
-        tot_data = [
-            ["Total HT :", f"{tot_ht_gross:,.2f} DA"],
-        ]
-        
-        if has_remise or tot_discount > 0:
-            tot_data.append(["Remise :", f"{tot_discount:,.2f} DA"])
-        if has_tva or tot_tva > 0:
-            tot_data.append(["Total TVA :", f"{tot_tva:,.2f} DA"])
-            
-        tot_data.append(["TOTAL TTC À PAYER :", f"{tot_ttc:,.2f} DA"])
-
-        payment_lines = invoice_data.get("payments") or []
-        if not payment_lines and hasattr(data_manager, "pos_features"):
-            payment_lines = data_manager.pos_features.get_invoice_payments(invoice_id)
-        if payment_lines:
-            for payment in payment_lines:
-                method = payment.get("Payment_Method") or payment.get("method") or "-"
-                amount = float(payment.get("Amount") or payment.get("amount") or 0)
-                reference = payment.get("Reference") or payment.get("reference")
-                label = f"Paiement {method}"
-                if reference:
-                    label += f" ({reference})"
-                tot_data.append([label + " :", f"{amount:,.2f} DA"])
-                change = float(payment.get("Change_Amount") or payment.get("change") or 0)
-                if change > 0:
-                    tot_data.append(["Rendu :", f"{change:,.2f} DA"])
-        else:
-            tot_data.append(["Paiement :", str(invoice_data.get("Payment_Method") or "-")])
-        tot_table = Table(tot_data, colWidths=[14.0*cm, 4.0*cm])
-        
-        tot_style = [
-            ('ALIGN', (0,0), (0,-1), 'RIGHT'),
-            ('ALIGN', (1,0), (1,-1), 'RIGHT'),
-            ('FONTNAME', (0,len(tot_data)-1), (1,len(tot_data)-1), 'Helvetica-Bold'),
-            ('BACKGROUND', (0,len(tot_data)-1), (1,len(tot_data)-1), colors.HexColor("#f4f6f6")),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
-            ('PADDING', (0,0), (-1,-1), 6),
-        ]
-        
-        tot_table.setStyle(TableStyle(tot_style))
-        elements.append(Spacer(1, 0.5*cm))
-        elements.append(tot_table)
-
-        doc.build(elements, onFirstPage=draw_header_compact, onLaterPages=draw_header_compact)
-
-        if os.name == 'nt': os.startfile(path)
-        else: os.system(f'xdg-open "{path}"')
-
-    except Exception as e:
-        QMessageBox.critical(parent_widget, "Erreur PDF", f"Échec de création du PDF: {str(e)}")
-
-    print("="*50 + " PDF EXPORT END " + "="*50)
-
-class SaleDetailsDialog(QDialog):
-    def __init__(self, data_manager, invoice_data, parent=None):
-        super().__init__(parent)
-        self.data_manager = data_manager
-        self.invoice_data = invoice_data
-        self.parent_tab = parent # To trigger refresh
-        sale_ref = invoice_data.get('Invoice_No') or f"#{invoice_data['Invoice_ID']}"
-        self.setWindowTitle(f"Détails de la Vente {sale_ref}")
-        self.resize(850, 500)
-        self.details_list = []
-        self.init_ui()
-
-    def _has_permission(self, permission):
-        checker = getattr(self.window(), "has_permission", None)
-        if callable(checker):
-            return bool(checker(permission))
-        return True
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(15, 15, 15, 15)
-
-        # Invoice summary
-        summary_group = QGroupBox("Résumé de la Facture")
-        form = QFormLayout(summary_group)
-        
-        client_name = self.invoice_data.get('Client_Name')
-        if not client_name:
-            client_name = "Vente comptoir"
-            
-        form.addRow("<b>Client :</b>", QLabel(client_name))
-        form.addRow("<b>Date :</b>", QLabel(str(self.invoice_data.get('Invoice_Date'))))
-        form.addRow("<b>Statut :</b>", QLabel(self.invoice_data.get('Status', '')))
-        
-        self.lbl_total = QLabel(format_money(self.invoice_data.get('Total_Amount_TTC', 0)) + " DA")
-        form.addRow("<b>Total TTC :</b>", self.lbl_total)
-        
-        profit = float(self.invoice_data.get('Total_Profit') or 0)
-        self.lbl_profit = QLabel(format_money(profit) + " DA")
-        self.lbl_profit.setStyleSheet("color: #27ae60; font-weight: bold;" if profit > 0 else "color: #e74c3c; font-weight: bold;")
-        if self._has_permission("act_pos_view_profit"):
-            form.addRow("<b>Fayda (Profit) :</b>", self.lbl_profit)
-        
-        layout.addWidget(summary_group)
-
-        # Table for products
-        self.table = QTableWidget()
-        cols = ["Produit", "Lot", "Qté", "Prix Vente HT", "Remise %", "TVA %", "Total Ligne TTC", "Profit", "Actions"]
-        self.table.setColumnCount(len(cols))
-        self.table.setHorizontalHeaderLabels(cols)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setAlternatingRowColors(True)
-
-        layout.addWidget(self.table)
-
-        btn_row = QHBoxLayout()
-        
-        self.btn_cancel_sale = QPushButton("🔴 Annuler la Facture")
-        self.btn_cancel_sale.setStyleSheet("background-color: #e74c3c; color: white; font-weight: bold; padding: 5px;")
-        self.btn_cancel_sale.clicked.connect(self.cancel_sale)
-        
-        if self.invoice_data.get('Status') == 'Cancelled':
-            self.btn_cancel_sale.setEnabled(False)
-            
-        self.btn_save = QPushButton("💾 Sauvegarder les modifications")
-        self.btn_save.clicked.connect(self.save_changes)
-        
-        self.btn_pdf = QPushButton("🖨️ Imprimer Facture")
-        self.btn_pdf.setStyleSheet("background-color: #3498db; color: white; font-weight: bold; padding: 5px;")
-        self.btn_pdf.clicked.connect(self.print_pdf)
-
-        self.btn_return = QPushButton("Retour / Remboursement")
-        self.btn_return.setStyleSheet("background-color: #f59e0b; color: white; font-weight: bold; padding: 5px;")
-        self.btn_return.clicked.connect(self.create_return_for_selected_line)
-        self.btn_return.setEnabled(hasattr(self.data_manager, "pos_features"))
-
-        self.btn_audit = QPushButton("Audit")
-        self.btn_audit.clicked.connect(self.show_audit_timeline)
-
-        btn_close = QPushButton("Fermer")
-        btn_close.clicked.connect(self.accept)
-        
-        btn_row.addWidget(self.btn_cancel_sale)
-        btn_row.addStretch()
-        btn_row.addWidget(self.btn_return)
-        btn_row.addWidget(self.btn_audit)
-        btn_row.addWidget(self.btn_pdf)
-        btn_row.addWidget(self.btn_save)
-        btn_row.addWidget(btn_close)
-        
-        layout.addLayout(btn_row)
-
-        self.load_details()
-
-    def load_details(self):
-        self.details_list = self.data_manager.sales.get_invoice_details_with_profit(self.invoice_data['Invoice_ID'])
-        self.table.setRowCount(0)
-        
-        for r, d in enumerate(self.details_list):
-            self.table.insertRow(r)
-            self.table.setItem(r, 0, QTableWidgetItem(d.get('Product_Name', '---')))
-            self.table.setItem(r, 1, QTableWidgetItem(d.get('Lot_Number', '---')))
-            
-            # Editable Qty SpinBox
-            qty_spin = QSpinBox()
-            qty_spin.setRange(1, 99999)
-            qty_spin.setValue(int(d.get('Qty_Sold', 1)))
-            qty_spin.setAlignment(Qt.AlignCenter)
-            qty_spin.setProperty("detail_id", d['Detail_ID'])
-            qty_spin.setProperty("old_qty", int(d.get('Qty_Sold', 1)))
-            qty_spin.setStyleSheet("min-height: 25px;")
-            
-            qty_container = QWidget()
-            qty_container.setStyleSheet("background: transparent;")
-            qty_layout = QHBoxLayout(qty_container)
-            qty_layout.setContentsMargins(2, 2, 2, 2)
-            qty_layout.addWidget(qty_spin, alignment=Qt.AlignCenter)
-            
-            self.table.setCellWidget(r, 2, qty_container)
-            
-            self.table.setItem(r, 3, QTableWidgetItem(format_money(d.get('Unit_Price_HT', 0))))
-            
-            remise = float(d.get('Discount_Percent', 0))
-            tva = float(d.get('TVA_Percent', 0))
-            
-            remise_item = QTableWidgetItem(f"{remise}%")
-            if remise > 0: remise_item.setForeground(Qt.darkGreen)
-            self.table.setItem(r, 4, remise_item)
-            
-            tva_item = QTableWidgetItem(f"{tva}%")
-            self.table.setItem(r, 5, tva_item)
-            
-            self.table.setItem(r, 6, QTableWidgetItem(format_money(d.get('Line_Total_TTC', 0))))
-            
-            profit = float(d.get('Line_Profit') or 0)
-            profit_item = QTableWidgetItem(format_money(profit))
-            profit_item.setForeground(Qt.darkGreen if profit > 0 else Qt.red)
-            profit_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
-            self.table.setItem(r, 7, profit_item)
-            
-            # Actions
-            btn_del = QPushButton("🗑️")
-            btn_del.setFixedSize(30, 30)
-            btn_del.setCursor(Qt.PointingHandCursor)
-            btn_del.setStyleSheet("padding: 0; margin: 2px; border-radius: 5px;")
-            btn_del.clicked.connect(lambda checked=False, d_id=d['Detail_ID']: self.delete_detail(d_id))
-            
-            if self.invoice_data.get('Status') == 'Cancelled':
-                qty_spin.setEnabled(False)
-                btn_del.setEnabled(False)
-                self.btn_save.setEnabled(False)
-                
-            # Wrapper for centering the delete button
-            action_container = QWidget()
-            action_container.setStyleSheet("background: transparent;")
-            action_layout = QHBoxLayout(action_container)
-            action_layout.setContentsMargins(2, 2, 2, 2)
-            action_layout.addWidget(btn_del, alignment=Qt.AlignCenter)
-            
-            self.table.setCellWidget(r, 8, action_container)
-            
-        has_remise = any(float(d.get('Discount_Percent', 0)) > 0 for d in self.details_list)
-        has_tva = any(float(d.get('TVA_Percent', 0)) > 0 for d in self.details_list)
-        self.table.setColumnHidden(4, not has_remise)
-        self.table.setColumnHidden(5, not has_tva)
-        self.table.setColumnHidden(7, not self._has_permission("act_pos_view_profit"))
-
-    def create_return_for_selected_line(self):
-        checker = getattr(self.window(), "has_permission", None)
-        if checker and not checker("act_pos_return"):
-            QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour créer un retour.")
-            return
-        row = self.table.currentRow()
-        if row < 0 or row >= len(self.details_list):
-            QMessageBox.warning(self, "Retour", "Sélectionnez une ligne à retourner.")
-            return
-        detail = self.details_list[row]
-        max_qty = float(detail.get("Qty_Sold") or 0)
-        qty, ok = QInputDialog.getDouble(
-            self, "Quantité retournée", "Quantité:", max_qty, 0.01, max_qty, 2
-        )
-        if not ok:
-            return
-        labels = ["Espèces", "Carte", "Virement", "Versement", "Autre", "Crédit client"]
-        values = ["Cash", "Card", "Transfer", "Versement", "Other", "Credit"]
-        label, ok = QInputDialog.getItem(self, "Remboursement", "Moyen:", labels, 0, False)
-        if not ok:
-            return
-        reason, ok = QInputDialog.getText(self, "Motif du retour", "Motif:")
-        if not ok:
-            return
-        success, result = self.data_manager.pos_features.create_sale_return(
-            self.invoice_data.get("Invoice_ID"),
-            [{"original_detail_id": detail.get("Detail_ID"), "qty_returned": qty}],
-            refund_method=values[labels.index(label)],
-            reason=reason.strip() or "Retour client",
-            user_id=self._current_user_id(),
-        )
-        if success:
-            QMessageBox.information(self, "Retour", f"Retour enregistré: {result.get('return_no')}")
-            if hasattr(self.parent_tab, "load_sales_data"):
-                self.parent_tab.load_sales_data()
-            self.accept()
-        else:
-            QMessageBox.warning(self, "Retour", result.get("message", "Impossible d'enregistrer le retour."))
-
-    def show_audit_timeline(self):
-        checker = getattr(self.window(), "has_permission", None)
-        if checker and not checker("act_pos_audit"):
-            QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour consulter l'audit.")
-            return
-        events = self.data_manager.pos_features.list_audit_events(
-            "Sales_Invoice", self.invoice_data.get("Invoice_ID"), limit=100
-        )
-        if not events:
-            QMessageBox.information(self, "Audit", "Aucun événement enregistré pour cette facture.")
-            return
-        lines = []
-        for event in events:
-            lines.append(
-                f"{event.get('Created_At')} | {event.get('Action')} | "
-                f"{event.get('User_Name') or '-'} | {event.get('Details') or ''}"
-            )
-        QMessageBox.information(self, "Timeline audit", "\n".join(lines))
-    def _current_user_id(self):
-        try:
-            from database.system_logger import active_user_id
-            return active_user_id.get()
-        except Exception:
-            return None
-    def save_changes(self):
-        checker = getattr(self.window(), "has_permission", None)
-        if checker and not checker("act_edit_sale"):
-            QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour modifier cette facture.")
-            return
-        changes_made = False
-        for r in range(self.table.rowCount()):
-            container = self.table.cellWidget(r, 2)
-            if container:
-                spin = container.layout().itemAt(0).widget()
-                detail_id = spin.property("detail_id")
-                old_qty = spin.property("old_qty")
-                new_qty = spin.value()
-                
-                if old_qty != new_qty:
-                    success = self.data_manager.sales.update_invoice_detail_qty(
-                        detail_id, new_qty, self.data_manager.batches
-                    )
-                    if not success:
-                        QMessageBox.warning(self, "Erreur", "Échec de la mise à jour pour la ligne. Vérifiez le stock disponible.")
-                    else:
-                        changes_made = True
-                        
-        if changes_made:
-            QMessageBox.information(self, "Succès", "Les modifications ont été sauvegardées avec succès.")
-            if hasattr(self.parent_tab, 'load_sales_data'):
-                self.parent_tab.load_sales_data()
-            self.accept()
-
-    def delete_detail(self, detail_id):
-        reply = QMessageBox.question(self, "Confirmation", "Voulez-vous vraiment supprimer ce produit de la facture ? Le stock sera restitué.",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            success = self.data_manager.sales.remove_invoice_detail(detail_id, self.data_manager.batches)
-            if success:
-                QMessageBox.information(self, "Succès", "Produit supprimé et stock restitué.")
-                if hasattr(self.parent_tab, 'load_sales_data'):
-                    self.parent_tab.load_sales_data()
-                self.accept()
-            else:
-                QMessageBox.warning(self, "Erreur", "Échec de la suppression.")
-
-    def cancel_sale(self):
-        checker = getattr(self.window(), "has_permission", None)
-        if checker and not checker("act_cancel_sale"):
-            QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour annuler cette facture.")
-            return
-        reply = QMessageBox.question(self, "Annuler la Vente", "Voulez-vous annuler complètement cette vente ? Tous les produits seront remis en stock.",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            success = self.data_manager.sales.cancel_invoice(self.invoice_data['Invoice_ID'], self.data_manager.batches)
-            if success:
-                QMessageBox.information(self, "Succès", "Vente annulée et stock restitué.")
-                if hasattr(self.parent_tab, 'load_sales_data'):
-                    self.parent_tab.load_sales_data()
-                self.accept()
-            else:
-                QMessageBox.warning(self, "Erreur", "Échec de l'annulation.")
-
-    def print_pdf(self):
-        checker = getattr(self.window(), "has_permission", None)
-        if checker and not checker("act_pos_reprint_invoice"):
-            QMessageBox.warning(self, "Autorisation", "Autorisation refusée pour réimprimer cette facture.")
-            return
-        export_invoice_to_pdf(self.data_manager, self.invoice_data, self)
+from .sale_details_dialog import SaleDetailsDialog
+from .pdf_export import export_invoice_to_pdf
 
 
 class SalesHistoryTab(QWidget):
+    """
+    Interface d'historique général des ventes, factures et sessions de caisse.
+    Permet le filtrage multi-critères, le suivi des impayés et du vieillissement de la dette (AR Aging),
+    l'encaissement de règlements, l'annulation et la consultation détaillée.
+    """
+
     def __init__(self, data_manager):
         super().__init__()
         self.data_manager = data_manager
@@ -610,7 +48,7 @@ class SalesHistoryTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.setContentsMargins(5, 5, 5, 5)
-        
+
         # --- 1. Filter Section (Responsive 2-Tier Container) ---
         filter_frame = QFrame()
         filter_frame.setObjectName("SalesHistoryFilterFrame")
@@ -720,7 +158,7 @@ class SalesHistoryTab(QWidget):
         self.chk_overdue_only = QCheckBox("⚠️ Factures Échues Non Payées")
         self.chk_overdue_only.setToolTip("Filtrer uniquement les factures échues non payées / non soldées")
         self.chk_overdue_only.setStyleSheet("color: #dc2626; font-weight: bold; font-size: 12px;")
-        
+
         self.cb_aging = QComboBox()
         self.cb_aging.addItem("Toutes Échues", "all")
         self.cb_aging.addItem("0 - 30 jours", "0-30")
@@ -738,7 +176,7 @@ class SalesHistoryTab(QWidget):
 
         filter_vbox.addLayout(row1_layout)
 
-        # Tier 2: Search Input (Flexible width) & Action Buttons
+        # Tier 2: Search Input & Action Buttons
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(8)
         row2_layout.setContentsMargins(0, 0, 0, 0)
@@ -818,7 +256,7 @@ class SalesHistoryTab(QWidget):
         filter_vbox.addLayout(row2_layout)
 
         layout.addWidget(filter_frame)
-        
+
         # --- 2. Table Section ---
         self.table = QTableWidget()
         cols = [
@@ -829,11 +267,11 @@ class SalesHistoryTab(QWidget):
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.setColumnHidden(11, not self.can_view_profit)
-        
+
         f = self.table.font()
         f.setPointSize(9)
         self.table.setFont(f)
-        
+
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -844,7 +282,7 @@ class SalesHistoryTab(QWidget):
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(12, QHeaderView.ResizeToContents)
-        
+
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -852,7 +290,7 @@ class SalesHistoryTab(QWidget):
         self.table.customContextMenuRequested.connect(self._show_context_menu)
         self.table.doubleClicked.connect(self.show_full_details)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
-        
+
         layout.addWidget(self.table)
 
         pagination_layout = QHBoxLayout()
@@ -866,7 +304,7 @@ class SalesHistoryTab(QWidget):
         pagination_layout.addWidget(self.lbl_page)
         pagination_layout.addWidget(self.btn_next_page)
         layout.addLayout(pagination_layout)
-        
+
         # --- 3. Summary Section ---
         summary_layout = QHBoxLayout()
         summary_layout.addStretch()
@@ -876,7 +314,7 @@ class SalesHistoryTab(QWidget):
         summary_layout.addWidget(self.lbl_total_period_profit)
         if not self.can_view_profit:
             self.lbl_total_period_profit.setText("Bénéfice Total Période : accès restreint")
-        
+
         layout.addLayout(summary_layout)
 
     def _show_context_menu(self, pos):
@@ -939,6 +377,7 @@ class SalesHistoryTab(QWidget):
             return active_user_id.get()
         except Exception:
             return None
+
     def load_filters(self):
         clients = self.data_manager.clients.get_all_clients()
         for client in clients:
@@ -958,7 +397,7 @@ class SalesHistoryTab(QWidget):
         d_from = self.date_from.date().toString("yyyy-MM-dd")
         d_to = self.date_to.date().toString("yyyy-MM-dd")
         client_id = self.cb_client.currentData()
-        
+
         self.raw_data = self.data_manager.sales.get_sales_operations_history(d_from, d_to, client_id)
         self.apply_filter_local()
 
@@ -1002,7 +441,7 @@ class SalesHistoryTab(QWidget):
                 total_ttc = float(inv.get('Total_Amount_TTC') or 0.0)
                 paid_amount = float(inv.get('Paid_Amount') or 0.0)
                 if total_ttc - paid_amount <= 0.01:
-                    continue  # fully paid, not outstanding
+                    continue
 
                 days = inv.get('Days_Overdue')
                 if days is None and inv.get('Due_Date'):
@@ -1013,7 +452,7 @@ class SalesHistoryTab(QWidget):
                         days = 0
                 days = int(days or 0) if days is not None else 0
                 if days < 0:
-                    continue  # not due yet (future due date)
+                    continue
 
                 if (aging_bucket == "0-30" or aging_bucket == "1-30") and not (0 <= days <= 30):
                     continue
@@ -1052,16 +491,18 @@ class SalesHistoryTab(QWidget):
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         total_profit_period = 0.0
-        
+
         for r, inv in enumerate(data):
             self.table.insertRow(r)
-            
+
             def item(text, align=Qt.AlignCenter, color=None, font=None):
                 val = str(text) if text is not None else "-"
                 it = QTableWidgetItem(val)
                 it.setTextAlignment(align)
-                if color: it.setForeground(QBrush(QColor(color)))
-                if font: it.setFont(font)
+                if color:
+                    it.setForeground(QBrush(QColor(color)))
+                if font:
+                    it.setFont(font)
                 return it
 
             row_type = inv.get('Row_Type', 'Sale')
@@ -1074,15 +515,15 @@ class SalesHistoryTab(QWidget):
             id_item = item(invoice_label)
             id_item.setData(Qt.UserRole, inv)
             self.table.setItem(r, 0, id_item)
-            
+
             self.table.setItem(r, 1, item(str(inv.get('Event_Date') or inv.get('Invoice_Date') or "-")))
             self.table.setItem(r, 2, item(inv.get('Operation_Label') or "Vente", font=row_font))
-            
+
             client_name = inv.get('Client_Name')
             if not client_name:
                 client_name = "Vente comptoir"
             self.table.setItem(r, 3, item(client_name, Qt.AlignLeft | Qt.AlignVCenter, font=QFont("Segoe UI", 9, QFont.Bold)))
-            
+
             status_item = item(inv['Status'])
             self.table.setItem(r, 4, status_item)
 
@@ -1116,7 +557,7 @@ class SalesHistoryTab(QWidget):
             else:
                 retard_item = item("-")
             self.table.setItem(r, 5, retard_item)
-            
+
             caisse_display = inv.get('Caisse_Label') or inv.get('Terminal_Name') or "-"
             caisse_item = item(caisse_display)
             if is_cash_row:
@@ -1150,7 +591,7 @@ class SalesHistoryTab(QWidget):
                 amount_entered = inv.get("Paid_Amount")
                 self.table.setItem(r, 9, item(format_money(amount_entered) if amount_entered is not None else "-"))
                 self.table.setItem(r, 10, item(format_money(inv.get('Total_Amount_TTC', 0))))
-            
+
             profit = float(inv.get('Total_Profit') or 0) if self.can_view_profit else 0
             if row_type == 'Sale':
                 total_profit_period += profit
@@ -1198,7 +639,7 @@ class SalesHistoryTab(QWidget):
             if is_overdue:
                 for col in range(12):
                     cell = self.table.item(r, col)
-                    if cell and col != 5:  # keep retard badge's distinct style
+                    if cell and col != 5:
                         cell.setBackground(QBrush(QColor("#fef2f2")))
             elif row_bg:
                 for col in range(self.table.columnCount()):
@@ -1206,13 +647,14 @@ class SalesHistoryTab(QWidget):
                     if cell:
                         cell.setBackground(QBrush(row_bg))
                         cell.setFont(row_font)
-            
+
         self.table.setSortingEnabled(True)
         self.lbl_total_period_profit.setText(f"Bénéfice Total Période : {format_money(total_profit_period)} DA")
 
     def show_full_details(self):
         row = self.table.currentRow()
-        if row < 0: return
+        if row < 0:
+            return
         data = self.table.item(row, 0).data(Qt.UserRole)
         if not data:
             return
@@ -1275,7 +717,8 @@ class SalesHistoryTab(QWidget):
 
     def print_selected_invoice(self):
         row = self.table.currentRow()
-        if row < 0: return
+        if row < 0:
+            return
         data = self.table.item(row, 0).data(Qt.UserRole)
         if data and data.get('Row_Type') == 'Sale':
             export_invoice_to_pdf(self.data_manager, data, self)

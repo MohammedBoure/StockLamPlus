@@ -30,8 +30,8 @@ from .widgets.master_data.external_partners_tab import ExternalPartnersTab
 from .widgets.billing.billing_tab import BillingTab
 from .widgets.history import MovementHistoryTab
 from .widgets.sales.point_of_sale_tab import PointOfSaleTab
-from .widgets.sales.wholesale_sales_tab import WholesaleSalesTab
-from .widgets.sales.sales_history_tab import SalesHistoryTab
+from .widgets.wholesale_sales import WholesaleSalesTab
+from .widgets.sales_history import SalesHistoryTab
 from .navigation_permissions import has_permission as check_permission, has_navigation_permission as check_navigation_permission
 from database.auto_backup_worker import AutoBackupWorker
 from database import active_user_id

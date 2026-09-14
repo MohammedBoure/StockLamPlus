@@ -1,0 +1,10 @@
+# Module Historique des Ventes (`ui/widgets/sales_history`)
+
+Ce dossier regroupe l'interface utilisateur et les composants dédiés à la consultation, au filtrage et à la gestion des opérations de vente, factures et sessions de caisse.
+
+## Fichiers et Rôles
+
+- `sales_history_tab.py` : Interface principale de l'historique (`SalesHistoryTab`). Comprend une barre de filtres responsive à deux niveaux (période, caisse, client, statut, moyen de paiement, suivi du vieillissement de dette / factures échues), la pagination, le calcul du bénéfice (profit) sous autorisation, ainsi que les raccourcis d'encaissement et de retours sans facture.
+- `sale_details_dialog.py` : Fenêtre modale (`SaleDetailsDialog`) affichant le détail des articles d'une facture de vente avec actions d'annulation, ajustement des quantités, restitution de stock et retours partiels.
+- `pdf_export.py` : Moteur d'exportation PDF ReportLab (`export_invoice_to_pdf`) produisant des factures de vente conformes et prêtes à l'impression.
+- `__init__.py` : Point d'entrée du package exportant `SalesHistoryTab`, `SaleDetailsDialog` et `export_invoice_to_pdf`.

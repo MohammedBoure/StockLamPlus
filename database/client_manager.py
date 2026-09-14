@@ -172,11 +172,14 @@ class ClientManager:
                         "available_credit": 0.0
                     }
 
-                # 1. Total Facturé (hors factures annulées)
+                # 1. Total Facturé (hors factures annulées, devis et commandes brouillon)
                 cursor.execute("""
                     SELECT COALESCE(SUM(Total_Amount_TTC), 0) AS total_invoiced
                     FROM Sales_Invoices
-                    WHERE Client_ID = %s AND Status != 'Cancelled'
+                    WHERE Client_ID = %s 
+                      AND Status NOT IN ('Cancelled', 'Draft')
+                      AND Invoice_No NOT LIKE 'DEV-%'
+                      AND Invoice_No NOT LIKE 'BC-%'
                 """, (client_id,))
                 total_invoiced = float(cursor.fetchone()['total_invoiced'] or 0.0)
 
@@ -185,7 +188,11 @@ class ClientManager:
                     SELECT COALESCE(SUM(p.Amount), 0) AS pos_paid
                     FROM POS_Sale_Payments p
                     JOIN Sales_Invoices i ON i.Invoice_ID = p.Invoice_ID
-                    WHERE i.Client_ID = %s AND i.Status != 'Cancelled' AND p.Payment_Method != 'Credit'
+                    WHERE i.Client_ID = %s 
+                      AND i.Status NOT IN ('Cancelled', 'Draft')
+                      AND i.Invoice_No NOT LIKE 'DEV-%'
+                      AND i.Invoice_No NOT LIKE 'BC-%'
+                      AND p.Payment_Method != 'Credit'
                 """, (client_id,))
                 pos_paid = float(cursor.fetchone()['pos_paid'] or 0.0)
 
@@ -223,18 +230,23 @@ class ClientManager:
                     "available_credit": available_credit
                 }
         except Exception as e:
-            logging.error(f"Error computing balance for client {client_id}: {e}")
+            logging.error(f"Error getting balance for client {client_id}: {e}")
             return {
                 "client_id": client_id,
-                "current_balance": 0.0,
+                "client_name": "",
                 "credit_limit": 0.0,
-                "available_credit": 0.0,
-                "price_tier": "Prix_1"
+                "price_tier": "Prix_1",
+                "total_invoiced": 0.0,
+                "total_paid": 0.0,
+                "total_credit_notes": 0.0,
+                "current_balance": 0.0,
+                "available_credit": 0.0
             }
 
     def get_all_clients_with_balances(self) -> list:
         """
-        Récupère tous les clients actifs avec leurs soldes calculés dynamiquement en une seule requête optimisée.
+        Récupère tous les clients avec leur solde actuel calculé dynamiquement
+        (Factures validées - Règlements - Avoirs), en excluant les devis et commandes brouillon.
         """
         try:
             with self.db.get_db_connection() as conn:
@@ -257,14 +269,21 @@ class ClientManager:
                     LEFT JOIN (
                         SELECT Client_ID, SUM(Total_Amount_TTC) AS total_invoiced
                         FROM Sales_Invoices
-                        WHERE Status != 'Cancelled' AND Client_ID IS NOT NULL
+                        WHERE Status NOT IN ('Cancelled', 'Draft') 
+                          AND Invoice_No NOT LIKE 'DEV-%'
+                          AND Invoice_No NOT LIKE 'BC-%'
+                          AND Client_ID IS NOT NULL
                         GROUP BY Client_ID
                     ) inv ON c.Client_ID = inv.Client_ID
                     LEFT JOIN (
                         SELECT i.Client_ID, SUM(p.Amount) AS pos_paid
                         FROM POS_Sale_Payments p
                         JOIN Sales_Invoices i ON i.Invoice_ID = p.Invoice_ID
-                        WHERE i.Status != 'Cancelled' AND p.Payment_Method != 'Credit' AND i.Client_ID IS NOT NULL
+                        WHERE i.Status NOT IN ('Cancelled', 'Draft') 
+                          AND i.Invoice_No NOT LIKE 'DEV-%'
+                          AND i.Invoice_No NOT LIKE 'BC-%'
+                          AND p.Payment_Method != 'Credit' 
+                          AND i.Client_ID IS NOT NULL
                         GROUP BY i.Client_ID
                     ) pos_pay ON c.Client_ID = pos_pay.Client_ID
                     LEFT JOIN (
@@ -310,12 +329,21 @@ class ClientManager:
                             (
                                 SELECT COALESCE(SUM(Total_Amount_TTC), 0)
                                 FROM Sales_Invoices
-                                WHERE Client_ID = %s AND Status != 'Cancelled' AND Invoice_Date < %s
+                                WHERE Client_ID = %s 
+                                  AND Status NOT IN ('Cancelled', 'Draft') 
+                                  AND Invoice_No NOT LIKE 'DEV-%'
+                                  AND Invoice_No NOT LIKE 'BC-%'
+                                  AND Invoice_Date < %s
                             ) - (
                                 SELECT COALESCE(SUM(p.Amount), 0)
                                 FROM POS_Sale_Payments p
                                 JOIN Sales_Invoices i ON i.Invoice_ID = p.Invoice_ID
-                                WHERE i.Client_ID = %s AND i.Status != 'Cancelled' AND p.Payment_Method != 'Credit' AND i.Invoice_Date < %s
+                                WHERE i.Client_ID = %s 
+                                  AND i.Status NOT IN ('Cancelled', 'Draft') 
+                                  AND i.Invoice_No NOT LIKE 'DEV-%'
+                                  AND i.Invoice_No NOT LIKE 'BC-%'
+                                  AND p.Payment_Method != 'Credit' 
+                                  AND i.Invoice_Date < %s
                             ) - (
                                 SELECT COALESCE(SUM(Amount), 0)
                                 FROM Client_Payments
@@ -347,6 +375,9 @@ class ClientManager:
                 cursor.execute(inv_query, tuple(inv_params))
                 for r in cursor.fetchall():
                     ref = r.get('Invoice_No') or f"FAC-{r['Invoice_ID']}"
+                    status_raw = r.get('Status') or 'Validated'
+                    is_quote_or_draft = (status_raw == 'Draft') or ref.startswith("DEV-") or ref.startswith("BC-")
+
                     if ref.startswith("BL-"):
                         label = "Bon de Livraison (BL)"
                     elif ref.startswith("DEV-"):
@@ -357,13 +388,21 @@ class ClientManager:
                         label = "Facture (Vente Gros)"
                     else:
                         label = "Facture (Vente POS)"
+
+                    # Strict accounting segregation:
+                    # Devis (DEV) and draft orders (BC) do NOT impact debt/solde
+                    debit = 0.0 if is_quote_or_draft else float(r['Total_Amount_TTC'] or 0.0)
+                    note_str = f"Statut: {status_raw} (Hors bilan)" if is_quote_or_draft else f"Statut: {status_raw}"
+
                     transactions.append({
                         'date': str(r['op_date']),
                         'type': label,
                         'reference': ref,
-                        'debit': float(r['Total_Amount_TTC'] or 0.0),
+                        'debit': debit,
                         'credit': 0.0,
-                        'notes': f"Statut: {r.get('Status')}"
+                        'is_non_binding': is_quote_or_draft,
+                        'raw_amount': float(r['Total_Amount_TTC'] or 0.0),
+                        'notes': note_str
                     })
 
                 # 2. Paiements au comptant lors de la vente dans la période

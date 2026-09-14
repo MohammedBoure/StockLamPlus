@@ -12,8 +12,8 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
 - **`client_credit_note_manager.py`** : Gestion des avoirs et retours clients.
 - **`client_manager.py`** : Gestion du répertoire des clients :
   - Support de la catégorie tarifaire (`Price_Tier` : Prix 1 à 4) et du plafond de crédit (`Credit_Limit`).
-  - Calcul dynamique et instantané du solde débiteur client (`get_client_balance`, `get_all_clients_with_balances`).
-  - Génération du grand livre client chronologique pour relevé de compte (`get_client_ledger`) avec débits, crédits et solde progressif.
+  - Calcul dynamique et instantané du solde débiteur client (`get_client_balance`, `get_all_clients_with_balances`) avec ségrégation comptable stricte : exclusion des devis (`DEV-`) et commandes brouillons (`BC-` / `Status='Draft'`) qui n'engendrent aucune dette légale.
+  - Génération du grand livre client chronologique pour relevé de compte (`get_client_ledger`) avec calcul du solde antérieur, débits, crédits et solde progressif en ignorant l'impact financier des pièces pro-forma / devis.
 - **`client_payment_manager.py`** : Gestion des encaissements et règlements clients avec lettrage de facture (`add_payment`) et mise à jour automatique du statut en `Paid`.
 - **`company_settings_manager.py`** : Configuration générale de l'entreprise, devise, seuils, cachets et paramètres globaux.
 - **`credit_note_manager.py`** : Gestion des avoirs fournisseurs suite aux retours de marchandises.

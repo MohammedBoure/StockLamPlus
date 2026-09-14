@@ -40,46 +40,54 @@ class ClientStatementDialog(QDialog):
         self.client_manager = data_manager.clients
         self.ledger_data = {}
 
-        self.setWindowTitle("📄 Relevé de Compte Client")
-        self.resize(950, 680)
-        self.setMinimumSize(800, 550)
+        self.setWindowTitle("📄 Relevé de Compte Client - Grand Livre Auxiliaire")
+        self.setWindowFlags(Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
+        self.resize(1200, 780)
+        self.setMinimumSize(950, 600)
 
         self.init_ui()
         self.apply_preset("this_month")
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.showMaximized()
+
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(12)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
 
-        # 1. Header Card (Nom du client & Coordonnées)
+        # 1. Header Card (Nom du client & Coordonnées & Risque Crédit)
         self.header_frame = QFrame()
         self.header_frame.setStyleSheet("""
             QFrame {
                 background-color: #f8fafc;
                 border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                padding: 10px;
+                border-radius: 0px;
+                padding: 10px 14px;
             }
         """)
         header_layout = QHBoxLayout(self.header_frame)
-        header_layout.setContentsMargins(10, 5, 10, 5)
+        header_layout.setContentsMargins(6, 4, 6, 4)
 
         self.lbl_client_title = QLabel("Chargement du client...")
-        self.lbl_client_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0f172a;")
+        self.lbl_client_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #007572;")
         header_layout.addWidget(self.lbl_client_title, 1)
 
         self.lbl_client_meta = QLabel("")
-        self.lbl_client_meta.setStyleSheet("font-size: 12px; color: #64748b;")
+        self.lbl_client_meta.setStyleSheet("font-size: 12px; color: #475569; font-weight: 500;")
         header_layout.addWidget(self.lbl_client_meta)
 
         layout.addWidget(self.header_frame)
 
-        # 2. Controls Toolbar (Date Filters & Presets)
+        # 2. Controls Toolbar (Dedicated Top Utility Bar)
         filter_layout = QHBoxLayout()
         filter_layout.setSpacing(8)
 
-        filter_layout.addWidget(QLabel("Période :"))
+        lbl_p = QLabel("Période :")
+        lbl_p.setStyleSheet("font-weight: bold; font-size: 12px; color: #334155;")
+        filter_layout.addWidget(lbl_p)
+
         self.preset_combo = QComboBox()
         self.preset_combo.addItems([
             "Ce mois",
@@ -90,45 +98,108 @@ class ClientStatementDialog(QDialog):
             "Tout l'historique",
             "Personnalisé"
         ])
+        self.preset_combo.setMinimumHeight(34)
+        self.preset_combo.setStyleSheet("border: 1px solid #cbd5e1; border-radius: 0px; padding: 4px 8px; font-size: 12px;")
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
         filter_layout.addWidget(self.preset_combo)
 
-        filter_layout.addWidget(QLabel("Du :"))
+        lbl_du = QLabel("Du :")
+        lbl_du.setStyleSheet("font-weight: bold; font-size: 12px; color: #334155;")
+        filter_layout.addWidget(lbl_du)
+
         self.date_start = QDateEdit()
         self.date_start.setCalendarPopup(True)
         self.date_start.setDate(QDate.currentDate().addMonths(-1))
+        self.date_start.setMinimumHeight(34)
+        self.date_start.setStyleSheet("border: 1px solid #cbd5e1; border-radius: 0px; padding: 4px 6px; font-size: 12px;")
         self.date_start.dateChanged.connect(self._on_date_changed)
         filter_layout.addWidget(self.date_start)
 
-        filter_layout.addWidget(QLabel("Au :"))
+        lbl_au = QLabel("Au :")
+        lbl_au.setStyleSheet("font-weight: bold; font-size: 12px; color: #334155;")
+        filter_layout.addWidget(lbl_au)
+
         self.date_end = QDateEdit()
         self.date_end.setCalendarPopup(True)
         self.date_end.setDate(QDate.currentDate())
+        self.date_end.setMinimumHeight(34)
+        self.date_end.setStyleSheet("border: 1px solid #cbd5e1; border-radius: 0px; padding: 4px 6px; font-size: 12px;")
         self.date_end.dateChanged.connect(self._on_date_changed)
         filter_layout.addWidget(self.date_end)
 
         self.btn_refresh = QPushButton("🔄 Actualiser")
         self.btn_refresh.setCursor(Qt.PointingHandCursor)
+        self.btn_refresh.setMinimumHeight(34)
+        self.btn_refresh.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #1e293b;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                padding: 4px 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e2e8f0; }
+        """)
         self.btn_refresh.clicked.connect(self.load_ledger)
         filter_layout.addWidget(self.btn_refresh)
 
         filter_layout.addStretch(1)
 
+        self.btn_print = QPushButton("🖨️ Imprimer")
+        self.btn_print.setCursor(Qt.PointingHandCursor)
+        self.btn_print.setMinimumHeight(34)
+        self.btn_print.setStyleSheet("""
+            QPushButton {
+                background-color: #f8fafc;
+                color: #007572;
+                border: 1.5px solid #007572;
+                border-radius: 0px;
+                padding: 4px 14px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e6f4f1; }
+        """)
+        self.btn_print.clicked.connect(self.print_statement)
+        filter_layout.addWidget(self.btn_print)
+
         self.btn_export_pdf = QPushButton("📑 Exporter en PDF (A4)")
         self.btn_export_pdf.setCursor(Qt.PointingHandCursor)
+        self.btn_export_pdf.setMinimumHeight(34)
         self.btn_export_pdf.setStyleSheet("""
             QPushButton {
                 background-color: #007572;
                 color: white;
                 font-weight: bold;
-                padding: 6px 14px;
-                border-radius: 4px;
-                min-height: 32px;
+                padding: 4px 16px;
+                border: none;
+                border-radius: 0px;
+                font-size: 12px;
             }
             QPushButton:hover { background-color: #005a57; }
         """)
         self.btn_export_pdf.clicked.connect(self.export_pdf)
         filter_layout.addWidget(self.btn_export_pdf)
+
+        self.btn_top_close = QPushButton("✕ Fermer")
+        self.btn_top_close.setCursor(Qt.PointingHandCursor)
+        self.btn_top_close.setMinimumHeight(34)
+        self.btn_top_close.setStyleSheet("""
+            QPushButton {
+                background-color: #fee2e2;
+                color: #dc2626;
+                border: 1px solid #fca5a5;
+                border-radius: 0px;
+                padding: 4px 14px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #fecaca; }
+        """)
+        self.btn_top_close.clicked.connect(self.accept)
+        filter_layout.addWidget(self.btn_top_close)
 
         layout.addLayout(filter_layout)
 
@@ -137,8 +208,8 @@ class ClientStatementDialog(QDialog):
         kpi_layout.setSpacing(10)
 
         self.card_initial = self._create_kpi_card("Solde Initial", "0.00 DA", "#64748b")
-        self.card_debit = self._create_kpi_card("Total Débit (Factures)", "0.00 DA", "#0284c7")
-        self.card_credit = self._create_kpi_card("Total Crédit (Règlements)", "0.00 DA", "#16a34a")
+        self.card_debit = self._create_kpi_card("Total Débit (Factures & BL)", "0.00 DA", "#0284c7")
+        self.card_credit = self._create_kpi_card("Total Crédit (Règlements & Avoirs)", "0.00 DA", "#16a34a")
         self.card_final = self._create_kpi_card("Nouveau Solde Dû", "0.00 DA", "#dc2626")
 
         kpi_layout.addWidget(self.card_initial)
@@ -154,9 +225,37 @@ class ClientStatementDialog(QDialog):
         self.table.setHorizontalHeaderLabels(cols)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.verticalHeader().setDefaultSectionSize(34)
-        
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                gridline-color: #f1f5f9;
+                font-size: 12px;
+                color: #1e293b;
+            }
+            QHeaderView::section {
+                background-color: #f8fafc;
+                color: #1e293b;
+                font-weight: bold;
+                font-size: 12px;
+                border: none;
+                border-bottom: 2px solid #007572;
+                border-right: 1px solid #e2e8f0;
+                padding: 6px 8px;
+            }
+            QTableWidget::item:selected {
+                background-color: #e6f4f1;
+                color: #004d40;
+            }
+        """)
+
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -168,11 +267,28 @@ class ClientStatementDialog(QDialog):
 
         layout.addWidget(self.table, 1)
 
-        # 5. Bottom Buttons
+        # 5. Bottom Status and Close
         bottom_layout = QHBoxLayout()
+        lbl_legend = QLabel("💡 * Note : Les Devis et Bons de Commande brouillon sont répertoriés [Hors bilan] avec Débit 0,00 DA sans affecter le solde exigible.")
+        lbl_legend.setStyleSheet("font-size: 11px; color: #64748b; font-style: italic;")
+        bottom_layout.addWidget(lbl_legend)
         bottom_layout.addStretch(1)
-        self.btn_close = QPushButton("Fermer")
-        self.btn_close.setFixedWidth(100)
+
+        self.btn_close = QPushButton("Fermer (Echap)")
+        self.btn_close.setCursor(Qt.PointingHandCursor)
+        self.btn_close.setFixedWidth(120)
+        self.btn_close.setMinimumHeight(34)
+        self.btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: #f1f5f9;
+                color: #334155;
+                border: 1px solid #cbd5e1;
+                border-radius: 0px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #e2e8f0; }
+        """)
         self.btn_close.clicked.connect(self.accept)
         bottom_layout.addWidget(self.btn_close)
         layout.addLayout(bottom_layout)
@@ -322,28 +438,54 @@ class ClientStatementDialog(QDialog):
             date_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row_idx, 0, date_item)
 
-            type_item = QTableWidgetItem(t['type'])
+            type_label = t['type']
+            is_non_binding = t.get('is_non_binding', False)
+            if is_non_binding and "[Hors bilan]" not in type_label:
+                type_label += " [Hors bilan]"
+
+            type_item = QTableWidgetItem(type_label)
             type_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            if is_non_binding:
+                type_item.setForeground(QColor("#64748b"))
+                font = type_item.font()
+                font.setItalic(True)
+                type_item.setFont(font)
             self.table.setItem(row_idx, 1, type_item)
 
             ref_item = QTableWidgetItem(t['reference'])
             ref_item.setTextAlignment(Qt.AlignCenter)
+            if is_non_binding:
+                ref_item.setForeground(QColor("#64748b"))
             self.table.setItem(row_idx, 2, ref_item)
 
+            # Débit (+)
             debit_val = t['debit']
-            debit_item = QTableWidgetItem(format_money(debit_val) if debit_val > 0 else "-")
+            if is_non_binding:
+                raw_amt = t.get('raw_amount', 0.0)
+                debit_item = QTableWidgetItem("0,00 DA")
+                debit_item.setToolTip(f"Montant indicatif : {format_money(raw_amt)} DA\nDevis / Commande proforma (Aucun impact financier sur le compte).")
+                debit_item.setForeground(QColor("#94a3b8"))
+                font = debit_item.font()
+                font.setItalic(True)
+                debit_item.setFont(font)
+            else:
+                debit_item = QTableWidgetItem(f"{format_money(debit_val)} DA" if debit_val > 0 else "-")
+                if debit_val > 0:
+                    debit_item.setForeground(QColor("#0284c7"))
+                    debit_item.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
             debit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            if debit_val > 0:
-                debit_item.setForeground(QColor("#0284c7"))
             self.table.setItem(row_idx, 3, debit_item)
 
+            # Crédit (-)
             credit_val = t['credit']
-            credit_item = QTableWidgetItem(format_money(credit_val) if credit_val > 0 else "-")
+            credit_item = QTableWidgetItem(f"{format_money(credit_val)} DA" if credit_val > 0 else "-")
             credit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             if credit_val > 0:
                 credit_item.setForeground(QColor("#16a34a"))
+                credit_item.setFont(QFont("Segoe UI", 9, QFont.DemiBold))
             self.table.setItem(row_idx, 4, credit_item)
 
+            # Solde Progressif
             bal_val = t['balance']
             bal_item = QTableWidgetItem(f"{format_money(bal_val)} DA")
             bal_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -352,16 +494,35 @@ class ClientStatementDialog(QDialog):
                 bal_item.setForeground(QColor("#dc2626"))
             elif bal_val < 0:
                 bal_item.setForeground(QColor("#16a34a"))
+            else:
+                bal_item.setForeground(QColor("#475569"))
             self.table.setItem(row_idx, 5, bal_item)
 
-            note_item = QTableWidgetItem(t.get('notes') or "")
+            # Notes
+            note_str = t.get('notes') or ""
+            if is_non_binding and "Hors bilan" not in note_str:
+                note_str = f"Document proforma (Non exigible) | {note_str}".strip(" |")
+            note_item = QTableWidgetItem(note_str)
+            note_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            if is_non_binding:
+                note_item.setForeground(QColor("#64748b"))
             self.table.setItem(row_idx, 6, note_item)
 
-    def export_pdf(self):
-        if not HAS_REPORTLAB:
-            QMessageBox.warning(self, "Bibliothèque manquante", "La bibliothèque ReportLab n'est pas installée.")
-            return
+    def print_statement(self):
+        """Génère un PDF temporaire et l'ouvre directement pour impression."""
+        import tempfile
+        client = self.ledger_data.get('client', {})
+        client_name = client.get('Client_Name') or "Client"
+        safe_name = "".join(c for c in client_name if c.isalnum() or c in (' ', '_', '-')).strip()
+        temp_dir = tempfile.gettempdir()
+        temp_pdf = os.path.join(temp_dir, f"Releve_{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf")
+        if self._generate_pdf_file(temp_pdf):
+            try:
+                os.startfile(temp_pdf)
+            except Exception as e:
+                logging.error(f"Error opening statement PDF for printing: {e}")
 
+    def export_pdf(self):
         client = self.ledger_data.get('client', {})
         client_name = client.get('Client_Name') or "Client"
         safe_name = "".join(c for c in client_name if c.isalnum() or c in (' ', '_', '-')).strip()
@@ -373,7 +534,28 @@ class ClientStatementDialog(QDialog):
         if not file_path:
             return
 
+        if self._generate_pdf_file(file_path):
+            reply = QMessageBox.information(
+                self,
+                "Export Réussi",
+                f"Le relevé de compte a été exporté avec succès :\n{file_path}\n\nSouhaitez-vous l'ouvrir maintenant ?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                try:
+                    os.startfile(file_path)
+                except Exception as e:
+                    logging.error(f"Error opening exported statement PDF: {e}")
+
+    def _generate_pdf_file(self, file_path: str) -> bool:
+        if not HAS_REPORTLAB:
+            QMessageBox.warning(self, "Bibliothèque manquante", "La bibliothèque ReportLab n'est pas installée.")
+            return False
+
         try:
+            client = self.ledger_data.get('client', {})
+            client_name = client.get('Client_Name') or "Client"
+
             doc = SimpleDocTemplate(
                 file_path,
                 pagesize=A4,
@@ -418,7 +600,7 @@ class ClientStatementDialog(QDialog):
             story.append(Spacer(1, 10))
 
             # 2. Titre du Relevé
-            story.append(Paragraph("RELEVÉ DE COMPTE CLIENT", title_style))
+            story.append(Paragraph("RELEVÉ DE COMPTE CLIENT (GRAND LIVRE AUXILIAIRE)", title_style))
             period_str = f"Période du <b>{self.date_start.date().toString('dd/MM/yyyy')}</b> au <b>{self.date_end.date().toString('dd/MM/yyyy')}</b>"
             story.append(Paragraph(period_str, ParagraphStyle('Center', parent=normal_style, alignment=1, fontSize=10)))
             story.append(Spacer(1, 12))
@@ -428,7 +610,7 @@ class ClientStatementDialog(QDialog):
             rc = client.get('Commercial_Reg_No') or client.get('Commercial_Register') or '-'
             client_info = [
                 [Paragraph(f"<b>Client :</b> {client_name}", normal_style),
-                 Paragraph(f"<b>Catégorie :</b> {client.get('Price_Tier', 'Prix_1')}", normal_style)],
+                 Paragraph(f"<b>Catégorie Tarifaire :</b> {client.get('Price_Tier', 'Prix_1')}", normal_style)],
                 [Paragraph(f"<b>Contact :</b> {client.get('Contact_Person', '-')}", normal_style),
                  Paragraph(f"<b>Téléphone :</b> {client.get('Phone', '-')}", normal_style)],
                 [Paragraph(f"<b>NIF :</b> {tax_id}", normal_style),
@@ -454,7 +636,7 @@ class ClientStatementDialog(QDialog):
             total_credit = sum(t.get('credit', 0.0) for t in txs)
 
             kpi_data = [
-                ["Solde Antérieur", "Total Débit (Factures)", "Total Crédit (Règlements)", "Nouveau Solde Dû"],
+                ["Solde Antérieur", "Total Débit (Factures & BL)", "Total Crédit (Règlements & Avoirs)", "Nouveau Solde Dû"],
                 [f"{format_money(initial)} DA", f"{format_money(total_debit)} DA", f"{format_money(total_credit)} DA", f"{format_money(final)} DA"]
             ]
             t_kpi = Table(kpi_data, colWidths=[4.5 * cm, 4.5 * cm, 4.5 * cm, 4.5 * cm])
@@ -477,12 +659,14 @@ class ClientStatementDialog(QDialog):
             ledger_table_data = [ledger_header]
 
             for t in txs:
-                d_str = format_money(t['debit']) if t['debit'] > 0 else "-"
+                is_nb = t.get('is_non_binding', False)
+                type_display = t['type'] + (" [Hors bilan]" if is_nb and "[Hors bilan]" not in t['type'] else "")
+                d_str = "0.00" if is_nb else (format_money(t['debit']) if t['debit'] > 0 else "-")
                 c_str = format_money(t['credit']) if t['credit'] > 0 else "-"
                 b_str = format_money(t['balance'])
                 ledger_table_data.append([
                     t['date'],
-                    t['type'],
+                    type_display,
                     t['reference'],
                     d_str,
                     c_str,
@@ -521,16 +705,9 @@ class ClientStatementDialog(QDialog):
             story.append(t_sign)
 
             doc.build(story)
-
-            reply = QMessageBox.information(
-                self,
-                "Export Réussi",
-                f"Le relevé de compte a été exporté avec succès :\n{file_path}\n\nSouhaitez-vous l'ouvrir maintenant ?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                os.startfile(file_path)
+            return True
 
         except Exception as e:
-            logging.error(f"Error exporting PDF statement: {e}", exc_info=True)
+            logging.error(f"Error generating statement PDF: {e}", exc_info=True)
             QMessageBox.critical(self, "Erreur PDF", f"Impossible de générer le document PDF :\n{str(e)}")
+            return False

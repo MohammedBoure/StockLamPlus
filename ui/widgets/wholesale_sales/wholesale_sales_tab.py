@@ -6,10 +6,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QComboBox, QMessageBox, QDoubleSpinBox, QDateEdit, QFrame,
-    QCompleter, QSizePolicy
+    QCompleter, QSizePolicy, QCheckBox
 )
 from PySide6.QtCore import Qt, QDate, QStringListModel, QPoint
-from PySide6.QtGui import QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QFont, QKeySequence, QShortcut, QColor
 
 from ui.formatting import format_money
 from branding import get_logo_path
@@ -17,6 +17,8 @@ from ui.widgets.sales.dialogs import ClientDialog
 from ui.widgets.master_data.client_statement_dialog import ClientStatementDialog
 from ui.widgets.sales.touch_keypad import TouchKeypadDialog
 from .pdf_export import export_wholesale_document_pdf
+from .lot_split_dialog import MultiLotSelectionDialog
+from .supervisor_override_dialog import SupervisorOverrideDialog
 
 
 class WholesaleSalesTab(QWidget):
@@ -39,6 +41,8 @@ class WholesaleSalesTab(QWidget):
         self.batches_cache = []
         self.search_map = {}
         self.barcode_map = {}
+        self.product_batches_map = {}
+        self.pending_batch = None
         self.touch_keypad = None
 
         self.init_ui()
@@ -146,14 +150,48 @@ class WholesaleSalesTab(QWidget):
         layout.addWidget(self.btn_new_client)
         layout.addWidget(self.btn_client_statement)
 
-        # Badges Info Client
+        # Badges & Controls Info Client
         sep = QFrame()
         sep.setFrameShape(QFrame.VLine)
         sep.setStyleSheet("color: #cbd5e1;")
         layout.addWidget(sep)
 
-        self.lbl_price_tier = QLabel("Catégorie : Prix 1")
-        self.lbl_price_tier.setStyleSheet("background-color: #f1f5f9; padding: 4px 8px; border-radius: 0px; font-weight: bold; color: #007572;")
+        # Interactive Price Tier Selector (F3)
+        lbl_tier = QLabel("Grille Tarifaire (F3) :")
+        lbl_tier.setStyleSheet("font-weight: bold; color: #1e293b; font-size: 12px;")
+        layout.addWidget(lbl_tier)
+
+        self.cb_price_tier = QComboBox()
+        self.cb_price_tier.addItem("Prix 1 (Détail)", "Prix_1")
+        self.cb_price_tier.addItem("Prix 2 (Demi-Gros)", "Prix_2")
+        self.cb_price_tier.addItem("Prix 3 (Gros)", "Prix_3")
+        self.cb_price_tier.addItem("Prix 4 (Super-Gros)", "Prix_4")
+        self.cb_price_tier.setMinimumHeight(36)
+        self.cb_price_tier.setStyleSheet("""
+            QComboBox {
+                background-color: #ffffff;
+                border: 1.5px solid #007572;
+                border-radius: 0px;
+                padding: 4px 8px;
+                font-size: 12px;
+                font-weight: bold;
+                color: #007572;
+            }
+        """)
+        self.cb_price_tier.currentIndexChanged.connect(self._on_price_tier_changed)
+        layout.addWidget(self.cb_price_tier)
+
+        self.lbl_tier_warning = QLabel("⚠️ Tarif Détail appliqué")
+        self.lbl_tier_warning.setStyleSheet("""
+            background-color: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #f87171;
+            padding: 4px 8px;
+            font-weight: bold;
+            font-size: 11px;
+        """)
+        self.lbl_tier_warning.hide()
+        layout.addWidget(self.lbl_tier_warning)
 
         self.lbl_credit_limit = QLabel("Plafond : 0.00 DA")
         self.lbl_credit_limit.setStyleSheet("background-color: #f1f5f9; padding: 4px 8px; border-radius: 0px; font-weight: 500; color: #475569;")
@@ -164,7 +202,6 @@ class WholesaleSalesTab(QWidget):
         self.lbl_available_credit = QLabel("Disponible : 0.00 DA")
         self.lbl_available_credit.setStyleSheet("background-color: #f1f5f9; padding: 4px 8px; border-radius: 0px; font-weight: 500; color: #0284c7;")
 
-        layout.addWidget(self.lbl_price_tier)
         layout.addWidget(self.lbl_credit_limit)
         layout.addWidget(self.lbl_current_balance)
         layout.addWidget(self.lbl_available_credit)
@@ -270,7 +307,7 @@ class WholesaleSalesTab(QWidget):
         layout.setSpacing(8)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Rechercher un produit en stock, scanner un code-barres ou numéro de lot...")
+        self.search_input.setPlaceholderText("🔍 Scanner code-barres, chercher désignation ou N° lot (F1 / Ctrl+F)...")
         self.search_input.setMinimumHeight(38)
         self.search_input.setStyleSheet("""
             QLineEdit {
@@ -298,7 +335,7 @@ class WholesaleSalesTab(QWidget):
         self.spin_quick_qty.setValue(1.0)
         self.spin_quick_qty.setDecimals(2)
         self.spin_quick_qty.setMinimumHeight(38)
-        self.spin_quick_qty.setMinimumWidth(95)
+        self.spin_quick_qty.setMinimumWidth(100)
         self.spin_quick_qty.setPrefix("Qté: ")
         self.spin_quick_qty.setStyleSheet("""
             QDoubleSpinBox {
@@ -314,8 +351,33 @@ class WholesaleSalesTab(QWidget):
                 background-color: #e6f4f1;
             }
         """)
+        self.spin_quick_qty.lineEdit().returnPressed.connect(self._on_quick_qty_return)
 
-        self.btn_add_to_cart = QPushButton("➕ Ajouter")
+        self.spin_quick_discount = QDoubleSpinBox()
+        self.spin_quick_discount.setRange(0.0, 100.0)
+        self.spin_quick_discount.setValue(0.0)
+        self.spin_quick_discount.setDecimals(2)
+        self.spin_quick_discount.setPrefix("Rem: ")
+        self.spin_quick_discount.setSuffix(" %")
+        self.spin_quick_discount.setMinimumHeight(38)
+        self.spin_quick_discount.setMinimumWidth(95)
+        self.spin_quick_discount.setStyleSheet("""
+            QDoubleSpinBox {
+                background-color: #ffffff;
+                border: 1.5px solid #d97706;
+                border-radius: 0px;
+                font-weight: bold;
+                font-size: 13px;
+                color: #b45309;
+                padding: 2px 4px;
+            }
+            QDoubleSpinBox:focus {
+                background-color: #fffbeb;
+            }
+        """)
+        self.spin_quick_discount.lineEdit().returnPressed.connect(self._commit_pending_item)
+
+        self.btn_add_to_cart = QPushButton("➕ Ajouter (Entrée)")
         self.btn_add_to_cart.setCursor(Qt.PointingHandCursor)
         self.btn_add_to_cart.setMinimumHeight(38)
         self.btn_add_to_cart.setStyleSheet("""
@@ -330,7 +392,7 @@ class WholesaleSalesTab(QWidget):
             }
             QPushButton:hover { background-color: #005a57; }
         """)
-        self.btn_add_to_cart.clicked.connect(self._on_search_return)
+        self.btn_add_to_cart.clicked.connect(self._commit_pending_item)
 
         self.btn_keypad_search = QPushButton("🔢")
         self.btn_keypad_search.setCursor(Qt.PointingHandCursor)
@@ -369,6 +431,7 @@ class WholesaleSalesTab(QWidget):
 
         layout.addWidget(self.search_input, 4)
         layout.addWidget(self.spin_quick_qty, 1)
+        layout.addWidget(self.spin_quick_discount, 1)
         layout.addWidget(self.btn_add_to_cart)
         layout.addWidget(self.btn_keypad_search)
         layout.addWidget(self.btn_refresh)
@@ -378,8 +441,8 @@ class WholesaleSalesTab(QWidget):
     def _build_cart_table(self):
         table = QTableWidget()
         cols = [
-            "", "Code-Barres", "Désignation Produit", "N° Lot", "Péremption",
-            "Emplacement", "Stock Dispo", "Prix Unit. HT", "Quantité", "Remise %",
+            "Action", "Code-Barres", "Désignation Produit", "N° Lot", "Péremption",
+            "Emplacement", "Stock Dispo", "Prix Unit. HT", "Échantillon", "Quantité", "Remise %",
             "Total HT", "TVA %", "Total TTC"
         ]
         table.setColumnCount(len(cols))
@@ -422,7 +485,7 @@ class WholesaleSalesTab(QWidget):
 
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Fixed)
-        table.setColumnWidth(0, 44)
+        table.setColumnWidth(0, 76)
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
@@ -435,6 +498,7 @@ class WholesaleSalesTab(QWidget):
         header.setSectionResizeMode(10, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(11, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(12, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(13, QHeaderView.ResizeToContents)
 
         return table
 
@@ -550,8 +614,44 @@ class WholesaleSalesTab(QWidget):
         super().hideEvent(event)
 
     def _install_shortcuts(self):
+        # F1 or Ctrl+F: Focus Search Input
+        self._shortcut_f1 = QShortcut(QKeySequence("F1"), self)
+        self._shortcut_f1.activated.connect(self._focus_search)
+        self._shortcut_ctrl_f = QShortcut(QKeySequence("Ctrl+F"), self)
+        self._shortcut_ctrl_f.activated.connect(self._focus_search)
+
+        # F2: Focus Client Selector
+        self._shortcut_f2 = QShortcut(QKeySequence("F2"), self)
+        self._shortcut_f2.activated.connect(self._focus_client)
+
+        # F3: Cycle / Focus Price Tier
+        self._shortcut_f3 = QShortcut(QKeySequence("F3"), self)
+        self._shortcut_f3.activated.connect(self._cycle_price_tier)
+
+        # F10: Validate and Commit Document
         self._shortcut_f10 = QShortcut(QKeySequence("F10"), self)
         self._shortcut_f10.activated.connect(self.validate_wholesale_sale)
+
+        # Delete / Suppr: Remove selected cart line with confirmation
+        self._shortcut_del = QShortcut(QKeySequence(Qt.Key_Delete), self)
+        self._shortcut_del.activated.connect(self._delete_selected_cart_row)
+
+    def _focus_search(self):
+        self.search_input.setFocus()
+        self.search_input.selectAll()
+
+    def _focus_client(self):
+        self.cb_client.setFocus()
+        self.cb_client.showPopup()
+
+    def _cycle_price_tier(self):
+        next_idx = (self.cb_price_tier.currentIndex() + 1) % self.cb_price_tier.count()
+        self.cb_price_tier.setCurrentIndex(next_idx)
+
+    def _delete_selected_cart_row(self):
+        row = self.cart_table.currentRow()
+        if row >= 0:
+            self._prompt_remove_row(row)
 
     def load_initial_data(self):
         # 1. Load Clients
@@ -579,10 +679,17 @@ class WholesaleSalesTab(QWidget):
         self.batches_cache = []
         self.search_map = {}
         self.barcode_map = {}
+        self.product_batches_map = {}
         try:
             self.batches_cache = self.data_manager.batches.get_all_batches_with_details()
             suggestions = []
             for b in self.batches_cache:
+                pid = b.get("Product_ID")
+                if pid:
+                    if pid not in self.product_batches_map:
+                        self.product_batches_map[pid] = []
+                    self.product_batches_map[pid].append(b)
+
                 codes = self._extract_barcodes(b)
                 code_str = " / ".join(codes) if codes else "-"
                 lot = b.get("Lot_Number") or "---"
@@ -616,19 +723,38 @@ class WholesaleSalesTab(QWidget):
             return self.cb_client.itemData(idx)
         return None
 
+    def _get_current_price_tier(self) -> str:
+        if hasattr(self, 'cb_price_tier') and self.cb_price_tier.currentIndex() >= 0:
+            return self.cb_price_tier.currentData() or 'Prix_1'
+        client = self._get_current_client()
+        return client.get('Price_Tier') if client else 'Prix_1'
+
+    def _update_tier_warning(self, tier: str):
+        if tier == 'Prix_1':
+            self.lbl_tier_warning.setText("⚠️ Tarif Détail (Prix 1) appliqué à un client B2B !")
+            self.lbl_tier_warning.show()
+        else:
+            self.lbl_tier_warning.setText("")
+            self.lbl_tier_warning.hide()
+
+    def _on_price_tier_changed(self, index):
+        tier = self._get_current_price_tier()
+        self._update_tier_warning(tier)
+        self._reapply_client_prices_to_cart()
+
     def _on_client_changed(self, index):
         client = self._get_current_client()
         if not client:
             return
 
         tier = client.get('Price_Tier') or 'Prix_1'
-        tier_names = {
-            'Prix_1': 'Prix 1 (Détail)',
-            'Prix_2': 'Prix 2 (Demi-Gros)',
-            'Prix_3': 'Prix 3 (Gros)',
-            'Prix_4': 'Prix 4 (Super-Gros)'
-        }
-        self.lbl_price_tier.setText(f"Catégorie : {tier_names.get(tier, tier)}")
+        self.cb_price_tier.blockSignals(True)
+        tier_idx = self.cb_price_tier.findData(tier)
+        if tier_idx >= 0:
+            self.cb_price_tier.setCurrentIndex(tier_idx)
+        self.cb_price_tier.blockSignals(False)
+
+        self._update_tier_warning(tier)
 
         limit = float(client.get('Credit_Limit') or 0.0)
         self.lbl_credit_limit.setText(f"Plafond : {format_money(limit)} DA")
@@ -637,11 +763,11 @@ class WholesaleSalesTab(QWidget):
         self.lbl_current_balance.setText(f"Solde Dû : {format_money(bal)} DA")
 
         if bal <= 0:
-            self.lbl_current_balance.setStyleSheet("background-color: #ecfdf5; padding: 4px 8px; border-radius: 4px; font-weight: bold; color: #16a34a;")
+            self.lbl_current_balance.setStyleSheet("background-color: #ecfdf5; padding: 4px 8px; border-radius: 0px; font-weight: bold; color: #16a34a;")
         elif limit > 0 and bal <= limit:
-            self.lbl_current_balance.setStyleSheet("background-color: #fefce8; padding: 4px 8px; border-radius: 4px; font-weight: bold; color: #d97706;")
+            self.lbl_current_balance.setStyleSheet("background-color: #fefce8; padding: 4px 8px; border-radius: 0px; font-weight: bold; color: #d97706;")
         else:
-            self.lbl_current_balance.setStyleSheet("background-color: #fef2f2; padding: 4px 8px; border-radius: 4px; font-weight: bold; color: #dc2626;")
+            self.lbl_current_balance.setStyleSheet("background-color: #fef2f2; padding: 4px 8px; border-radius: 0px; font-weight: bold; color: #dc2626;")
 
         avail = max(0.0, limit - bal) if limit > 0 else 0.0
         self.lbl_available_credit.setText(f"Disponible : {format_money(avail)} DA")
@@ -697,8 +823,7 @@ class WholesaleSalesTab(QWidget):
             return p1 or 0.0
 
     def _reapply_client_prices_to_cart(self):
-        client = self._get_current_client()
-        tier = client.get('Price_Tier') if client else 'Prix_1'
+        tier = self._get_current_price_tier()
 
         for row in range(self.cart_table.rowCount()):
             item_prod = self.cart_table.item(row, 2)
@@ -707,17 +832,50 @@ class WholesaleSalesTab(QWidget):
             batch = item_prod.data(Qt.UserRole)
             if not batch:
                 continue
+
+            cell_sample = self.cart_table.cellWidget(row, 8)
+            chk_sample = None
+            if cell_sample:
+                chk_sample = cell_sample.findChild(QCheckBox) if not isinstance(cell_sample, QCheckBox) else cell_sample
+            if chk_sample and chk_sample.isChecked():
+                continue
+
             resolved_p = self._resolve_price_tier(batch, tier)
             spin_price = self.cart_table.cellWidget(row, 7)
             if spin_price:
                 spin_price.setValue(resolved_p)
         self.calculate_totals()
 
+    def _on_quick_qty_return(self):
+        self.spin_quick_discount.setFocus()
+        self.spin_quick_discount.selectAll()
+
+    def _commit_pending_item(self):
+        if hasattr(self, 'pending_batch') and self.pending_batch:
+            batch = self.pending_batch
+            qty = self.spin_quick_qty.value()
+            discount = self.spin_quick_discount.value()
+            self.add_batch_to_cart(batch, qty=qty, discount=discount)
+            self.pending_batch = None
+            self.search_input.clear()
+            self.spin_quick_qty.setValue(1.0)
+            self.spin_quick_discount.setValue(0.0)
+            self.search_input.setFocus()
+        else:
+            self._on_search_return()
+
     def _on_search_selected(self, text):
         batch = self.search_map.get(text)
         if batch:
-            self.add_batch_to_cart(batch, qty=self.spin_quick_qty.value())
-            self.search_input.clear()
+            pid = batch.get('Product_ID')
+            all_batches = self.product_batches_map.get(pid, [])
+            if len(all_batches) > 1:
+                self._open_lot_split_dialog(batch.get('Product_Name', ''), all_batches)
+            else:
+                self.pending_batch = batch
+                self.search_input.setText(f"{batch.get('Product_Name')} (Lot: {batch.get('Lot_Number')})")
+                self.spin_quick_qty.setFocus()
+                self.spin_quick_qty.selectAll()
 
     def _on_search_return(self):
         text = self.search_input.text().strip()
@@ -738,21 +896,92 @@ class WholesaleSalesTab(QWidget):
             ]
             if len(matches) == 1:
                 batch = matches[0]
+            elif len(matches) > 1:
+                first_pid = matches[0].get('Product_ID')
+                if all(b.get('Product_ID') == first_pid for b in matches):
+                    self._open_lot_split_dialog(matches[0].get('Product_Name', ''), matches)
+                    return
+                else:
+                    batch = matches[0]
 
         if batch:
-            self.add_batch_to_cart(batch, qty=self.spin_quick_qty.value())
-            self.search_input.clear()
+            pid = batch.get('Product_ID')
+            all_batches = self.product_batches_map.get(pid, [])
+            if len(all_batches) > 1:
+                self._open_lot_split_dialog(batch.get('Product_Name', ''), all_batches)
+            else:
+                self.pending_batch = batch
+                self.search_input.setText(f"{batch.get('Product_Name')} (Lot: {batch.get('Lot_Number')})")
+                self.spin_quick_qty.setFocus()
+                self.spin_quick_qty.selectAll()
         else:
             QMessageBox.warning(self, "Recherche", "Aucun produit ou lot correspondant trouvé.")
 
-    def add_batch_to_cart(self, batch, qty=1.0):
+    def _open_lot_split_dialog(self, product_name, batches):
+        tier = self._get_current_price_tier()
+        dlg = MultiLotSelectionDialog(
+            parent=self,
+            product_name=product_name,
+            batches=batches,
+            requested_qty=self.spin_quick_qty.value(),
+            price_tier=tier,
+            resolve_price_fn=self._resolve_price_tier
+        )
+        if dlg.exec() and dlg.allocations:
+            discount = self.spin_quick_discount.value()
+            for b, qty in dlg.allocations:
+                self.add_batch_to_cart(b, qty=qty, discount=discount)
+            self.search_input.clear()
+            self.pending_batch = None
+            self.spin_quick_qty.setValue(1.0)
+            self.spin_quick_discount.setValue(0.0)
+            self.search_input.setFocus()
+
+    def _open_split_from_cart_row(self, batch):
+        if not batch:
+            return
+        pid = batch.get('Product_ID')
+        pbatches = self.product_batches_map.get(pid, [])
+        if not pbatches:
+            pbatches = [batch]
+        self._open_lot_split_dialog(batch.get('Product_Name', ''), pbatches)
+
+    def _prompt_remove_row(self, row_or_btn):
+        if isinstance(row_or_btn, int):
+            row = row_or_btn
+        else:
+            row = -1
+            for r in range(self.cart_table.rowCount()):
+                cell_w = self.cart_table.cellWidget(r, 0)
+                if cell_w and (cell_w == row_or_btn or cell_w.isAncestorOf(row_or_btn)):
+                    row = r
+                    break
+        if row < 0 or row >= self.cart_table.rowCount():
+            return
+
+        item_p = self.cart_table.item(row, 2)
+        pname = item_p.text() if item_p else "ce produit"
+        item_l = self.cart_table.item(row, 3)
+        lot = item_l.text() if item_l else "-"
+
+        res = QMessageBox.question(
+            self,
+            "Supprimer la Ligne",
+            f"Êtes-vous sûr de vouloir retirer '{pname}' (Lot: {lot}) du panier ?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if res == QMessageBox.Yes:
+            self.cart_table.removeRow(row)
+            self.calculate_totals()
+
+    def add_batch_to_cart(self, batch, qty=1.0, discount=0.0, is_sample=False):
         # Check if already in cart
         batch_id = batch.get('Batch_ID')
         for r in range(self.cart_table.rowCount()):
             item_p = self.cart_table.item(r, 2)
             existing = item_p.data(Qt.UserRole) if item_p else None
             if existing and existing.get('Batch_ID') == batch_id:
-                spin_q = self.cart_table.cellWidget(r, 8)
+                spin_q = self.cart_table.cellWidget(r, 9)
                 if spin_q:
                     spin_q.setValue(spin_q.value() + qty)
                 self.calculate_totals()
@@ -761,37 +990,58 @@ class WholesaleSalesTab(QWidget):
         row = self.cart_table.rowCount()
         self.cart_table.insertRow(row)
 
-        client = self._get_current_client()
-        tier = client.get('Price_Tier') if client else 'Prix_1'
+        tier = self._get_current_price_tier()
         unit_price = self._resolve_price_tier(batch, tier)
         max_stock = float(batch.get('Quantity_Current') or 0.0)
 
-        # 0. Delete button (touch sized)
+        # 0. Actions Container (Delete 🗑️ + Split 📦)
+        action_widget = QWidget()
+        action_layout = QHBoxLayout(action_widget)
+        action_layout.setContentsMargins(2, 2, 2, 2)
+        action_layout.setSpacing(4)
+        action_layout.setAlignment(Qt.AlignCenter)
+
         btn_del = QPushButton("🗑️")
         btn_del.setCursor(Qt.PointingHandCursor)
-        btn_del.setFixedSize(34, 34)
-        btn_del.setToolTip("Supprimer cette ligne")
+        btn_del.setFixedSize(30, 32)
+        btn_del.setToolTip("Supprimer cette ligne du panier")
         btn_del.setStyleSheet("""
             QPushButton {
                 border: 1px solid #fca5a5;
                 background-color: #fee2e2;
                 color: #dc2626;
                 border-radius: 0px;
-                font-size: 13px;
+                font-size: 12px;
             }
             QPushButton:hover {
                 background-color: #fecaca;
                 border-color: #ef4444;
             }
         """)
-        btn_del.clicked.connect(lambda _, r_btn=btn_del: self._remove_cart_row(r_btn))
+        btn_del.clicked.connect(lambda _, b=btn_del: self._prompt_remove_row(b))
+        action_layout.addWidget(btn_del)
 
-        del_container = QWidget()
-        del_lay = QHBoxLayout(del_container)
-        del_lay.setContentsMargins(0, 0, 0, 0)
-        del_lay.setAlignment(Qt.AlignCenter)
-        del_lay.addWidget(btn_del)
-        self.cart_table.setCellWidget(row, 0, del_container)
+        btn_split = QPushButton("📦")
+        btn_split.setCursor(Qt.PointingHandCursor)
+        btn_split.setFixedSize(30, 32)
+        btn_split.setToolTip("Scinder ou répartir sur d'autres lots de ce produit")
+        btn_split.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #93c5fd;
+                background-color: #eff6ff;
+                color: #1d4ed8;
+                border-radius: 0px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #dbeafe;
+                border-color: #3b82f6;
+            }
+        """)
+        btn_split.clicked.connect(lambda _, b=batch: self._open_split_from_cart_row(b))
+        action_layout.addWidget(btn_split)
+
+        self.cart_table.setCellWidget(row, 0, action_widget)
 
         # 1. Barcode
         codes = self._extract_barcodes(batch)
@@ -821,15 +1071,16 @@ class WholesaleSalesTab(QWidget):
         item_loc.setTextAlignment(Qt.AlignCenter)
         self.cart_table.setItem(row, 5, item_loc)
 
-        # 6. Stock Dispo
-        item_stk = QTableWidgetItem(str(max_stock))
+        # 6. Stock Dispo (Right aligned)
+        item_stk = QTableWidgetItem(f"{max_stock:g}")
         item_stk.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        item_stk.setFont(QFont("Segoe UI", 9, QFont.Bold))
         self.cart_table.setItem(row, 6, item_stk)
 
         # 7. Unit Price HT (Editable SpinBox)
         spin_p = QDoubleSpinBox()
         spin_p.setRange(0.0, 99999999.0)
-        spin_p.setValue(unit_price)
+        spin_p.setValue(0.0 if is_sample else unit_price)
         spin_p.setDecimals(2)
         spin_p.setButtonSymbols(QDoubleSpinBox.NoButtons)
         spin_p.setAlignment(Qt.AlignRight)
@@ -851,7 +1102,19 @@ class WholesaleSalesTab(QWidget):
         spin_p.valueChanged.connect(self.calculate_totals)
         self.cart_table.setCellWidget(row, 7, spin_p)
 
-        # 8. Qty Sold (SpinBox)
+        # 8. Échantillon / Gratuité Checkbox
+        chk_sample_widget = QWidget()
+        chk_sample_lay = QHBoxLayout(chk_sample_widget)
+        chk_sample_lay.setContentsMargins(0, 0, 0, 0)
+        chk_sample_lay.setAlignment(Qt.AlignCenter)
+        chk_sample = QCheckBox()
+        chk_sample.setChecked(is_sample)
+        chk_sample.setToolTip("Cocher s'il s'agit d'un échantillon promotionnel ou d'une gratuité commerciale (Prix 0.00 DA autorisé)")
+        chk_sample.toggled.connect(self.calculate_totals)
+        chk_sample_lay.addWidget(chk_sample)
+        self.cart_table.setCellWidget(row, 8, chk_sample_widget)
+
+        # 9. Qty Sold (SpinBox)
         spin_q = QDoubleSpinBox()
         spin_q.setRange(0.01, max_stock if max_stock > 0 else 999999.0)
         spin_q.setValue(min(qty, max_stock if max_stock > 0 else qty))
@@ -873,12 +1136,12 @@ class WholesaleSalesTab(QWidget):
             }
         """)
         spin_q.valueChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row, 8, spin_q)
+        self.cart_table.setCellWidget(row, 9, spin_q)
 
-        # 9. Discount % (SpinBox)
+        # 10. Discount % (SpinBox)
         spin_d = QDoubleSpinBox()
         spin_d.setRange(0.0, 100.0)
-        spin_d.setValue(0.0)
+        spin_d.setValue(discount)
         spin_d.setDecimals(2)
         spin_d.setAlignment(Qt.AlignCenter)
         spin_d.setSuffix(" %")
@@ -899,34 +1162,26 @@ class WholesaleSalesTab(QWidget):
             }
         """)
         spin_d.valueChanged.connect(self.calculate_totals)
-        self.cart_table.setCellWidget(row, 9, spin_d)
+        self.cart_table.setCellWidget(row, 10, spin_d)
 
-        # 10. Total HT
-        item_tht = QTableWidgetItem("0.00")
+        # 11. Total HT
+        item_tht = QTableWidgetItem("0.00 DA")
         item_tht.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.cart_table.setItem(row, 10, item_tht)
+        self.cart_table.setItem(row, 11, item_tht)
 
-        # 11. TVA %
+        # 12. TVA %
         tva_pct = float(batch.get('Selling_TVA_Percent') or 0.0)
         item_tva = QTableWidgetItem(f"{tva_pct:.1f}%")
         item_tva.setData(Qt.UserRole, tva_pct)
         item_tva.setTextAlignment(Qt.AlignCenter)
-        self.cart_table.setItem(row, 11, item_tva)
+        self.cart_table.setItem(row, 12, item_tva)
 
-        # 12. Total TTC
-        item_ttc = QTableWidgetItem("0.00")
+        # 13. Total TTC
+        item_ttc = QTableWidgetItem("0.00 DA")
         item_ttc.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
         item_ttc.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        self.cart_table.setItem(row, 12, item_ttc)
+        self.cart_table.setItem(row, 13, item_ttc)
 
-        self.calculate_totals()
-
-    def _remove_cart_row(self, btn):
-        for r in range(self.cart_table.rowCount()):
-            cell_w = self.cart_table.cellWidget(r, 0)
-            if cell_w == btn or (cell_w and cell_w.findChild(QPushButton) == btn):
-                self.cart_table.removeRow(r)
-                break
         self.calculate_totals()
 
     def clear_cart(self):
@@ -941,16 +1196,38 @@ class WholesaleSalesTab(QWidget):
 
         for r in range(self.cart_table.rowCount()):
             spin_p = self.cart_table.cellWidget(r, 7)
-            spin_q = self.cart_table.cellWidget(r, 8)
-            spin_d = self.cart_table.cellWidget(r, 9)
-            item_tva = self.cart_table.item(r, 11)
+            cell_sample = self.cart_table.cellWidget(r, 8)
+            spin_q = self.cart_table.cellWidget(r, 9)
+            spin_d = self.cart_table.cellWidget(r, 10)
+            item_tva = self.cart_table.item(r, 12)
 
             if not (spin_p and spin_q and spin_d):
                 continue
 
-            price = spin_p.value()
+            is_sample = False
+            if cell_sample:
+                box = cell_sample.findChild(QCheckBox) if not isinstance(cell_sample, QCheckBox) else cell_sample
+                if box and box.isChecked():
+                    is_sample = True
+
+            if is_sample:
+                spin_p.blockSignals(True)
+                spin_p.setValue(0.0)
+                spin_p.setEnabled(False)
+                spin_p.blockSignals(False)
+                spin_d.blockSignals(True)
+                spin_d.setValue(0.0)
+                spin_d.setEnabled(False)
+                spin_d.blockSignals(False)
+                price = 0.0
+                remise_pct = 0.0
+            else:
+                spin_p.setEnabled(True)
+                spin_d.setEnabled(True)
+                price = spin_p.value()
+                remise_pct = spin_d.value()
+
             qty = spin_q.value()
-            remise_pct = spin_d.value()
             tva_pct = float(item_tva.data(Qt.UserRole) or 0.0) if item_tva else 0.0
 
             raw_ht = price * qty
@@ -964,13 +1241,13 @@ class WholesaleSalesTab(QWidget):
             grand_tva += tva_amount
             grand_ttc += line_ttc
 
-            # Update row cells
-            item_tht = self.cart_table.item(r, 10)
+            # Update row cells with right-aligned formatted text
+            item_tht = self.cart_table.item(r, 11)
             if item_tht:
-                item_tht.setText(format_money(net_ht))
-            item_ttc = self.cart_table.item(r, 12)
+                item_tht.setText(f"{format_money(net_ht)} DA")
+            item_ttc = self.cart_table.item(r, 13)
             if item_ttc:
-                item_ttc.setText(format_money(line_ttc))
+                item_ttc.setText(f"{format_money(line_ttc)} DA")
 
         self.lbl_summary_ht.setText(f"Total HT : {format_money(grand_ht)} DA")
         self.lbl_summary_remise.setText(f"Remise : {format_money(grand_remise)} DA")
@@ -988,9 +1265,16 @@ class WholesaleSalesTab(QWidget):
                 continue
 
             spin_p = self.cart_table.cellWidget(r, 7)
-            spin_q = self.cart_table.cellWidget(r, 8)
-            spin_d = self.cart_table.cellWidget(r, 9)
-            item_tva = self.cart_table.item(r, 11)
+            cell_sample = self.cart_table.cellWidget(r, 8)
+            spin_q = self.cart_table.cellWidget(r, 9)
+            spin_d = self.cart_table.cellWidget(r, 10)
+            item_tva = self.cart_table.item(r, 12)
+
+            is_sample = False
+            if cell_sample:
+                box = cell_sample.findChild(QCheckBox) if not isinstance(cell_sample, QCheckBox) else cell_sample
+                if box and box.isChecked():
+                    is_sample = True
 
             tva_pct = float(item_tva.data(Qt.UserRole) or 0.0) if item_tva else 0.0
 
@@ -1001,9 +1285,10 @@ class WholesaleSalesTab(QWidget):
                 'lot_number': batch.get('Lot_Number', ''),
                 'expiry_date': str(batch.get('Expiry_Date') or ''),
                 'qty_sold': spin_q.value(),
-                'unit_price_ht': spin_p.value(),
-                'discount_percent': spin_d.value(),
-                'tva_percent': tva_pct
+                'unit_price_ht': 0.0 if is_sample else spin_p.value(),
+                'discount_percent': 0.0 if is_sample else spin_d.value(),
+                'tva_percent': tva_pct,
+                'is_sample': is_sample
             })
         return items
 
@@ -1029,33 +1314,56 @@ class WholesaleSalesTab(QWidget):
             QMessageBox.warning(self, "Panier", "Le panier est vide. Veuillez ajouter des produits.")
             return
 
+        # 1. Zero-price entry guard
+        for it in cart_items:
+            if it['unit_price_ht'] <= 0.0 and not it.get('is_sample', False):
+                QMessageBox.critical(
+                    self,
+                    "Prix Unitaire Nul Interdit (Bloquant)",
+                    f"Le produit '{it.get('product_name')}' (Lot: {it.get('lot_number', '-')}) a un prix de vente unitaire HT nul (0,00 DA).\n\n"
+                    "Conformément aux règles comptables et fiscales de vente en gros, un prix nul est bloquant.\n\n"
+                    "👉 Veuillez renseigner un prix unitaire valide, ou cochez 'Échantillon' si ce produit est offert gracieusement."
+                )
+                return
+
         doc_type = self.cb_doc_type.currentData()
         order_date_str = self.date_order.date().toString("yyyy-MM-dd")
         due_date_str = self.date_due.date().toString("yyyy-MM-dd")
         payment_method = self.cb_payment_method.currentData()
 
-        # Check credit limit alert
+        # 2. Credit Limit & Overdue Risk Hard Lock
         limit = float(client.get('Credit_Limit') or 0.0)
         curr_bal = float(client.get('Current_Balance') or 0.0)
         grand_ttc = sum(
             (it['qty_sold'] * it['unit_price_ht'] * (1 - it['discount_percent'] / 100.0)) * (1 + it['tva_percent'] / 100.0)
             for it in cart_items
         )
+        projected_bal = curr_bal + grand_ttc
 
-        if payment_method == 'Credit' and limit > 0 and (curr_bal + grand_ttc) > limit:
-            diff = (curr_bal + grand_ttc) - limit
-            res = QMessageBox.warning(
-                self,
-                "Dépassement de Plafond de Crédit",
-                f"Attention : Cette vente porte l'encours du client à {format_money(curr_bal + grand_ttc)} DA,\n"
-                f"dépassant le plafond autorisé de {format_money(limit)} DA (Excédent: {format_money(diff)} DA).\n\n"
-                f"Souhaitez-vous quand même poursuivre la validation ?",
-                QMessageBox.Yes | QMessageBox.No
+        override_notes = ""
+        if payment_method == 'Credit' and limit > 0 and projected_bal > limit:
+            diff = projected_bal - limit
+            dlg = SupervisorOverrideDialog(
+                parent=self,
+                data_manager=self.data_manager,
+                client_name=client.get('Client_Name', ''),
+                credit_limit=limit,
+                current_balance=curr_bal,
+                document_amount=grand_ttc,
+                projected_balance=projected_bal,
+                excess_amount=diff
             )
-            if res != QMessageBox.Yes:
+            if not dlg.exec() or not dlg.approved:
+                # Blocked without supervisor clearance
                 return
 
+            info = dlg.get_override_info()
+            sup_user = info.get('supervisor_user') or {}
+            sup_name = sup_user.get('Username') or sup_user.get('Full_Name') or 'Superviseur'
+            override_notes = f"[DÉROGATION CRÉDIT : Autorisée par {sup_name} | Motif: {info['reason']}]"
+
         # Execute Document Creation
+        doc_notes = f"{override_notes}".strip() or None
         success, result = self.data_manager.sales.create_wholesale_document(
             client_id=client_id,
             doc_type=doc_type,
@@ -1063,6 +1371,7 @@ class WholesaleSalesTab(QWidget):
             due_date=due_date_str,
             cart_items=cart_items,
             payment_method=payment_method,
+            notes=doc_notes,
             user_id=self._get_current_user_id()
         )
 
@@ -1079,6 +1388,9 @@ class WholesaleSalesTab(QWidget):
             msg += "\n\n• Le stock correspondant a été déduit atomiquement."
         else:
             msg += "\n\n• Document enregistré en brouillon (aucun mouvement de stock)."
+
+        if override_notes:
+            msg += f"\n\n• {override_notes}"
 
         # Prompt for PDF generation
         reply = QMessageBox.information(

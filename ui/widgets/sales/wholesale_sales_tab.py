@@ -8,10 +8,10 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QComboBox, QMessageBox, QDoubleSpinBox, QDateEdit, QFrame,
-    QCompleter, QSizePolicy, QFileDialog, QShortcut
+    QCompleter, QSizePolicy, QFileDialog
 )
 from PySide6.QtCore import Qt, QDate, QStringListModel
-from PySide6.QtGui import QColor, QFont, QKeySequence
+from PySide6.QtGui import QColor, QFont, QKeySequence, QShortcut
 
 from ui.formatting import format_money
 from branding import get_logo_path

@@ -150,34 +150,70 @@ class LocationManager:
     # ============================================================
     #  3. إدارة المواقع (Locations CRUD)
     # ============================================================
-    def add_location(self, name: str, type_id: int, temperature_zone: str, parent_id: Optional[int] = None) -> Optional[int]:
+    def get_pos_locations(self) -> List[Dict]:
+        """
+        جلب المواقع المخصصة والمؤهلة للبيع في نقطة البيع (POS) فقط.
+        (Visibility = 'Public' AND Allow_POS_Sales = TRUE)
+        """
+        raw_list = self.get_all_locations_flat()
+        return [
+            loc for loc in raw_list 
+            if loc.get('Visibility') == 'Public' and loc.get('Allow_POS_Sales')
+        ]
+
+    def add_location(
+        self, 
+        name: str, 
+        type_id: int, 
+        temperature_zone: str, 
+        parent_id: Optional[int] = None,
+        visibility: str = 'Private',
+        allow_pos_sales: bool = False
+    ) -> Optional[int]:
+        if visibility != 'Public':
+            allow_pos_sales = False
+
         try:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor()
                 query = """
-                    INSERT INTO Locations (Location_Name, Type_ID, Temperature_Zone, Parent_Location_ID) 
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO Locations 
+                    (Location_Name, Type_ID, Temperature_Zone, Parent_Location_ID, Visibility, Allow_POS_Sales) 
+                    VALUES (%s, %s, %s, %s, %s, %s)
                 """
-                cursor.execute(query, (name, type_id, temperature_zone, parent_id))
+                cursor.execute(query, (name, type_id, temperature_zone, parent_id, visibility, bool(allow_pos_sales)))
                 return cursor.lastrowid
         except mysql.connector.Error as err:
             logging.error(f"Error adding location: {err}")
             return None
 
-    def update_location(self, location_id: int, name: str, type_id: int, temperature_zone: str, parent_id: Optional[int] = None) -> bool:
+    def update_location(
+        self, 
+        location_id: int, 
+        name: str, 
+        type_id: int, 
+        temperature_zone: str, 
+        parent_id: Optional[int] = None,
+        visibility: str = 'Private',
+        allow_pos_sales: bool = False
+    ) -> bool:
         if parent_id is not None:
             if location_id == parent_id: return False
             if self._is_descendant(location_id, parent_id): return False
+
+        if visibility != 'Public':
+            allow_pos_sales = False
 
         try:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor()
                 query = """
                     UPDATE Locations 
-                    SET Location_Name = %s, Type_ID = %s, Temperature_Zone = %s, Parent_Location_ID = %s
+                    SET Location_Name = %s, Type_ID = %s, Temperature_Zone = %s, 
+                        Parent_Location_ID = %s, Visibility = %s, Allow_POS_Sales = %s
                     WHERE Location_ID = %s
                 """
-                cursor.execute(query, (name, type_id, temperature_zone, parent_id, location_id))
+                cursor.execute(query, (name, type_id, temperature_zone, parent_id, visibility, bool(allow_pos_sales), location_id))
                 return True
         except mysql.connector.Error as err:
             logging.error(f"Error updating location: {err}")

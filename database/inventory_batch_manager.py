@@ -1154,7 +1154,11 @@ class InventoryBatchManager:
                         P.Usage_Qty_Per_Stock_Unit,
                         P.Barcode,
                         L.Location_Name,
+                        L.Visibility,
+                        L.Allow_POS_Sales,
                         B.Location_ID,
+                        B.Parent_Batch_ID,
+                        B.Batch_Type,
                         B.PO_ID,
                         B.BR_ID,
                         B.Status,
@@ -1353,8 +1357,9 @@ class InventoryBatchManager:
                          Quantity_Initial, Quantity_Current, Status, Created_At,
                          Unit_Price_Received, Tax_Rate_Percent, Discount_Percent,
                          Selling_Price_HT, Selling_Price_HT_2, Selling_Price_HT_3, Selling_Price_HT_4,
-                         Selling_TVA_Percent, Reception_Note, Supplier_ID, External_Barcode, Internal_Barcode, PO_ID, BR_ID)
-                        VALUES (%s, %s, %s, %s, %s, %s, 'Available', NOW(), %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, 'TMP', NULL, NULL)
+                         Selling_TVA_Percent, Reception_Note, Supplier_ID, External_Barcode, Internal_Barcode, PO_ID, BR_ID,
+                         Parent_Batch_ID, Batch_Type)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'Available', NOW(), %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, 'TMP', NULL, NULL, %s, 'Extracted_Retail')
                     """
 
                     cursor.execute(insert_query, (
@@ -1374,6 +1379,7 @@ class InventoryBatchManager:
                         source.get('Selling_TVA_Percent', 0.0),
                         source.get('Supplier_ID'),
                         source.get('External_Barcode', ''),
+                        batch_id,
                     ))
                     new_batch_id = cursor.lastrowid
 
@@ -1458,6 +1464,170 @@ class InventoryBatchManager:
         except Exception as e:
             logging.error(f"Critical Error in unpack_and_transfer_batch: {e}", exc_info=True)
             return False, str(e), None
+
+    def extract_retail_batch(
+        self,
+        parent_batch_id: int,
+        extracted_qty: float,
+        retail_product_id: Optional[int] = None,
+        target_location_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        custom_barcode: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Extrait une quantité d'un lot parent (vrac / gros) pour créer un sous-lot de détail (Extracted_Retail).
+        Garantit l'atomicité de la transaction et journalise le mouvement dans Stock_Movement_Log avec 'BULK_EXTRACTION'.
+        """
+        if extracted_qty <= 0:
+            return {"success": False, "message": "La quantité extraite doit être supérieure à zéro."}
+
+        try:
+            with self.db.get_db_connection() as conn:
+                conn.autocommit = False
+                cursor = conn.cursor(dictionary=True)
+                try:
+                    # 1. Verrouiller et récupérer le lot parent
+                    cursor.execute("""
+                        SELECT b.*, p.Product_Name, p.Stock_Unit, p.Usage_Unit
+                        FROM Inventory_Batches b
+                        JOIN Products_Master p ON b.Product_ID = p.Product_ID
+                        WHERE b.Batch_ID = %s FOR UPDATE
+                    """, (parent_batch_id,))
+                    parent = cursor.fetchone()
+                    if not parent:
+                        conn.rollback()
+                        return {"success": False, "message": f"Lot parent #{parent_batch_id} introuvable."}
+
+                    parent_stock = float(parent.get('Quantity_Current') or 0.0)
+                    if parent_stock < extracted_qty:
+                        conn.rollback()
+                        return {
+                            "success": False,
+                            "message": f"Stock parent insuffisant (Disponible: {parent_stock}, Demandé: {extracted_qty})."
+                        }
+
+                    # Résolution des cibles
+                    resolved_product_id = retail_product_id if retail_product_id is not None else parent['Product_ID']
+                    resolved_location_id = target_location_id if target_location_id is not None else parent['Location_ID']
+
+                    # 2. Déduction du stock parent
+                    new_parent_qty = Decimal(str(parent['Quantity_Current'])) - Decimal(str(extracted_qty))
+                    new_parent_status = 'Depleted' if new_parent_qty <= 0 else parent.get('Status', 'Available')
+                    cursor.execute("""
+                        UPDATE Inventory_Batches
+                        SET Quantity_Current = %s, Status = %s
+                        WHERE Batch_ID = %s
+                    """, (new_parent_qty, new_parent_status, parent_batch_id))
+
+                    # 3. Code-barres pour le lot extrait
+                    if custom_barcode and custom_barcode.strip():
+                        child_barcode = custom_barcode.strip()
+                    else:
+                        child_barcode = self.generate_unique_barcode()
+
+                    # 4. Insertion du nouveau lot enfant
+                    insert_query = """
+                        INSERT INTO Inventory_Batches
+                        (Parent_Batch_ID, Batch_Type, Product_ID, Location_ID, Lot_Number, Expiry_Date,
+                         Quantity_Initial, Quantity_Current, Status, Created_At,
+                         Unit_Price_Received, Tax_Rate_Percent, Discount_Percent,
+                         Selling_Price_HT, Selling_Price_HT_2, Selling_Price_HT_3, Selling_Price_HT_4,
+                         Selling_TVA_Percent, Reception_Note, Supplier_ID, External_Barcode, Internal_Barcode)
+                        VALUES (%s, 'Extracted_Retail', %s, %s, %s, %s, %s, %s, 'Available', NOW(),
+                                %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s)
+                    """
+                    cursor.execute(insert_query, (
+                        parent_batch_id,
+                        resolved_product_id,
+                        resolved_location_id,
+                        parent.get('Lot_Number') or '',
+                        parent.get('Expiry_Date'),
+                        Decimal(str(extracted_qty)),
+                        Decimal(str(extracted_qty)),
+                        parent.get('Unit_Price_Received', 0.0),
+                        parent.get('Tax_Rate_Percent', 0.0),
+                        parent.get('Discount_Percent', 0.0),
+                        parent.get('Selling_Price_HT', 0.0),
+                        parent.get('Selling_Price_HT_2', 0.0),
+                        parent.get('Selling_Price_HT_3', 0.0),
+                        parent.get('Selling_Price_HT_4', 0.0),
+                        parent.get('Selling_TVA_Percent', 0.0),
+                        parent.get('Supplier_ID'),
+                        parent.get('External_Barcode', ''),
+                        child_barcode
+                    ))
+                    child_batch_id = cursor.lastrowid
+
+                    # 5. Journalisation des mouvements dans Stock_Movement_Log
+                    unit_used = parent.get('Usage_Unit') or parent.get('Stock_Unit') or 'Unité'
+                    note_parent = f"Extraction détail vers lot #{child_batch_id} (Quantité: {extracted_qty})"
+                    note_child = f"Extrait du lot parent #{parent_batch_id} (Quantité: {extracted_qty})"
+
+                    try:
+                        self.stock_movement_log.create_movement_log(
+                            product_id=parent['Product_ID'],
+                            movement_type='BULK_EXTRACTION',
+                            qty_change=Decimal(str(-abs(extracted_qty))),
+                            unit_used=unit_used,
+                            batch_id=parent_batch_id,
+                            user_id=user_id,
+                            notes=note_parent,
+                            external_cursor=cursor
+                        )
+                        self.stock_movement_log.create_movement_log(
+                            product_id=resolved_product_id,
+                            movement_type='BULK_EXTRACTION',
+                            qty_change=Decimal(str(extracted_qty)),
+                            unit_used=unit_used,
+                            batch_id=child_batch_id,
+                            user_id=user_id,
+                            notes=note_child,
+                            external_cursor=cursor
+                        )
+                    except Exception as log_err:
+                        logging.warning(f"BULK_EXTRACTION movement log fallback to Transfer: {log_err}")
+                        self.stock_movement_log.create_movement_log(
+                            product_id=parent['Product_ID'],
+                            movement_type='Transfer',
+                            qty_change=Decimal(str(-abs(extracted_qty))),
+                            unit_used=unit_used,
+                            batch_id=parent_batch_id,
+                            user_id=user_id,
+                            notes=f"[BULK_EXTRACTION] {note_parent}",
+                            external_cursor=cursor
+                        )
+                        self.stock_movement_log.create_movement_log(
+                            product_id=resolved_product_id,
+                            movement_type='Transfer',
+                            qty_change=Decimal(str(extracted_qty)),
+                            unit_used=unit_used,
+                            batch_id=child_batch_id,
+                            user_id=user_id,
+                            notes=f"[BULK_EXTRACTION] {note_child}",
+                            external_cursor=cursor
+                        )
+
+                    conn.commit()
+                    return {
+                        "success": True,
+                        "parent_batch_id": parent_batch_id,
+                        "child_batch_id": child_batch_id,
+                        "barcode": child_barcode,
+                        "extracted_qty": float(extracted_qty),
+                        "parent_remaining_qty": float(new_parent_qty),
+                        "retail_product_id": resolved_product_id,
+                        "target_location_id": resolved_location_id
+                    }
+
+                except Exception as inner_e:
+                    conn.rollback()
+                    logging.error(f"Error in extract_retail_batch: {inner_e}", exc_info=True)
+                    return {"success": False, "message": str(inner_e)}
+                finally:
+                    cursor.close()
+        except Exception as e:
+            logging.error(f"Database error in extract_retail_batch: {e}", exc_info=True)
+            return {"success": False, "message": str(e)}
 
     def update_batch_sales_prices(
         self,

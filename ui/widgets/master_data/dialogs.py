@@ -746,9 +746,22 @@ class LocationDialog(BaseDialog):
         self.zone_combo.addItem("Congelé (-20°C)", "Frozen -20")
         self.zone_combo.addItem("Congélation Profonde (-80°C)", "Deep Freeze -80")
         
+        # Visibilité (Privé vs Public)
+        self.visibility_combo = QComboBox()
+        self.visibility_combo.addItem("Privé (Dépôt / Réserve / Gros)", "Private")
+        self.visibility_combo.addItem("Public (Magasin / Rayon / Détail)", "Public")
+
+        # Autorisation POS
+        self.allow_pos_cb = QCheckBox("Autoriser la vente en caisse (POS)")
+        self.allow_pos_cb.setEnabled(False)
+
+        self.visibility_combo.currentIndexChanged.connect(self._on_visibility_changed)
+
         layout.addRow("Nom de l'Emplacement * :", self.name_input)
         layout.addRow("Type d'Emplacement * :", self.type_combo)
         layout.addRow("Condition de Température :", self.zone_combo)
+        layout.addRow("Visibilité * :", self.visibility_combo)
+        layout.addRow("Vente Caisse (POS) :", self.allow_pos_cb)
 
         if self.data:
             self.name_input.setText(self.data.get('Location_Name', ''))
@@ -765,11 +778,27 @@ class LocationDialog(BaseDialog):
                 if idx_type >= 0:
                     self.type_combo.setCurrentIndex(idx_type)
 
+            vis = self.data.get('Visibility', 'Private')
+            idx_v = self.visibility_combo.findData(vis)
+            if idx_v >= 0:
+                self.visibility_combo.setCurrentIndex(idx_v)
+            self._on_visibility_changed()
+            if self.allow_pos_cb.isEnabled():
+                self.allow_pos_cb.setChecked(bool(self.data.get('Allow_POS_Sales', False)))
+
+    def _on_visibility_changed(self):
+        is_public = self.visibility_combo.currentData() == "Public"
+        self.allow_pos_cb.setEnabled(is_public)
+        if not is_public:
+            self.allow_pos_cb.setChecked(False)
+
     def get_data(self):
         name = self.name_input.text().strip()
         type_id = self.type_combo.currentData()
         # سحب القيمة الإنجليزية (Data) وليس النص الفرنسي (Text)
         zone_db_value = self.zone_combo.currentData()
+        visibility = self.visibility_combo.currentData() or "Private"
+        allow_pos = self.allow_pos_cb.isChecked()
         
         if not name:
             QMessageBox.warning(self, "Erreur", "Le nom de l'emplacement est obligatoire.")
@@ -779,10 +808,21 @@ class LocationDialog(BaseDialog):
             QMessageBox.warning(self, "Erreur", "Le type d'emplacement est obligatoire.")
             return None
 
+        # Validation Rule: Allow_POS_Sales cannot be checked if Visibility is 'Private'
+        if visibility == "Private" and allow_pos:
+            QMessageBox.warning(
+                self, 
+                "Règle de Gestion", 
+                "Un emplacement privé ne peut pas être autorisé à la vente POS."
+            )
+            return None
+
         return {
             "Location_Name": name,
             "Type_ID": type_id,
-            "Temperature_Zone": zone_db_value # القيمة التي ستذهب لقاعدة البيانات
+            "Temperature_Zone": zone_db_value,
+            "Visibility": visibility,
+            "Allow_POS_Sales": allow_pos
         }
 
 
@@ -1211,6 +1251,18 @@ class ClientDialog(BaseDialog):
         self.commercial_reg_input = QLineEdit()
         self.commercial_reg_input.setPlaceholderText("RC / Registre de Commerce")
 
+        self.price_tier_combo = QComboBox()
+        self.price_tier_combo.addItem("Prix 1 (Détail / Standard)", "Prix_1")
+        self.price_tier_combo.addItem("Prix 2 (Demi-Gros)", "Prix_2")
+        self.price_tier_combo.addItem("Prix 3 (Gros)", "Prix_3")
+        self.price_tier_combo.addItem("Prix 4 (Super-Gros / Revendeur)", "Prix_4")
+
+        self.credit_limit_spin = QDoubleSpinBox()
+        self.credit_limit_spin.setRange(0.0, 999999999.0)
+        self.credit_limit_spin.setDecimals(2)
+        self.credit_limit_spin.setSingleStep(1000.0)
+        self.credit_limit_spin.setSuffix(" DA")
+
         layout.addRow("Nom du Client * :", self.name_input)
         layout.addRow("Contact :", self.contact_input)
         layout.addRow("Téléphone :", self.phone_input)
@@ -1219,6 +1271,8 @@ class ClientDialog(BaseDialog):
         layout.addRow("Ville :", self.city_input)
         layout.addRow("NIF :", self.tax_id_input)
         layout.addRow("RC :", self.commercial_reg_input)
+        layout.addRow("Catégorie Tarifaire :", self.price_tier_combo)
+        layout.addRow("Plafond de Crédit :", self.credit_limit_spin)
 
         if self.data:
             self.name_input.setText(self.data.get('Client_Name', ''))
@@ -1229,6 +1283,11 @@ class ClientDialog(BaseDialog):
             self.city_input.setText(self.data.get('City', ''))
             self.tax_id_input.setText(self.data.get('Tax_ID_Number', ''))
             self.commercial_reg_input.setText(self.data.get('Commercial_Reg_No', ''))
+            pt = self.data.get('Price_Tier', 'Prix_1')
+            idx_pt = self.price_tier_combo.findData(pt)
+            if idx_pt >= 0:
+                self.price_tier_combo.setCurrentIndex(idx_pt)
+            self.credit_limit_spin.setValue(float(self.data.get('Credit_Limit') or 0.0))
 
     def get_data(self):
         name = self.name_input.text().strip()
@@ -1244,7 +1303,9 @@ class ClientDialog(BaseDialog):
             'address': self.address_input.text().strip(),
             'city': self.city_input.text().strip(),
             'tax_id': self.tax_id_input.text().strip(),
-            'commercial_reg': self.commercial_reg_input.text().strip()
+            'commercial_reg': self.commercial_reg_input.text().strip(),
+            'price_tier': self.price_tier_combo.currentData() or 'Prix_1',
+            'credit_limit': self.credit_limit_spin.value()
         }
 
 

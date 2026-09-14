@@ -30,6 +30,7 @@ from .widgets.master_data.external_partners_tab import ExternalPartnersTab
 from .widgets.billing.billing_tab import BillingTab
 from .widgets.history import MovementHistoryTab
 from .widgets.sales.point_of_sale_tab import PointOfSaleTab
+from .widgets.sales.wholesale_sales_tab import WholesaleSalesTab
 from .widgets.sales.sales_history_tab import SalesHistoryTab
 from .navigation_permissions import has_permission as check_permission, has_navigation_permission as check_navigation_permission
 from database.auto_backup_worker import AutoBackupWorker
@@ -115,6 +116,7 @@ class MainWindow(QMainWindow):
                 6: "nav_services",
                 7: "nav_history",
                 10: "nav_sales",
+                11: "nav_sales",
                 12: "nav_sales",
                 5: "tab_users",
                 4: "nav_settings"
@@ -307,6 +309,7 @@ class MainWindow(QMainWindow):
             (8, "Réclamations", "reclamations"),
             (9, "Inventaire", "inventaire"),
             (10, "Point de Vente", "pos"),
+            (11, "Vente en Gros B2B", "wholesale"),
             (12, "Historique Ventes", "sales_history"),
             (7, "Traçabilité", "history"),
             (5, "Utilisateurs", "users"),
@@ -617,6 +620,10 @@ class MainWindow(QMainWindow):
         elif page_id == 10:
             widget = PointOfSaleTab(self.data_manager)
 
+        # --- 11. Vente en Gros B2B ---
+        elif page_id == 11:
+            widget = WholesaleSalesTab(self.data_manager)
+
         # --- 12. Sales History ---
         elif page_id == 12:
             widget = SalesHistoryTab(self.data_manager)
@@ -675,6 +682,7 @@ class MainWindow(QMainWindow):
             9: "nav_inventaire",
             6: "nav_services",
             10: "nav_sales",
+            11: "nav_sales",
             12: "nav_sales",
             7: "nav_history",
             5: "tab_users",

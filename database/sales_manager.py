@@ -5,6 +5,7 @@ import logging
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Any, Optional, Dict, List
 from .system_logger import active_user_id, log_methods
 from .stock_movement_log_manager import StockMovementLogManager
 from .pos_feature_manager import money, PAYMENT_METHODS, POSFeatureManager
@@ -396,6 +397,203 @@ class SalesManager:
             if conn:
                 conn.rollback()
             logging.error(f"Atomic sale error: {e}", exc_info=True)
+            return False, {"message": str(e)}
+        finally:
+            if conn and conn.is_connected():
+                conn.close()
+
+    def _next_wholesale_doc_no(self, cursor, doc_type, doc_date):
+        year_num = self._invoice_year_from_date(doc_date)
+        prefix_map = {
+            'Devis': 'DEV',
+            'Bon de Commande': 'BC',
+            'Bon de Livraison': 'BL',
+            'Facture': 'FAC',
+            'DEV': 'DEV',
+            'BC': 'BC',
+            'BL': 'BL',
+            'FAC': 'FAC'
+        }
+        pfx = prefix_map.get(doc_type, 'WHS')
+        cursor.execute(
+            """
+            SELECT MAX(CAST(SUBSTRING_INDEX(Invoice_No, '/', -1) AS UNSIGNED)) AS MaxSeq
+            FROM Sales_Invoices
+            WHERE Invoice_No LIKE %s
+            """,
+            (f"{pfx}-{year_num}/%",),
+        )
+        row = cursor.fetchone() or {}
+        max_seq = row.get('MaxSeq') if isinstance(row, dict) else (row[0] if row else 0)
+        seq = int(max_seq or 0) + 1
+        return f"{pfx}-{year_num}/{seq:04d}"
+
+    def create_wholesale_document(
+        self,
+        client_id: int,
+        doc_type: str,
+        order_date: Any,
+        due_date: Any,
+        cart_items: list,
+        payment_method: str = 'Credit',
+        notes: str = None,
+        user_id: int = None
+    ):
+        """
+        Crée un document de vente en gros / B2B :
+        - 'Devis' et 'Bon de Commande' : ne déduisent pas le stock (Status = 'Draft', stock_deducted = False).
+        - 'Bon de Livraison' et 'Facture' : déduisent le stock de manière atomique (Status = 'Validated', stock_deducted = True).
+        """
+        if not cart_items:
+            return False, {"message": "Le panier de vente en gros est vide."}
+
+        is_stock_deducting = doc_type in ('Bon de Livraison', 'Facture')
+        status = 'Validated' if is_stock_deducting else 'Draft'
+
+        conn = None
+        try:
+            conn = self.db.get_raw_connection()
+            conn.start_transaction()
+            cursor = conn.cursor(dictionary=True)
+
+            normalized_items = []
+            batch_totals = {}
+            for raw in cart_items:
+                batch_id = int(raw['batch_id'])
+                qty = Decimal(str(raw['qty_sold']))
+                if qty <= 0:
+                    conn.rollback()
+                    return False, {"message": "Quantité invalide dans les lignes du document."}
+                item = {
+                    "product_id": int(raw['product_id']),
+                    "batch_id": batch_id,
+                    "qty_sold": qty,
+                    "unit_price_ht": Decimal(str(raw.get('unit_price_ht') or 0)),
+                    "discount_percent": Decimal(str(raw.get('discount_percent') or 0)),
+                    "tva_percent": Decimal(str(raw.get('tva_percent') or 0)),
+                }
+                normalized_items.append(item)
+                batch_totals[batch_id] = batch_totals.get(batch_id, Decimal('0')) + qty
+
+            locked_batches = {}
+            if is_stock_deducting:
+                for batch_id in sorted(batch_totals):
+                    cursor.execute(
+                        """
+                        SELECT b.Batch_ID, b.Product_ID, b.Quantity_Current, b.Status, p.Stock_Unit, p.Product_Name
+                        FROM Inventory_Batches b
+                        JOIN Products_Master p ON b.Product_ID = p.Product_ID
+                        WHERE b.Batch_ID = %s
+                        FOR UPDATE
+                        """,
+                        (batch_id,),
+                    )
+                    batch = cursor.fetchone()
+                    needed = batch_totals[batch_id]
+                    if not batch:
+                        conn.rollback()
+                        return False, {"message": f"Lot introuvable (ID: {batch_id})."}
+                    available = Decimal(str(batch.get('Quantity_Current') or 0))
+                    if available < needed:
+                        conn.rollback()
+                        pname = batch.get('Product_Name', '')
+                        return False, {
+                            "message": f"Stock insuffisant pour '{pname}' (Lot #{batch_id}). "
+                                       f"Disponible: {available}, Demandé: {needed}"
+                        }
+                    locked_batches[batch_id] = batch
+
+            doc_no = self._next_wholesale_doc_no(cursor, doc_type, order_date)
+
+            insert_invoice_query = """
+                INSERT INTO Sales_Invoices
+                (Invoice_No, Client_ID, Invoice_Date, Due_Date, Status, Sale_Type, Notes, Created_By, Payment_Method)
+                VALUES (%s, %s, %s, %s, %s, 'Wholesale', %s, %s, %s)
+            """
+            doc_notes = f"[{doc_type}] {notes or ''}".strip()
+            cursor.execute(
+                insert_invoice_query,
+                (doc_no, client_id, order_date, due_date, status, doc_notes, user_id, payment_method)
+            )
+            invoice_id = cursor.lastrowid
+
+            for item in normalized_items:
+                line_total_ht = item['qty_sold'] * item['unit_price_ht'] * (
+                    Decimal('1') - (item['discount_percent'] / Decimal('100'))
+                )
+                line_total_ttc = line_total_ht * (Decimal('1') + (item['tva_percent'] / Decimal('100')))
+                cursor.execute(
+                    """
+                    INSERT INTO Sales_Details
+                    (Invoice_ID, Product_ID, Batch_ID, Qty_Sold, Unit_Price_HT,
+                     Discount_Percent, TVA_Percent, Line_Total_HT, Line_Total_TTC)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        invoice_id, item['product_id'], item['batch_id'], item['qty_sold'],
+                        item['unit_price_ht'], item['discount_percent'], item['tva_percent'],
+                        line_total_ht, line_total_ttc,
+                    ),
+                )
+
+            if is_stock_deducting:
+                for batch_id, qty_needed in batch_totals.items():
+                    batch = locked_batches[batch_id]
+                    new_qty = Decimal(str(batch.get('Quantity_Current') or 0)) - qty_needed
+                    cursor.execute(
+                        """
+                        UPDATE Inventory_Batches
+                        SET Quantity_Current = %s,
+                            Status = CASE
+                                WHEN %s <= 0 THEN 'Depleted'
+                                WHEN Status = 'Depleted' AND %s > 0 THEN 'Available'
+                                ELSE Status
+                            END
+                        WHERE Batch_ID = %s
+                        """,
+                        (new_qty, new_qty, new_qty, batch_id),
+                    )
+                    movement_id = self.stock_movement_log.create_movement_log(
+                        product_id=batch['Product_ID'],
+                        movement_type='Sale',
+                        qty_change=-qty_needed,
+                        unit_used=batch.get('Stock_Unit') or 'Unit',
+                        batch_id=batch_id,
+                        user_id=user_id,
+                        notes=f"[Vente Gros {doc_type}] {doc_no}",
+                        external_cursor=cursor,
+                    )
+                    if not movement_id:
+                        conn.rollback()
+                        return False, {"message": "Échec de journalisation du mouvement de stock."}
+
+            self._update_invoice_totals(cursor, invoice_id)
+
+            if doc_type == 'Facture' and payment_method != 'Credit':
+                cursor.execute("SELECT Total_Amount_TTC FROM Sales_Invoices WHERE Invoice_ID = %s", (invoice_id,))
+                inv_total = money((cursor.fetchone() or {}).get('Total_Amount_TTC'))
+                cursor.execute(
+                    """
+                    INSERT INTO POS_Sale_Payments
+                    (Invoice_ID, Payment_Line_No, Payment_Method, Amount, Tendered_Amount, Change_Amount, Reference, Payment_UUID, Created_By)
+                    VALUES (%s, 1, %s, %s, %s, 0.00, %s, %s, %s)
+                    """,
+                    (invoice_id, payment_method, inv_total, inv_total, f"Vente Gros {doc_no}", str(uuid.uuid4()), user_id)
+                )
+
+            conn.commit()
+            return True, {
+                "invoice_id": invoice_id,
+                "doc_no": doc_no,
+                "status": status,
+                "doc_type": doc_type,
+                "stock_deducted": is_stock_deducting
+            }
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logging.error(f"Wholesale document creation error: {e}", exc_info=True)
             return False, {"message": str(e)}
         finally:
             if conn and conn.is_connected():
@@ -985,8 +1183,17 @@ class SalesManager:
                     SELECT 
                         i.Invoice_ID, i.Invoice_No, i.Invoice_Date, i.Status, i.Total_Amount_HT, i.Total_Amount_TTC,
                         i.Total_Discount, i.Total_TVA, i.Payment_Method, i.Terminal_ID, i.Cash_Session_ID, i.Created_By,
+                        i.Client_ID, i.Sale_Type, i.Due_Date,
+                        DATEDIFF(CURRENT_DATE, i.Due_Date) AS Days_Overdue,
                         COALESCE((SELECT GROUP_CONCAT(CONCAT(pp.Payment_Method, ': ', FORMAT(pp.Amount, 2)) SEPARATOR ' | ') FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID), i.Payment_Method) AS Payment_Summary,
-                        COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID), i.Total_Amount_TTC) AS Paid_Amount,
+                        CASE 
+                            WHEN EXISTS (SELECT 1 FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID)
+                                 OR EXISTS (SELECT 1 FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID)
+                            THEN COALESCE((SELECT SUM(pp.Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID), 0)
+                               + COALESCE((SELECT SUM(cp.Amount) FROM Client_Payments cp WHERE cp.Invoice_ID = i.Invoice_ID), 0)
+                            WHEN i.Payment_Method = 'Credit' THEN 0.0
+                            ELSE i.Total_Amount_TTC
+                        END AS Paid_Amount,
                         COALESCE((SELECT SUM(pp.Change_Amount) FROM POS_Sale_Payments pp WHERE pp.Invoice_ID = i.Invoice_ID), 0) AS Change_Amount,
                         t.Terminal_Name, s.Session_No,
                         c.Client_Name,
@@ -1030,9 +1237,15 @@ class SalesManager:
         for inv in invoices:
             inv['Row_Type'] = 'Sale'
             inv['Event_Date'] = inv.get('Invoice_Date')
-            inv['Operation_Label'] = 'Vente'
+            sale_type = inv.get('Sale_Type')
+            if sale_type == 'Wholesale':
+                inv['Operation_Label'] = 'Vente en Gros'
+            elif sale_type == 'Retail_POS':
+                inv['Operation_Label'] = 'Vente Détail (POS)'
+            else:
+                inv['Operation_Label'] = 'Vente'
             inv['Amount_Entered'] = None
-            inv['Caisse_Label'] = inv.get('Terminal_Name') or "-"
+            inv['Caisse_Label'] = inv.get('Terminal_Name') or ("Gros B2B" if sale_type == 'Wholesale' else "-")
             rows.append(inv)
 
         if client_id:

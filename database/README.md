@@ -10,15 +10,21 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
 - **`automate_manager.py`** : Gestion des automates d'analyse du laboratoire et de leurs consommables associés.
 - **`cash_session_manager.py`** : Gestion des sessions de caisse POS et clôtures.
 - **`client_credit_note_manager.py`** : Gestion des avoirs et retours clients.
-- **`client_manager.py`** : Gestion du répertoire des clients.
-- **`client_payment_manager.py`** : Gestion des encaissements et règlements clients.
+- **`client_manager.py`** : Gestion du répertoire des clients :
+  - Support de la catégorie tarifaire (`Price_Tier` : Prix 1 à 4) et du plafond de crédit (`Credit_Limit`).
+  - Calcul dynamique et instantané du solde débiteur client (`get_client_balance`, `get_all_clients_with_balances`).
+  - Génération du grand livre client chronologique pour relevé de compte (`get_client_ledger`) avec débits, crédits et solde progressif.
+- **`client_payment_manager.py`** : Gestion des encaissements et règlements clients avec lettrage de facture (`add_payment`) et mise à jour automatique du statut en `Paid`.
 - **`company_settings_manager.py`** : Configuration générale de l'entreprise, devise, seuils, cachets et paramètres globaux.
 - **`credit_note_manager.py`** : Gestion des avoirs fournisseurs suite aux retours de marchandises.
 - **`external_partners_manager.py`** : Gestion des partenaires externes (laboratoires confrères, cliniques partenaires).
 - **`external_transfer_manager.py`** : Gestion des transferts et cessions de réactifs entre établissements.
-- **`inventory_batch_manager.py`** : Gestion des lots en inventaire, réceptions, transferts, déconditionnement en sous-unités de détail (`unpack_and_transfer_batch`), génération de codes-barres uniques EAN-13 (`generate_unique_barcode`), vérification de collision (`is_barcode_available`), ajustements et péremptions.
+- **`inventory_batch_manager.py`** : Gestion des lots en inventaire :
+  - Traçabilité et lignage des lots (`Parent_Batch_ID`, `Batch_Type` : Standard Bulk vs Extracted Retail).
+  - Extraction atomique de lots de détail (`extract_retail_batch`) avec déduction du lot parent et écriture de log `BULK_EXTRACTION`.
+  - Déconditionnement (`unpack_and_transfer_batch`), génération EAN-13 unique et vérification de collision code-barres.
 - **`inventory_count_manager.py`** : Gestion des sessions de comptage d'inventaire physique, réconciliation d'écarts, détection des conflits de snapshot (`get_session_conflicts`), résolutions d'arbitrage paramétrables (`force_counted`, `apply_delta`, `skip` via `conflict_resolutions`), suppression de sessions et recherche multi-code-barres (`FIND_IN_SET`).
-- **`location_manager.py`** : Gestion des emplacements de stockage (armoires, réfrigérateurs, congélateurs, tiroirs).
+- **`location_manager.py`** : Gestion des emplacements de stockage avec contrôles de visibilité (`Visibility` : Public / Privé), éligibilité à la vente POS (`Allow_POS_Sales`), et récupération filtrée pour les caisses (`get_pos_locations`).
 - **`manufacturer_manager.py`** : Gestion des fabricants et marques d'équipements / réactifs.
 - **`packaging_unit_manager.py`** : Gestion des unités de conditionnement et facteurs de conversion.
 - **`po_details_manager.py`** : Gestion des lignes de commandes d'achat et suivi de réception détaillée.
@@ -30,7 +36,11 @@ Ce dossier regroupe tous les gestionnaires d'accès aux données (Managers), les
 - **`product_manager.py`** : Gestion du catalogue maître des produits (`Products_Master`), seuils d'alerte et unités.
 - **`purchase_order_manager.py`** : Gestion des bons de commande d'achat (`Purchase_Orders`) et cycle de validation.
 - **`reception_log_manager.py`** : Journalisation et validation des réceptions de commandes avec calcul des coûts TTC et remises.
-- **`sales_manager.py`** : Gestion des ventes, facturation client et suivi des lignes de vente.
+- **`sales_manager.py`** : Gestion des ventes, facturation et cycle commercial :
+  - Support de la Vente en Gros B2B (`create_wholesale_document`) avec statuts Draft (Devis, BC) et déduction atomique (BL, Facture).
+  - Génération de numérotation séquentielle par type de document (`DEV`, `BC`, `BL`, `FAC`).
+  - Suivi des échéances (`Due_Date`) et calcul du vieillissement des créances (`Days_Overdue`).
+  - Distinction formelle du type de vente (`Sale_Type` : `Retail_POS` vs `Wholesale`).
 - **`statistics_manager.py`** : Calculs statistiques avancés, indicateurs clés (KPIs), valorisation de stock, flux réels, tendances d'achats/consommation et analyse détaillée des pertes et rebuts (`get_waste_analysis`, `get_waste_products_detailed`).
 - **`stock_movement_log_manager.py`** : Traçabilité et historique immuable de tous les mouvements de stock (`Stock_Movement_Log`).
 - **`supplier_manager.py`** : Gestion du référentiel des fournisseurs et historique des relations commerciales.

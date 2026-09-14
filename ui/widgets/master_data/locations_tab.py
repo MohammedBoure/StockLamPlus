@@ -68,8 +68,12 @@ class LocationsTab(QWidget):
 
         # === A. The Tree Widget ===
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Structure Hiérarchique", "Type", "Conditions"])
-        self.tree.setColumnWidth(0, 350)
+        self.tree.setHeaderLabels(["Structure Hiérarchique", "Type", "Conditions", "Visibilité", "POS"])
+        self.tree.setColumnWidth(0, 320)
+        self.tree.setColumnWidth(1, 120)
+        self.tree.setColumnWidth(2, 100)
+        self.tree.setColumnWidth(3, 90)
+        self.tree.setColumnWidth(4, 80)
         self.tree.setIndentation(25)
         self.tree.setDragDropMode(QTreeWidget.InternalMove)
         self.tree.itemClicked.connect(self.on_item_clicked)
@@ -105,10 +109,14 @@ class LocationsTab(QWidget):
         self.lbl_type = QLabel("-")
         self.lbl_zone = QLabel("-")
         self.lbl_parent = QLabel("-")
+        self.lbl_visibility = QLabel("-")
+        self.lbl_allow_pos = QLabel("-")
         info_layout.addRow("ID:", self.lbl_id)
         info_layout.addRow("Type:", self.lbl_type)
         info_layout.addRow("Zone:", self.lbl_zone)
         info_layout.addRow("Parent:", self.lbl_parent)
+        info_layout.addRow("Visibilité:", self.lbl_visibility)
+        info_layout.addRow("Vente Caisse (POS):", self.lbl_allow_pos)
         self.details_layout.addWidget(info_frame)
         self.details_layout.addStretch()
 
@@ -157,6 +165,9 @@ class LocationsTab(QWidget):
             item.setText(0, item_data['Location_Name'])
             item.setText(1, loc_type)
             item.setText(2, item_data['Temperature_Zone'])
+            vis = item_data.get('Visibility', 'Private')
+            item.setText(3, "Public" if vis == 'Public' else "Privé")
+            item.setText(4, "✓ POS" if item_data.get('Allow_POS_Sales') else "Non")
             item.setData(0, Qt.UserRole, item_data)
 
             if item_data.get('children'):
@@ -184,6 +195,9 @@ class LocationsTab(QWidget):
         self.lbl_selected_name.setText(data['Location_Name'])
         self.lbl_type.setText(data.get('Type_Name', 'Non défini'))
         self.lbl_zone.setText(data['Temperature_Zone'])
+        vis = data.get('Visibility', 'Private')
+        self.lbl_visibility.setText("Public (Détail)" if vis == 'Public' else "Privé (Dépôt)")
+        self.lbl_allow_pos.setText("Oui" if data.get('Allow_POS_Sales') else "Non")
         parent_item = item.parent()
         self.lbl_parent.setText(parent_item.text(0) if parent_item else "Racine (Aucun)")
         self.set_actions_enabled(True)
@@ -198,6 +212,8 @@ class LocationsTab(QWidget):
             self.lbl_type.setText("-")
             self.lbl_zone.setText("-")
             self.lbl_parent.setText("-")
+            self.lbl_visibility.setText("-")
+            self.lbl_allow_pos.setText("-")
 
     def _get_types_for_dialog(self):
         return self.manager.get_all_location_types()
@@ -225,7 +241,14 @@ class LocationsTab(QWidget):
         if dialog.exec():
             data = dialog.get_data()
             if data:
-                self.manager.add_location(data['Location_Name'], data['Type_ID'], data['Temperature_Zone'], None)
+                self.manager.add_location(
+                    data['Location_Name'], 
+                    data['Type_ID'], 
+                    data['Temperature_Zone'], 
+                    None,
+                    visibility=data.get('Visibility', 'Private'),
+                    allow_pos_sales=data.get('Allow_POS_Sales', False)
+                )
                 self.load_tree_data()
 
     def add_child_location(self):
@@ -237,7 +260,14 @@ class LocationsTab(QWidget):
         if dialog.exec():
             data = dialog.get_data()
             if data:
-                self.manager.add_location(data['Location_Name'], data['Type_ID'], data['Temperature_Zone'], parent_data['Location_ID'])
+                self.manager.add_location(
+                    data['Location_Name'], 
+                    data['Type_ID'], 
+                    data['Temperature_Zone'], 
+                    parent_data['Location_ID'],
+                    visibility=data.get('Visibility', 'Private'),
+                    allow_pos_sales=data.get('Allow_POS_Sales', False)
+                )
                 self.load_tree_data()
 
     def edit_location(self):
@@ -249,7 +279,15 @@ class LocationsTab(QWidget):
         if dialog.exec():
             new_data = dialog.get_data()
             if new_data:
-                self.manager.update_location(data['Location_ID'], new_data['Location_Name'], new_data['Type_ID'], new_data['Temperature_Zone'], data.get('Parent_Location_ID'))
+                self.manager.update_location(
+                    data['Location_ID'], 
+                    new_data['Location_Name'], 
+                    new_data['Type_ID'], 
+                    new_data['Temperature_Zone'], 
+                    data.get('Parent_Location_ID'),
+                    visibility=new_data.get('Visibility', 'Private'),
+                    allow_pos_sales=new_data.get('Allow_POS_Sales', False)
+                )
                 self.load_tree_data()
 
     def delete_location(self):

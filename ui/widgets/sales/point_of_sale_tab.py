@@ -136,9 +136,11 @@ class PointOfSaleTab(QWidget):
         self.active_draft_id = None
         self.current_total_ttc = 0.0
         self.batches_cache = []
+        self.all_batches_cache = []
         self.active_pos_group = 1
         self.search_map = {}
         self.barcode_map = {}
+        self.all_barcode_map = {}
         self.terminal_id = None
         self.terminal_label = "Caisse"
         self.cash_session_id = None
@@ -318,6 +320,22 @@ class PointOfSaleTab(QWidget):
         top_inputs_row.addWidget(self.combo_location_filter)
 
         left_layout.addLayout(top_inputs_row)
+
+        # Non-blocking POS Alert Banner
+        self.pos_alert_banner = QLabel("")
+        self.pos_alert_banner.setStyleSheet("""
+            background-color: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #f87171;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: bold;
+        """)
+        self.pos_alert_banner.setAlignment(Qt.AlignCenter)
+        self.pos_alert_banner.setWordWrap(True)
+        self.pos_alert_banner.setVisible(False)
+        left_layout.addWidget(self.pos_alert_banner)
 
         # Line 3: Cart Table (Dynamic unlimited width/height, touch-friendly scrollbars, full text visible)
         self.cart_table = QTableWidget()
@@ -1398,15 +1416,26 @@ class PointOfSaleTab(QWidget):
         except Exception as e:
             logging.error(f"Error loading clients for POS: {e}")
 
-        # Load products (Batches with stock > 0)
+        # Load products (Batches with stock > 0, restricted to Public & POS-allowed locations)
         self.cb_product_search.blockSignals(True)
         self.cb_product_search.clear()
         self.cb_product_search.blockSignals(False)
         self.batches_cache = []
+        self.all_batches_cache = []
         self.search_map = {}
         self.barcode_map = {}
+        self.all_barcode_map = {}
         try:
-            self.batches_cache = self.data_manager.batches.get_all_batches_with_details()
+            self.all_batches_cache = self.data_manager.batches.get_all_batches_with_details()
+            for batch in self.all_batches_cache:
+                self.register_all_barcodes(batch)
+
+            # Restrict POS inventory strictly to: Visibility = 'Public' AND Allow_POS_Sales = True
+            self.batches_cache = [
+                b for b in self.all_batches_cache
+                if b.get('Visibility') == 'Public' and b.get('Allow_POS_Sales')
+            ]
+
             suggestions = []
             for batch in self.batches_cache:
                 suggestion = self.format_product_suggestion(batch)
@@ -1419,6 +1448,20 @@ class PointOfSaleTab(QWidget):
             self.populate_pos_locations()
         except Exception as e:
             logging.error(f"Error loading batches for POS: {e}")
+
+    def show_pos_warning(self, message: str, timeout_ms: int = 5000):
+        """Affiche une notification d'avertissement non bloquante dans l'interface de caisse."""
+        self.flash_scan_feedback(False)
+        if hasattr(self, 'pos_alert_banner') and self.pos_alert_banner is not None:
+            self.pos_alert_banner.setText(f"⚠️ {message}")
+            self.pos_alert_banner.setVisible(True)
+            QTimer.singleShot(timeout_ms, lambda: self.pos_alert_banner.setVisible(False))
+        try:
+            sb = getattr(self.window(), "statusBar", lambda: None)()
+            if sb:
+                sb.showMessage(f"⚠️ {message}", timeout_ms)
+        except Exception:
+            pass
 
     def normalize_code(self, value):
         return str(value or "").strip().lower().replace(" ", "").replace("-", "")
@@ -1457,6 +1500,13 @@ class PointOfSaleTab(QWidget):
             if normalized:
                 self.barcode_map[normalized] = batch
 
+    def register_all_barcodes(self, batch):
+        codes = self.parse_all_barcodes(batch)
+        for code in codes:
+            normalized = self.normalize_code(code)
+            if normalized:
+                self.all_barcode_map[normalized] = batch
+
     def format_product_suggestion(self, batch):
         codes = self.parse_all_barcodes(batch)
         code_str = " / ".join(codes) if codes else "-"
@@ -1485,16 +1535,52 @@ class PointOfSaleTab(QWidget):
         except (TypeError, ValueError):
             return 1.0, raw
         return (quantity if quantity > 0 else 1.0), code.strip()
+
     def process_instant_scan(self):
         quantity, code = self._parse_scan_input(self.cb_product_search.text())
         if not code:
             return
-        batch = self.barcode_map.get(self.normalize_code(code))
+        norm_code = self.normalize_code(code)
+        # 1. Vérification dans le stock POS autorisé
+        batch = self.barcode_map.get(norm_code)
         if batch:
             self.add_product_to_cart(batch, quantity=quantity)
+            return
+
+        # 2. Barcode Guard : Interception des articles d'emplacements privés ou non éligibles au POS
+        private_batch = self.all_barcode_map.get(norm_code)
+        if private_batch:
+            self.show_pos_warning("Action bloquée : Article stocké dans un emplacement privé / non éligible à la vente POS.")
+            self.clear_search_input()
+            return
+
     def handle_search_return(self):
-        quantity, _ = self._parse_scan_input(self.cb_product_search.text())
-        self.add_product_to_cart(self.find_batch_from_search_text(), show_not_found=True, quantity=quantity)
+        quantity, code = self._parse_scan_input(self.cb_product_search.text())
+        norm_code = self.normalize_code(code)
+
+        # Barcode Guard : Interception directe si le code appartient à un emplacement privé/non POS
+        if norm_code in self.all_barcode_map and norm_code not in self.barcode_map:
+            self.show_pos_warning("Action bloquée : Article stocké dans un emplacement privé / non éligible à la vente POS.")
+            self.clear_search_input()
+            return
+
+        batch = self.find_batch_from_search_text()
+        if batch:
+            self.add_product_to_cart(batch, show_not_found=True, quantity=quantity)
+        else:
+            # Vérifier si la recherche textuelle correspond uniquement à un lot privé
+            lowered = str(code).lower()
+            matches_private = [
+                b for b in self.all_batches_cache
+                if (lowered in str(b.get("Product_Name", "")).lower() or lowered in str(b.get("Lot_Number", "")).lower())
+                and (b.get("Visibility") != "Public" or not b.get("Allow_POS_Sales"))
+            ]
+            if matches_private and not self.batches_cache:
+                self.show_pos_warning("Action bloquée : Article stocké dans un emplacement privé / non éligible à la vente POS.")
+                self.clear_search_input()
+                return
+
+            self.add_product_to_cart(None, show_not_found=True, quantity=quantity)
     def find_batch_from_search_text(self):
         _quantity, text = self._parse_scan_input(self.cb_product_search.text())
         if not text:
@@ -2218,7 +2304,10 @@ class PointOfSaleTab(QWidget):
         self.combo_location_filter.addItem("📍 Tous Lieux", None)
         try:
             if hasattr(self.data_manager, 'locations'):
-                locs = self.data_manager.locations.get_all_locations()
+                if hasattr(self.data_manager.locations, 'get_pos_locations'):
+                    locs = self.data_manager.locations.get_pos_locations()
+                else:
+                    locs = self.data_manager.locations.get_all_locations()
                 for loc in locs:
                     self.combo_location_filter.addItem(f"📍 {loc.get('Location_Name')}", loc.get('Location_ID'))
         except Exception as e:

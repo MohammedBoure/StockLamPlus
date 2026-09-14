@@ -97,6 +97,16 @@ DUOTONE_SVGS: Dict[str, str] = {
         <rect x="21" y="22.5" width="6" height="3" rx="0.8" fill="#10B981" stroke="#2C3E50" stroke-width="1.2"/>
     </svg>''',
 
+    # 11: Vente en Gros B2B (Wholesale Bulk Shipping & Commercial Invoicing)
+    "wholesale": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <path d="M4 8L16 2L28 8L16 14L4 8Z" fill="#FFB800" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M4 8V22L16 28V14L4 8Z" fill="#0284C7" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M28 8V22L16 28V14L28 8Z" fill="#00A896" stroke="#2C3E50" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M11 11.5L21 6.5" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="21" cy="20" r="4.5" fill="#10B981" stroke="#2C3E50" stroke-width="1.8"/>
+        <path d="M19.5 20L20.8 21.3L22.8 18.8" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>''',
+
     # 12: Historique Ventes (Sales Analytics & transaction chart)
     "sales_history": '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
         <rect x="4" y="4" width="24" height="24" rx="3" fill="#F8FAFC" stroke="#2C3E50" stroke-width="2.2" stroke-linejoin="round"/>

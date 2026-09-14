@@ -7,13 +7,15 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableWidget, QHeaderView, QPushButton,
     QHBoxLayout, QLabel, QComboBox, QDateEdit, QDialog, QFormLayout, 
     QGroupBox, QAbstractItemView, QStyle, QTableWidgetItem, QSpinBox, QMessageBox,
-    QFileDialog, QInputDialog, QFrame, QSizePolicy
+    QFileDialog, QInputDialog, QFrame, QSizePolicy, QCheckBox, QMenu
 )
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor, QBrush, QFont
 from ui.widgets.inventory.dialogs import BarcodeLineEdit
 from ui.formatting import format_money, format_quantity
 from ui.navigation_permissions import has_permission
+from ui.widgets.sales.invoice_payment_dialog import InvoicePaymentDialog
+from ui.widgets.sales.return_dialog import ReturnProductSelectionDialog
 
 try:
     from reportlab.lib import colors
@@ -713,6 +715,24 @@ class SalesHistoryTab(QWidget):
         row1_layout.addWidget(self.cb_status)
         row1_layout.addWidget(lbl_payment)
         row1_layout.addWidget(self.cb_payment)
+
+        # AR Aging Controls
+        self.chk_overdue_only = QCheckBox("⚠️ Échues non soldées")
+        self.chk_overdue_only.setToolTip("Filtrer uniquement les factures échues non soldées")
+        self.chk_overdue_only.setStyleSheet("color: #dc2626; font-weight: bold; font-size: 12px;")
+        
+        self.cb_aging = QComboBox()
+        self.cb_aging.addItem("Toutes Échues", "all")
+        self.cb_aging.addItem("1 - 30 jours", "1-30")
+        self.cb_aging.addItem("31 - 60 jours", "31-60")
+        self.cb_aging.addItem("> 60 jours", ">60")
+        self.cb_aging.setEnabled(False)
+        self.cb_aging.setFixedWidth(115)
+        self.chk_overdue_only.toggled.connect(lambda checked: (self.cb_aging.setEnabled(checked), self.apply_filter_local()))
+        self.cb_aging.currentIndexChanged.connect(self.apply_filter_local)
+
+        row1_layout.addWidget(self.chk_overdue_only)
+        row1_layout.addWidget(self.cb_aging)
         row1_layout.addStretch(1)
         row1_layout.addWidget(btn_refresh)
 
@@ -741,6 +761,19 @@ class SalesHistoryTab(QWidget):
         """)
         self.search_input.textChanged.connect(self.apply_filter_local)
         row2_layout.addWidget(self.search_input, stretch=1)
+
+        self.btn_settle_payment = QPushButton("💳 Encaisser Paiement")
+        self.btn_settle_payment.setEnabled(False)
+        self.btn_settle_payment.setCursor(Qt.PointingHandCursor)
+        self.btn_settle_payment.setStyleSheet("""
+            QPushButton {
+                background-color: #0f766e; color: white; font-weight: bold;
+                border-radius: 4px; padding: 4px 14px; min-height: 30px; border: none; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #115e59; }
+            QPushButton:disabled { background-color: #cbd5e1; color: #94a3b8; }
+        """)
+        self.btn_settle_payment.clicked.connect(self._open_payment_settlement)
 
         self.btn_print_selected = QPushButton("🖨️ Imprimer Facture")
         self.btn_print_selected.setEnabled(False)
@@ -777,6 +810,7 @@ class SalesHistoryTab(QWidget):
         """)
         self.btn_export.clicked.connect(self.export_filtered_csv)
 
+        row2_layout.addWidget(self.btn_settle_payment)
         row2_layout.addWidget(self.btn_print_selected)
         row2_layout.addWidget(self.btn_no_invoice_return)
         row2_layout.addWidget(self.btn_export)
@@ -789,12 +823,12 @@ class SalesHistoryTab(QWidget):
         self.table = QTableWidget()
         cols = [
             "ID", "Date", "Operation", "Client / Details", "Statut",
-            "Caisse", "Utilisateur", "Paiement", "Montant saisi",
+            "Retard (Jours)", "Caisse", "Utilisateur", "Paiement", "Montant saisi",
             "Total TTC", "Fayda (Profit)"
         ]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
-        self.table.setColumnHidden(10, not self.can_view_profit)
+        self.table.setColumnHidden(11, not self.can_view_profit)
         
         f = self.table.font()
         f.setPointSize(9)
@@ -808,10 +842,13 @@ class SalesHistoryTab(QWidget):
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
         
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
         self.table.doubleClicked.connect(self.show_full_details)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         
@@ -841,49 +878,59 @@ class SalesHistoryTab(QWidget):
         
         layout.addLayout(summary_layout)
 
+    def _show_context_menu(self, pos):
+        item = self.table.itemAt(pos)
+        if not item:
+            return
+        row = item.row()
+        id_item = self.table.item(row, 0)
+        if not id_item:
+            return
+        inv = id_item.data(Qt.UserRole)
+        if not inv:
+            return
+
+        menu = QMenu(self)
+        if inv.get('Row_Type') == 'Sale':
+            action_settle = menu.addAction("💳 Encaisser Paiement")
+            total_ttc = float(inv.get('Total_Amount_TTC') or 0.0)
+            paid_amount = float(inv.get('Paid_Amount') or 0.0)
+            can_settle = (inv.get('Status') != 'Cancelled' and (total_ttc - paid_amount > 0.01))
+            action_settle.setEnabled(can_settle)
+            action_settle.triggered.connect(lambda: self._open_payment_settlement(inv))
+
+            action_details = menu.addAction("🔍 Voir Détails de la Vente")
+            action_details.triggered.connect(self.show_full_details)
+
+            action_print = menu.addAction("🖨️ Imprimer Facture")
+            action_print.triggered.connect(self.print_selected_invoice)
+        elif inv.get('Row_Type') in ('Cash_Open', 'Cash_Close'):
+            action_details = menu.addAction("🔍 Détails de Session Caisse")
+            action_details.triggered.connect(self.show_full_details)
+
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _open_payment_settlement(self, inv=None):
+        if not inv or not isinstance(inv, dict):
+            row = self.table.currentRow()
+            if row >= 0 and self.table.item(row, 0):
+                inv = self.table.item(row, 0).data(Qt.UserRole)
+        if not inv or inv.get('Row_Type') != 'Sale':
+            return
+
+        dlg = InvoicePaymentDialog(self.data_manager, inv, self)
+        if dlg.exec() == QDialog.Accepted:
+            self.load_sales_data()
+
     def create_no_invoice_return(self):
         checker = getattr(self.window(), "has_permission", None)
         if checker and not checker("act_pos_return_without_invoice"):
             QMessageBox.warning(self, "Autorisation", "Le retour sans facture est réservé au manager.")
             return
-        product_id, ok = QInputDialog.getInt(self, "Retour sans facture", "ID produit:", 0, 1, 2147483647, 1)
-        if not ok:
-            return
-        batch_id, ok = QInputDialog.getInt(self, "Retour sans facture", "ID lot:", 0, 1, 2147483647, 1)
-        if not ok:
-            return
-        qty, ok = QInputDialog.getDouble(self, "Retour sans facture", "Quantité:", 1.0, 0.01, 999999999.0, 2)
-        if not ok:
-            return
-        unit_price, ok = QInputDialog.getDouble(self, "Retour sans facture", "Prix unitaire HT:", 0.0, 0.0, 999999999.0, 2)
-        if not ok:
-            return
-        tva, ok = QInputDialog.getDouble(self, "Retour sans facture", "TVA %:", 0.0, 0.0, 100.0, 2)
-        if not ok:
-            return
-        labels = ["Espèces", "Carte", "Virement", "Versement", "Autre", "Crédit client"]
-        values = ["Cash", "Card", "Transfer", "Versement", "Other", "Credit"]
-        label, ok = QInputDialog.getItem(self, "Retour sans facture", "Remboursement:", labels, 0, False)
-        if not ok:
-            return
-        reason, ok = QInputDialog.getText(self, "Retour sans facture", "Motif obligatoire:")
-        if not ok or not reason.strip():
-            return
-        success, result = self.data_manager.pos_features.create_no_invoice_return(
-            product_id=product_id,
-            batch_id=batch_id,
-            qty_returned=qty,
-            unit_price_ht=unit_price,
-            tva_percent=tva,
-            refund_method=values[labels.index(label)],
-            reason=reason.strip(),
-            user_id=self._current_user_id(),
-        )
-        if success:
-            QMessageBox.information(self, "Retour", f"Retour sans facture enregistré: {result.get('return_no')}")
+
+        dlg = ReturnProductSelectionDialog(self.data_manager, parent=self)
+        if dlg.exec() == QDialog.Accepted:
             self.load_sales_data()
-        else:
-            QMessageBox.warning(self, "Retour", result.get("message", "Impossible d'enregistrer le retour."))
 
     def _current_user_id(self):
         try:
@@ -919,6 +966,8 @@ class SalesHistoryTab(QWidget):
         status = self.cb_status.currentData() if hasattr(self, "cb_status") else None
         payment = self.cb_payment.currentData() if hasattr(self, "cb_payment") else None
         caisse = self.cb_caisse.currentData() if hasattr(self, "cb_caisse") else None
+        overdue_only = self.chk_overdue_only.isChecked() if hasattr(self, "chk_overdue_only") else False
+        aging_bucket = self.cb_aging.currentData() if hasattr(self, "cb_aging") else "all"
 
         filtered = []
         for inv in self.raw_data:
@@ -942,6 +991,36 @@ class SalesHistoryTab(QWidget):
                 methods = str(inv.get('Payment_Summary') or inv.get('Payment_Method') or '')
                 if payment not in methods:
                     continue
+
+            # AR Aging / Overdue filtering
+            if overdue_only:
+                if inv.get('Row_Type') != 'Sale':
+                    continue
+                if inv.get('Status') == 'Cancelled':
+                    continue
+                total_ttc = float(inv.get('Total_Amount_TTC') or 0.0)
+                paid_amount = float(inv.get('Paid_Amount') or 0.0)
+                if total_ttc - paid_amount <= 0.01:
+                    continue  # fully paid, not outstanding
+
+                days = inv.get('Days_Overdue')
+                if days is None and inv.get('Due_Date'):
+                    try:
+                        due_dt = datetime.strptime(str(inv.get('Due_Date'))[:10], "%Y-%m-%d").date()
+                        days = (datetime.now().date() - due_dt).days
+                    except Exception:
+                        days = 0
+                days = int(days or 0) if days is not None else 0
+                if days <= 0:
+                    continue  # not overdue yet
+
+                if aging_bucket == "1-30" and not (1 <= days <= 30):
+                    continue
+                elif aging_bucket == "31-60" and not (31 <= days <= 60):
+                    continue
+                elif aging_bucket == ">60" and not (days > 60):
+                    continue
+
             filtered.append(inv)
 
         self.filtered_data = filtered
@@ -967,6 +1046,7 @@ class SalesHistoryTab(QWidget):
         if self.current_page < total_pages:
             self.current_page += 1
             self._refresh_page()
+
     def _populate_table(self, data):
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
@@ -1004,46 +1084,77 @@ class SalesHistoryTab(QWidget):
             
             status_item = item(inv['Status'])
             self.table.setItem(r, 4, status_item)
+
+            # Retard (Jours)
+            if row_type == 'Sale':
+                due_date_val = inv.get('Due_Date')
+                total_ttc = float(inv.get('Total_Amount_TTC') or 0.0)
+                paid_amount = float(inv.get('Paid_Amount') or 0.0)
+                is_settled = (total_ttc - paid_amount <= 0.01)
+
+                days = inv.get('Days_Overdue')
+                if days is None and due_date_val and str(due_date_val) != 'None':
+                    try:
+                        due_dt = datetime.strptime(str(due_date_val)[:10], "%Y-%m-%d").date()
+                        days = (datetime.now().date() - due_dt).days
+                    except Exception:
+                        days = None
+                days = int(days) if days is not None else None
+
+                if inv.get('Status') == 'Cancelled':
+                    retard_item = item("Annulée", color="#94a3b8")
+                elif is_settled:
+                    retard_item = item("Soldée", color="#059669", font=QFont("Segoe UI", 9, QFont.Bold))
+                elif days is not None and days > 0:
+                    retard_item = item(f"+{days} j", color="#b91c1c", font=QFont("Segoe UI", 9, QFont.Bold))
+                    retard_item.setBackground(QBrush(QColor("#fee2e2")))
+                elif days is not None and days <= 0:
+                    retard_item = item(f"{abs(days)} j", color="#0284c7")
+                else:
+                    retard_item = item("-")
+            else:
+                retard_item = item("-")
+            self.table.setItem(r, 5, retard_item)
             
             caisse_display = inv.get('Caisse_Label') or inv.get('Terminal_Name') or "-"
             caisse_item = item(caisse_display)
             if is_cash_row:
                 caisse_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
                 caisse_item.setForeground(QBrush(QColor("#007572")))
-            self.table.setItem(r, 5, caisse_item)
+            self.table.setItem(r, 6, caisse_item)
 
-            self.table.setItem(r, 6, item(inv.get('User_Name') or "-"))
+            self.table.setItem(r, 7, item(inv.get('User_Name') or "-"))
             payment_text = inv.get("Payment_Summary") or inv.get("Payment_Method") or "-"
-            self.table.setItem(r, 7, item(payment_text))
+            self.table.setItem(r, 8, item(payment_text))
 
             if row_type == "Cash_Open":
                 amount_entered = inv.get("Opening_Amount")
                 amt_item = item(f"Fond: {format_money(amount_entered)} DA" if amount_entered is not None else "-")
                 amt_item.setForeground(QBrush(QColor("#007572")))
                 amt_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
-                self.table.setItem(r, 8, amt_item)
-                self.table.setItem(r, 9, item("---"))
+                self.table.setItem(r, 9, amt_item)
+                self.table.setItem(r, 10, item("---"))
             elif row_type == "Cash_Close":
                 amount_entered = inv.get("Counted_Cash")
                 amt_item = item(f"Compté: {format_money(amount_entered)} DA" if amount_entered is not None else "-")
                 amt_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
-                self.table.setItem(r, 8, amt_item)
+                self.table.setItem(r, 9, amt_item)
 
                 diff = float(inv.get('Cash_Difference') or 0.0)
                 diff_sign = "+" if diff > 0 else ""
                 diff_color = "#27ae60" if abs(diff) < 0.01 else ("#2980b9" if diff > 0 else "#c0392b")
                 diff_item = item(f"Écart: {diff_sign}{format_money(diff)} DA", color=diff_color, font=QFont("Segoe UI", 9, QFont.Bold))
-                self.table.setItem(r, 9, diff_item)
+                self.table.setItem(r, 10, diff_item)
             else:
                 amount_entered = inv.get("Paid_Amount")
-                self.table.setItem(r, 8, item(format_money(amount_entered) if amount_entered is not None else "-"))
-                self.table.setItem(r, 9, item(format_money(inv.get('Total_Amount_TTC', 0))))
+                self.table.setItem(r, 9, item(format_money(amount_entered) if amount_entered is not None else "-"))
+                self.table.setItem(r, 10, item(format_money(inv.get('Total_Amount_TTC', 0))))
             
             profit = float(inv.get('Total_Profit') or 0) if self.can_view_profit else 0
             if row_type == 'Sale':
                 total_profit_period += profit
             profit_item = item(format_money(profit), Qt.AlignCenter, "#27ae60" if profit > 0 else "#c0392b", QFont("Segoe UI", 9, QFont.Bold)) if row_type == 'Sale' else item("---")
-            self.table.setItem(r, 10, profit_item)
+            self.table.setItem(r, 11, profit_item)
 
             if row_bg:
                 for col in range(self.table.columnCount()):
@@ -1079,11 +1190,22 @@ class SalesHistoryTab(QWidget):
         has_selection = bool(data and data.get('Row_Type') == 'Sale')
         self.btn_print_selected.setEnabled(has_selection)
 
+        if hasattr(self, 'btn_settle_payment'):
+            can_settle = False
+            if has_selection and data.get('Status') != 'Cancelled':
+                total_ttc = float(data.get('Total_Amount_TTC') or 0.0)
+                paid_amount = float(data.get('Paid_Amount') or 0.0)
+                can_settle = (total_ttc - paid_amount > 0.01)
+            self.btn_settle_payment.setEnabled(can_settle)
+
     def export_filtered_csv(self):
         path, _ = QFileDialog.getSaveFileName(self, "Exporter l'historique", "historique_ventes.csv", "CSV (*.csv)")
         if not path:
             return
-        headers = ["ID", "Date", "Operation", "Client", "Statut", "Caisse", "Utilisateur", "Paiement", "Paye", "Total TTC", "Profit"]
+        headers = [
+            "ID", "Date", "Operation", "Client", "Statut",
+            "Retard (Jours)", "Caisse", "Utilisateur", "Paiement", "Paye", "Total TTC", "Profit"
+        ]
         try:
             with open(path, "w", newline="", encoding="utf-8-sig") as handle:
                 writer = csv.writer(handle)
@@ -1095,6 +1217,7 @@ class SalesHistoryTab(QWidget):
                         inv.get("Operation_Label"),
                         inv.get("Client_Name") or "-",
                         inv.get("Status") or "-",
+                        inv.get("Days_Overdue") if inv.get("Days_Overdue") is not None else "-",
                         inv.get("Caisse_Label") or inv.get("Terminal_Name") or "-",
                         inv.get("User_Name") or "-",
                         inv.get("Payment_Summary") or inv.get("Payment_Method") or "-",
@@ -1105,6 +1228,7 @@ class SalesHistoryTab(QWidget):
             QMessageBox.information(self, "Export", "Historique exporte avec succes.")
         except OSError as exc:
             QMessageBox.warning(self, "Export", f"Echec de l'export: {exc}")
+
     def print_selected_invoice(self):
         row = self.table.currentRow()
         if row < 0: return

@@ -144,9 +144,12 @@ class ExternalTransferManager:
             with self.db.get_db_connection() as conn:
                 cursor = conn.cursor(dictionary=True)
                 query = """
-                    SELECT t.*, IFNULL(t.Transfer_Type, 'Outbound') as Transfer_Type_Fixed, p.Partner_Name, u.Full_Name as Created_By_Name
+                    SELECT t.*, IFNULL(t.Transfer_Type, 'Outbound') as Transfer_Type_Fixed, 
+                           COALESCE(c.Client_Name, p.Partner_Name, CONCAT('Client #', t.Partner_ID)) as Partner_Name, 
+                           u.Full_Name as Created_By_Name
                     FROM External_Transfer_Log t
-                    JOIN External_Partners p ON t.Partner_ID = p.Partner_ID
+                    LEFT JOIN Clients c ON t.Partner_ID = c.Client_ID
+                    LEFT JOIN External_Partners p ON t.Partner_ID = p.Partner_ID
                     LEFT JOIN Users u ON t.Created_By = u.User_ID
                     ORDER BY t.Transaction_Date DESC
                 """
@@ -304,9 +307,15 @@ class ExternalTransferManager:
             if transfer['Status'] == 'Completed': return False, "Déjà complété."
 
             partner_id = transfer['Partner_ID']
-            # جلب اسم الشريك للملاحظات
-            cursor.execute("SELECT Partner_Name FROM External_Partners WHERE Partner_ID = %s", (partner_id,))
-            partner_name = cursor.fetchone()['Partner_Name']
+            # جلب اسم العميل/الشريك للملاحظات
+            cursor.execute("SELECT Client_Name FROM Clients WHERE Client_ID = %s", (partner_id,))
+            c_row = cursor.fetchone()
+            if c_row and c_row.get('Client_Name'):
+                partner_name = c_row['Client_Name']
+            else:
+                cursor.execute("SELECT Partner_Name FROM External_Partners WHERE Partner_ID = %s", (partner_id,))
+                p_row = cursor.fetchone()
+                partner_name = p_row['Partner_Name'] if p_row else f"Client #{partner_id}"
 
             # 2. جلب التفاصيل
             cursor.execute("SELECT * FROM External_Transfer_Details WHERE Transfer_ID = %s", (transfer_id,))
@@ -455,9 +464,12 @@ class ExternalTransferManager:
                 cursor = conn.cursor(dictionary=True)
 
                 query = """
-                    SELECT t.*, p.Partner_Name, p.City
+                    SELECT t.*, 
+                           COALESCE(c.Client_Name, p.Partner_Name, CONCAT('Client #', t.Partner_ID)) as Partner_Name, 
+                           COALESCE(c.Address, p.City, '-') as City
                     FROM External_Transfer_Log t
-                    JOIN External_Partners p ON t.Partner_ID = p.Partner_ID
+                    LEFT JOIN Clients c ON t.Partner_ID = c.Client_ID
+                    LEFT JOIN External_Partners p ON t.Partner_ID = p.Partner_ID
                     WHERE t.Transaction_Date BETWEEN %s AND %s
                 """
                 params = [start_date, end_date]
@@ -661,10 +673,15 @@ class ExternalTransferManager:
             conn.start_transaction()
             cursor = conn.cursor(dictionary=True)
 
-            # 1. جلب اسم الشريك للملاحظات
-            cursor.execute("SELECT Partner_Name FROM External_Partners WHERE Partner_ID = %s", (partner_id,))
-            partner_row = cursor.fetchone()
-            partner_name = partner_row['Partner_Name'] if partner_row else "Partenaire Inconnu"
+            # 1. جلب اسم العميل/الشريك للملاحظات
+            cursor.execute("SELECT Client_Name FROM Clients WHERE Client_ID = %s", (partner_id,))
+            c_row = cursor.fetchone()
+            if c_row and c_row.get('Client_Name'):
+                partner_name = c_row['Client_Name']
+            else:
+                cursor.execute("SELECT Partner_Name FROM External_Partners WHERE Partner_ID = %s", (partner_id,))
+                partner_row = cursor.fetchone()
+                partner_name = partner_row['Partner_Name'] if partner_row else f"Client #{partner_id}"
 
             # 2. إعداد وتحضير البيانات القديمة
             old_items_dict = {}
@@ -933,9 +950,14 @@ class ExternalTransferManager:
             conn.start_transaction()
             cursor = conn.cursor(dictionary=True)
 
-            cursor.execute("SELECT Partner_Name FROM External_Partners WHERE Partner_ID = %s", (partner_id,))
-            partner_row = cursor.fetchone()
-            partner_name = partner_row['Partner_Name'] if partner_row else "Partenaire Inconnu"
+            cursor.execute("SELECT Client_Name FROM Clients WHERE Client_ID = %s", (partner_id,))
+            c_row = cursor.fetchone()
+            if c_row and c_row.get('Client_Name'):
+                partner_name = c_row['Client_Name']
+            else:
+                cursor.execute("SELECT Partner_Name FROM External_Partners WHERE Partner_ID = %s", (partner_id,))
+                partner_row = cursor.fetchone()
+                partner_name = partner_row['Partner_Name'] if partner_row else f"Client #{partner_id}"
 
             old_items_dict = {}
             if transfer_id:

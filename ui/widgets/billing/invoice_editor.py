@@ -134,7 +134,7 @@ class InvoiceEditorWidget(QWidget):
         h_layout.addWidget(QLabel("Date :"))
         h_layout.addWidget(self.inp_date)
         h_layout.addSpacing(40)
-        h_layout.addWidget(QLabel("Partenaire :"))
+        h_layout.addWidget(QLabel("Client :"))
         h_layout.addWidget(self.combo_partner, stretch=1)
         h_layout.addWidget(self.btn_validate_header)
         layout.addWidget(header_group)
@@ -354,7 +354,12 @@ class InvoiceEditorWidget(QWidget):
     def load_partners(self):
         self.combo_partner.clear()
         self.combo_partner.addItem("Sélectionner un client...", None)
-        if hasattr(self.manager, 'partners'):
+        if hasattr(self.manager, 'clients'):
+            for c in self.manager.clients.get_all_clients():
+                phone = c.get('Phone') or c.get('Client_Code') or ''
+                phone_str = f" ({phone})" if phone else ""
+                self.combo_partner.addItem(f"{c['Client_Name']}{phone_str}", c['Client_ID'])
+        elif hasattr(self.manager, 'partners'):
             for p in self.manager.partners.get_all_partners():
                 self.combo_partner.addItem(f"{p['Partner_Name']} ({p.get('City', '-')})", p['Partner_ID'])
 
@@ -377,7 +382,7 @@ class InvoiceEditorWidget(QWidget):
         transfer_type = getattr(self, 'transfer_type_mode', 'Outbound')
         partner_id = self.get_effective_return_partner_id() if transfer_type == 'Return' else self.combo_partner.currentData()
         if not partner_id:
-            QMessageBox.warning(self, "Attention", "Veuillez selectionner un partenaire.")
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un client.")
             return False
 
         if transfer_type == 'Return':

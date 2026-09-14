@@ -99,7 +99,7 @@ class InvoicesListWidget(QWidget):
         filter_layout.addWidget(self.date_from)
         filter_layout.addWidget(QLabel("Au :"))
         filter_layout.addWidget(self.date_to)
-        filter_layout.addWidget(QLabel("Sous-Traitant / Partenaire :"))
+        filter_layout.addWidget(QLabel("Client :"))
         filter_layout.addWidget(self.combo_filter_partner, stretch=1)
         filter_layout.addWidget(btn_filter)
         layout.addWidget(filter_group)
@@ -532,8 +532,11 @@ class InvoicesListWidget(QWidget):
 
     def load_partners(self):
         self.combo_filter_partner.clear()
-        self.combo_filter_partner.addItem("Tous les partenaires", None)
-        if hasattr(self.manager, 'partners'):
+        self.combo_filter_partner.addItem("Tous les clients", None)
+        if hasattr(self.manager, 'clients'):
+            for c in self.manager.clients.get_all_clients():
+                self.combo_filter_partner.addItem(c['Client_Name'], c['Client_ID'])
+        elif hasattr(self.manager, 'partners'):
             for p in self.manager.partners.get_all_partners():
                 self.combo_filter_partner.addItem(p['Partner_Name'], p['Partner_ID'])
 
@@ -747,13 +750,13 @@ class InvoicesListWidget(QWidget):
             add("Ville :", value(partner_info, "City"))
 
         if show("partner_show_type", "partner_show_identity"):
-            add("Type :", value(partner_info, "Partner_Type"))
+            add("Type :", value(partner_info, "Partner_Type", "Price_Tier"))
         if show("partner_show_agrement", "partner_show_identity"):
             add("Agrément :", value(partner_info, "Agrement_Number", "Agreement_Number"))
         if show("partner_show_tax_id", "partner_show_identity"):
-            add("NIF :", value(partner_info, "Tax_ID_Number", "Tax_ID", "NIF"))
+            add("NIF :", value(partner_info, "Tax_ID_Number", "Tax_ID", "NIF", "Nif", "Code_Fiscal"))
         if show("partner_show_commercial_reg", "partner_show_identity"):
-            add("Reg. Commerce :", value(partner_info, "Commercial_Reg_No", "RC"))
+            add("Reg. Commerce :", value(partner_info, "Commercial_Reg_No", "Commercial_Register", "RC", "Rc"))
 
         if show("partner_show_bank_name", "partner_show_bank"):
             add("Banque :", value(partner_info, "Bank_Name"))
@@ -797,7 +800,11 @@ class InvoicesListWidget(QWidget):
                 return
 
             details_data = mgr.get_transfer_details(transfer_id)
-            partner_info = self.manager.partners.get_partner_by_id(header_data['Partner_ID']) or {}
+            partner_info = {}
+            if hasattr(self.manager, 'clients'):
+                partner_info = self.manager.clients.get_client_by_id(header_data['Partner_ID']) or {}
+            if not partner_info and hasattr(self.manager, 'partners'):
+                partner_info = self.manager.partners.get_partner_by_id(header_data['Partner_ID']) or {}
         except Exception as e:
             QMessageBox.critical(self, "Erreur BD", str(e))
             return
@@ -885,13 +892,13 @@ class InvoicesListWidget(QWidget):
 
             left_text_top = "<br/>".join(lab_info_lines)
 
-            p_name = self._partner_value(partner_info, 'Partner_Name', 'Name') or 'Inconnu'
+            p_name = self._partner_value(partner_info, 'Client_Name', 'Partner_Name', 'Name') or header_data.get('Partner_Name') or 'Inconnu'
             label_key = 'dest_label_rt' if is_return else 'dest_label_bl'
             dest_label = clean_str(settings.get(label_key, ''))
-            if dest_label.lower() in {'destinataire :', 'destinataire:', 'retourné à (sous-traitant) :'}:
-                dest_label = 'Correspondant :'
+            if dest_label.lower() in {'destinataire :', 'destinataire:', 'retourné à (sous-traitant) :', 'correspondant :'}:
+                dest_label = 'Client :'
             if not dest_label:
-                dest_label = 'Correspondant :'
+                dest_label = 'Client :'
 
             right_text_lines = [
                 f"<b>{safe_markup(dest_label)}</b>",
